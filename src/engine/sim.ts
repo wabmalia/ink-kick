@@ -1,0 +1,493 @@
+import { CONFIG } from '../config';
+
+// The match as plain 2D data: discs on a rectangle. Nothing here knows about
+// Three.js; the scene maps sim (x, y) to world (x, 0, y). Gold attacks +x,
+// red attacks -x.
+//
+// One button does everything: with the ball, hold to charge a kick and
+// release to strike it; without, tap to poke a foot in or hold to slide.
+
+export type Team = 'gold' | 'red';
+
+export type Action =
+  | 'none'
+  // Kick button held with the ball, building power.
+  | 'charge'
+  // Kick button held without the ball, not yet long enough to slide.
+  | 'hold'
+  | 'poke'
+  | 'slide'
+  | 'recover'
+  | 'stumble';
+
+export interface Disc {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  invMass: number;
+  damping: number;
+  bounce: number;
+}
+
+export interface Player extends Disc {
+  id: string;
+  team: Team;
+  // Unit vector the player faces; the ball sits this way while dribbling.
+  fx: number;
+  fy: number;
+  action: Action;
+  actionT: number;
+  // 0..1 while charging.
+  charge: number;
+  // 0..1; tired counts down once it runs dry.
+  stamina: number;
+  tired: number;
+  sprinting: boolean;
+  // Can't trap the ball until this reaches 0.
+  cooldown: number;
+  // Whether the current poke or slide already touched the ball.
+  struck: boolean;
+  kickDown: boolean;
+}
+
+export interface Input {
+  x: number;
+  y: number;
+  kick: boolean;
+  sprint: boolean;
+}
+
+export interface Match {
+  players: Player[];
+  ball: Disc;
+  posts: Disc[];
+  // Id of the player dribbling, if any.
+  owner: string | null;
+  // While above 0, the dribbler can't lose the ball for being too far from
+  // it, while it's pulled in to their feet.
+  pullingIn: number;
+  score: Record<Team, number>;
+  // Counts down after a goal; the kickoff happens when it reaches 0.
+  restartIn: number;
+}
+
+export type SimEvent =
+  | { type: 'kick'; player: string; power: number }
+  | { type: 'trap'; player: string }
+  | { type: 'poke'; player: string }
+  | { type: 'slide'; player: string }
+  | { type: 'steal'; player: string; from: string }
+  | { type: 'goal'; team: Team }
+  | { type: 'kickoff' };
+
+const still = () => ({ vx: 0, vy: 0 });
+const NO_INPUT: Input = { x: 0, y: 0, kick: false, sprint: false };
+
+export function createPlayer(id: string, team: Team): Player {
+  const p = CONFIG.player;
+  return {
+    id, team, x: 0, y: 0, ...still(),
+    r: p.radius, invMass: p.invMass, damping: 1, bounce: p.bounce,
+    fx: team === 'gold' ? 1 : -1, fy: 0,
+    action: 'none', actionT: 0, charge: 0,
+    stamina: 1, tired: 0, sprinting: false,
+    cooldown: 0, struck: false, kickDown: false,
+  };
+}
+
+export function createMatch(players: Player[]): Match {
+  const b = CONFIG.ball;
+  const { width, goalWidth } = CONFIG.pitch;
+  const post = (x: number, y: number): Disc => ({
+    x, y, ...still(), r: CONFIG.post.radius, invMass: 0, damping: 1, bounce: CONFIG.post.bounce,
+  });
+  const match: Match = {
+    players,
+    ball: { x: 0, y: 0, ...still(), r: b.radius, invMass: b.invMass, damping: b.damping, bounce: b.bounce },
+    posts: [-1, 1].flatMap(sx => [-1, 1].map(sy => post(sx * width / 2, sy * goalWidth / 2))),
+    owner: null,
+    pullingIn: 0,
+    score: { gold: 0, red: 0 },
+    restartIn: 0,
+  };
+  kickoff(match);
+  return match;
+}
+
+// Ball on the spot, each team lined up in its own half facing the other.
+export function kickoff(match: Match) {
+  Object.assign(match.ball, { x: 0, y: 0, ...still() });
+  match.owner = null;
+  match.pullingIn = 0;
+  for (const team of ['gold', 'red'] as const) {
+    const side = team === 'gold' ? -1 : 1;
+    const mine = match.players.filter(p => p.team === team);
+    mine.forEach((p, i) => {
+      const spread = (i - (mine.length - 1) / 2) * 4;
+      Object.assign(p, {
+        x: side * CONFIG.pitch.width / 4, y: spread, ...still(),
+        fx: -side, fy: 0, action: 'none', actionT: 0, charge: 0, cooldown: 0,
+      });
+    });
+  }
+}
+
+export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
+  const events: SimEvent[] = [];
+  const dt = CONFIG.tick;
+  const { ball } = match;
+  const byId = (id: string | null) => match.players.find(p => p.id === id);
+
+  for (const p of match.players) control(match, p, inputs[p.id] ?? NO_INPUT, events);
+
+  for (const p of match.players) {
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+  }
+
+  const owner = byId(match.owner);
+  if (owner) {
+    // The ball is pulled to a spot ahead of the dribbler's feet.
+    const tx = owner.x + owner.fx * CONFIG.dribble.distance;
+    const ty = owner.y + owner.fy * CONFIG.dribble.distance;
+    ball.vx = owner.vx + (tx - ball.x) * CONFIG.dribble.spring;
+    ball.vy = owner.vy + (ty - ball.y) * CONFIG.dribble.spring;
+  }
+  ball.x += ball.vx * dt;
+  ball.y += ball.vy * dt;
+  if (!owner) {
+    ball.vx *= ball.damping;
+    ball.vy *= ball.damping;
+  }
+
+  const players = match.players;
+  for (let i = 0; i < players.length; i++) {
+    for (let j = i + 1; j < players.length; j++) collide(players[i]!, players[j]!);
+    for (const post of match.posts) collide(players[i]!, post);
+    // The dribbler's own body doesn't get in the ball's way; anyone else's
+    // deadens it.
+    if (players[i] !== owner) collide(players[i]!, ball, CONFIG.ball.playerBounce);
+  }
+  for (const post of match.posts) collide(ball, post);
+
+  for (const p of players) tackle(match, p, events);
+
+  for (const p of players) keepPlayerIn(p);
+  keepBallIn(ball);
+
+  match.pullingIn = Math.max(0, match.pullingIn - dt);
+  const holder = byId(match.owner);
+  if (holder && match.pullingIn === 0) {
+    const gap = Math.hypot(
+      ball.x - (holder.x + holder.fx * CONFIG.dribble.distance),
+      ball.y - (holder.y + holder.fy * CONFIG.dribble.distance),
+    );
+    if (gap > CONFIG.dribble.loseDistance) loseBall(match, holder, CONFIG.dribble.lostCooldown);
+  } else if (match.restartIn <= 0) {
+    trap(match, events);
+  }
+
+  if (match.restartIn > 0) {
+    match.restartIn -= dt;
+    if (match.restartIn <= 0) {
+      match.restartIn = 0;
+      kickoff(match);
+      events.push({ type: 'kickoff' });
+    }
+  } else {
+    const scorer = goalScoredBy(ball);
+    if (scorer) {
+      match.score[scorer]++;
+      match.restartIn = CONFIG.restartDelay;
+      match.owner = null;
+      events.push({ type: 'goal', team: scorer });
+    }
+  }
+
+  return events;
+}
+
+function setAction(p: Player, action: Action) {
+  p.action = action;
+  p.actionT = 0;
+  p.struck = false;
+}
+
+function loseBall(match: Match, p: Player, cooldown: number) {
+  if (match.owner !== p.id) return;
+  match.owner = null;
+  p.cooldown = cooldown;
+  if (p.action === 'charge') setAction(p, 'none');
+  p.charge = 0;
+}
+
+// The button, timers, stamina, facing and velocity for one player.
+function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
+  const dt = CONFIG.tick;
+  const { tackle, kick } = CONFIG;
+  const pressed = input.kick && !p.kickDown;
+  const released = !input.kick && p.kickDown;
+  p.kickDown = input.kick;
+  p.actionT += dt;
+  p.cooldown = Math.max(0, p.cooldown - dt);
+  const hasBall = match.owner === p.id;
+
+  switch (p.action) {
+    case 'none':
+      if (pressed) setAction(p, hasBall ? 'charge' : 'hold');
+      break;
+    case 'charge':
+      p.charge = Math.min(1, p.actionT / kick.chargeTime);
+      if (released) {
+        const speed = kick.passSpeed + (kick.shotSpeed - kick.passSpeed) * p.charge;
+        match.ball.vx = p.fx * speed;
+        match.ball.vy = p.fy * speed;
+        match.owner = null;
+        p.cooldown = kick.cooldown;
+        events.push({ type: 'kick', player: p.id, power: p.charge });
+        p.charge = 0;
+        setAction(p, 'none');
+      }
+      break;
+    case 'hold':
+      // Trapping the ball mid-press turns it into a charge.
+      if (hasBall) {
+        p.action = 'charge';
+      } else if (released) {
+        setAction(p, 'poke');
+        p.vx += p.fx * tackle.pokeLunge;
+        p.vy += p.fy * tackle.pokeLunge;
+        events.push({ type: 'poke', player: p.id });
+      } else if (p.actionT >= tackle.tapTime) {
+        setAction(p, 'slide');
+        p.vx = p.fx * tackle.slideSpeed;
+        p.vy = p.fy * tackle.slideSpeed;
+        events.push({ type: 'slide', player: p.id });
+      }
+      break;
+    case 'poke':
+      if (p.actionT >= tackle.pokeTime) setAction(p, 'none');
+      break;
+    case 'slide':
+      if (p.actionT >= tackle.slideTime) setAction(p, 'recover');
+      break;
+    case 'recover':
+      if (p.actionT >= tackle.recoverTime) setAction(p, 'none');
+      break;
+    case 'stumble':
+      if (p.actionT >= tackle.stumbleTime) setAction(p, 'none');
+      break;
+  }
+
+  if (p.action === 'slide') {
+    p.vx *= tackle.slideDamping;
+    p.vy *= tackle.slideDamping;
+    p.sprinting = false;
+    return;
+  }
+  if (p.action === 'stumble') {
+    p.vx *= 0.9;
+    p.vy *= 0.9;
+    p.sprinting = false;
+    return;
+  }
+
+  const len = Math.hypot(input.x, input.y);
+  const moving = len > 0;
+  const dx = moving ? input.x / len : 0;
+  const dy = moving ? input.y / len : 0;
+
+  // Stamina: sprinting drains it; running dry means a spell of being tired.
+  const st = CONFIG.stamina;
+  if (p.tired > 0) {
+    p.tired = Math.max(0, p.tired - dt);
+    p.sprinting = false;
+  } else {
+    p.sprinting = input.sprint && moving && p.stamina > 0;
+    if (p.sprinting) {
+      p.stamina = Math.max(0, p.stamina - st.drain * dt);
+      if (p.stamina === 0) {
+        p.tired = st.tiredTime;
+        p.sprinting = false;
+      }
+    } else {
+      p.stamina = Math.min(1, p.stamina + st.regen * dt);
+    }
+  }
+
+  const pl = CONFIG.player;
+  let speed = p.tired > 0 ? pl.tiredSpeed : p.sprinting ? pl.sprintSpeed : pl.runSpeed;
+  if (match.owner === p.id) speed *= CONFIG.dribble.speedFactor;
+  if (p.action === 'charge') speed *= kick.moveFactor;
+  if (p.action === 'hold') speed *= tackle.holdMoveFactor;
+  if (p.action === 'recover') speed *= tackle.recoverFactor;
+
+  const k = Math.min(1, pl.response * dt);
+  p.vx += (dx * speed - p.vx) * k;
+  p.vy += (dy * speed - p.vy) * k;
+
+  if (moving) {
+    const rate = match.owner === p.id ? pl.turnRateWithBall : pl.turnRate;
+    const current = Math.atan2(p.fy, p.fx);
+    const turn = angleBetween(current, Math.atan2(dy, dx));
+    const a = current + Math.sign(turn) * Math.min(Math.abs(turn), rate * dt);
+    p.fx = Math.cos(a);
+    p.fy = Math.sin(a);
+  }
+}
+
+// Pokes and slides reaching the ball, and slides taking players out.
+function tackle(match: Match, p: Player, events: SimEvent[]) {
+  const { tackle: t } = CONFIG;
+  const { ball } = match;
+  if (p.action !== 'poke' && p.action !== 'slide') return;
+  if (p.struck || match.owner === p.id) return;
+
+  const poking = p.action === 'poke';
+  const footX = p.x + p.fx * (p.r + (poking ? 0.3 : 0.2));
+  const footY = p.y + p.fy * (p.r + (poking ? 0.3 : 0.2));
+  const reach = ball.r + (poking ? t.pokeReach : t.slideReach);
+  const victim = match.players.find(q => q.id === match.owner);
+  let ballHit = Math.hypot(ball.x - footX, ball.y - footY) < reach;
+  // A poke also gets round the dribbler's body to a ball out of reach, as
+  // long as the poker is facing them. Neither works from behind: a dribbler
+  // can shield the ball from someone on their back.
+  let bodyHit = false;
+  if (poking && victim) {
+    const dx = p.x - victim.x;
+    const dy = p.y - victim.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const behind = (victim.fx * dx + victim.fy * dy) / dist < t.shieldCos;
+    bodyHit = !behind
+      && dist < p.r + victim.r + t.pokeBodyReach
+      && p.fx * -dx + p.fy * -dy > 0;
+    if (behind) ballHit = false;
+  }
+  if (ballHit || bodyHit) {
+    if (victim) {
+      loseBall(match, victim, t.stealCooldown);
+      events.push({ type: 'steal', player: p.id, from: victim.id });
+    }
+    if (poking) {
+      // Knocked loose back towards the poker's feet, for them to collect.
+      const dx = footX - ball.x;
+      const dy = footY - ball.y;
+      const len = Math.hypot(dx, dy) || 1;
+      ball.vx = (dx / len) * t.pokeKnock + (victim?.vx ?? 0) * 0.3;
+      ball.vy = (dy / len) * t.pokeKnock + (victim?.vy ?? 0) * 0.3;
+    } else if (
+      (p.fx * (ball.x - p.x) + p.fy * (ball.y - p.y)) / (Math.hypot(ball.x - p.x, ball.y - p.y) || 1)
+        > t.slideControlCos
+    ) {
+      // Slid straight into it: a controlled slide, the ball kept.
+      match.owner = p.id;
+      match.pullingIn = t.pullInTime;
+      events.push({ type: 'trap', player: p.id });
+    } else {
+      // Clipped off to one side: knocked on ahead.
+      ball.vx = p.fx * t.slideKnock + p.vx * 0.3;
+      ball.vy = p.fy * t.slideKnock + p.vy * 0.3;
+    }
+    p.struck = true;
+  }
+
+  if (poking) return;
+  for (const q of match.players) {
+    if (q === p || q.action === 'stumble') continue;
+    if (Math.hypot(q.x - p.x, q.y - p.y) > p.r + q.r + 0.1) continue;
+    if (match.owner === q.id) events.push({ type: 'steal', player: p.id, from: q.id });
+    loseBall(match, q, t.stealCooldown);
+    setAction(q, 'stumble');
+    q.vx += p.fx * 3;
+    q.vy += p.fy * 3;
+  }
+}
+
+// A loose ball sticks to the nearest player who touches it, sliding or not.
+function trap(match: Match, events: SimEvent[]) {
+  const { ball } = match;
+  let best: Player | null = null;
+  let bestGap: number = CONFIG.dribble.reach;
+  for (const p of match.players) {
+    if (p.cooldown > 0 || p.action === 'stumble') continue;
+    const gap = Math.hypot(ball.x - p.x, ball.y - p.y) - p.r - ball.r;
+    if (gap <= bestGap) {
+      best = p;
+      bestGap = gap;
+    }
+  }
+  if (!best) return;
+  match.owner = best.id;
+  events.push({ type: 'trap', player: best.id });
+}
+
+function angleBetween(from: number, to: number) {
+  return ((((to - from) % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
+}
+
+// bounce overrides the pair's restitution, which is otherwise the product
+// of their own.
+function collide(a: Disc, b: Disc, bounce = a.bounce * b.bounce) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const dist = Math.hypot(dx, dy);
+  const overlap = a.r + b.r - dist;
+  const total = a.invMass + b.invMass;
+  if (overlap <= 0 || dist === 0 || total === 0) return;
+  const nx = dx / dist;
+  const ny = dy / dist;
+  a.x -= nx * overlap * (a.invMass / total);
+  a.y -= ny * overlap * (a.invMass / total);
+  b.x += nx * overlap * (b.invMass / total);
+  b.y += ny * overlap * (b.invMass / total);
+  const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+  if (vn >= 0) return;
+  const impulse = (-(1 + bounce) * vn) / total;
+  a.vx -= nx * impulse * a.invMass;
+  a.vy -= ny * impulse * a.invMass;
+  b.vx += nx * impulse * b.invMass;
+  b.vy += ny * impulse * b.invMass;
+}
+
+// Clamps one axis of a disc to [min, max], bouncing it back off the edge.
+function wall(d: Disc, axis: 'x' | 'y', min: number, max: number) {
+  const v = axis === 'x' ? 'vx' : 'vy';
+  if (d[axis] < min) {
+    d[axis] = min;
+    if (d[v] < 0) d[v] = -d[v] * d.bounce;
+  } else if (d[axis] > max) {
+    d[axis] = max;
+    if (d[v] > 0) d[v] = -d[v] * d.bounce;
+  }
+}
+
+function keepPlayerIn(p: Player) {
+  const { width, height, margin } = CONFIG.pitch;
+  wall(p, 'x', -width / 2 - margin + p.r, width / 2 + margin - p.r);
+  wall(p, 'y', -height / 2 - margin + p.r, height / 2 + margin - p.r);
+}
+
+// The pitch lines are walls for the ball, except the goal mouths, which open
+// into a net. The posts are discs, so the corners of the mouth round off.
+function keepBallIn(ball: Disc) {
+  const { width, height, goalWidth, goalDepth } = CONFIG.pitch;
+  const half = width / 2;
+  const goalHalf = goalWidth / 2;
+  if (Math.abs(ball.x) > half) {
+    wall(ball, 'y', -goalHalf + ball.r, goalHalf - ball.r);
+    wall(ball, 'x', -half - goalDepth + ball.r, half + goalDepth - ball.r);
+  } else {
+    wall(ball, 'y', -height / 2 + ball.r, height / 2 - ball.r);
+    if (Math.abs(ball.y) > goalHalf) wall(ball, 'x', -half + ball.r, half - ball.r);
+  }
+}
+
+// A goal counts once the whole ball is over the line.
+function goalScoredBy(ball: Disc): Team | null {
+  const half = CONFIG.pitch.width / 2;
+  if (ball.x > half + ball.r) return 'gold';
+  if (ball.x < -half - ball.r) return 'red';
+  return null;
+}

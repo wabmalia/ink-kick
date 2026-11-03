@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#12152a">
+  <title>Score</title>
+  <meta name="description" content="Floodlit top-down football.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat+Brush&family=Caveat:wght@500;700&display=swap">
+</head>
+<body>
+  <div id="game"></div>
+  <header class="scoreboard">
+    <span class="team gold">GOLD</span>
+    <span class="num" id="score-gold">0</span>
+    <span class="dash">-</span>
+    <span class="num" id="score-red">0</span>
+    <span class="team red">RED</span>
+  </header>
+  <p class="banner" id="banner"></p>
+  <p class="hint">
+    <kbd>WASD</kbd> run &middot; <kbd>Shift</kbd> sprint &middot;
+    <kbd>Space</kbd> with the ball: hold to power a kick &middot; without: tap to poke, hold to slide
+  </p>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+:root {
+  --navy: #1d2140;
+  --navy-deep: #12152a;
+  --gold: #f2b134;
+  --red: #e2553f;
+  --text: #eef0fa;
+  --muted: #9aa0bf;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--navy-deep);
+  color: var(--text);
+  font-family: 'Caveat Brush', 'Caveat', cursive;
+}
+
+#game canvas { display: block; }
+
+.scoreboard {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px;
+  border-radius: 14px 9px 16px 8px;
+  background: rgba(18, 21, 42, 0.82);
+  border: 2px solid #353b66;
+  font-weight: 700;
+}
+
+.team { font-size: 20px; letter-spacing: 0.06em; }
+.team.gold { color: var(--gold); }
+.team.red { color: var(--red); }
+.num { font-size: 32px; font-weight: 900; min-width: 1ch; text-align: center; }
+.dash { color: var(--muted); }
+
+.banner {
+  position: fixed;
+  top: 38%;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-size: clamp(48px, 12vw, 120px);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  opacity: 0;
+  transform: scale(0.7);
+  transition: opacity 0.25s, transform 0.35s cubic-bezier(0.2, 1.6, 0.4, 1);
+  pointer-events: none;
+  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.6);
+}
+.banner.show { opacity: 1; transform: scale(1); }
+.banner.gold { color: var(--gold); }
+.banner.red { color: var(--red); }
+
+.hint {
+  position: fixed;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-family: 'Caveat', cursive;
+  font-weight: 500;
+  font-size: 18px;
+  color: var(--muted);
+}
+
+kbd {
+  font-family: inherit;
+  color: var(--text);
+  padding: 1px 5px;
+  border: 1px solid #353b66;
+  border-radius: 4px;
+  background: rgba(18, 21, 42, 0.8);
+}
