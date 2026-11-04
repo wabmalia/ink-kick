@@ -122,16 +122,37 @@ export function kickoff(match: Match) {
   match.owner = null;
   match.pullingIn = 0;
   for (const team of ['gold', 'red'] as const) {
-    const side = team === 'gold' ? -1 : 1;
-    const mine = match.players.filter(p => p.team === team);
-    mine.forEach((p, i) => {
-      const spread = (i - (mine.length - 1) / 2) * 4;
+    match.players.filter(p => p.team === team).forEach((p, i, mine) => {
       Object.assign(p, {
-        x: side * CONFIG.pitch.width / 4, y: spread, ...still(),
-        fx: -side, fy: 0, action: 'none', actionT: 0, charge: 0, cooldown: 0,
+        ...formation(team, i, mine.length), ...still(),
+        action: 'none', actionT: 0, charge: 0, cooldown: 0,
       });
     });
   }
+}
+
+// Kickoff spot for the i-th of n players on a team: columns of up to four
+// across the pitch, each further back towards their own goal.
+function formation(team: Team, i: number, n: number) {
+  const side = team === 'gold' ? -1 : 1;
+  const col = Math.floor(i / FORMATION_ROWS);
+  const row = i % FORMATION_ROWS;
+  const inCol = Math.min(FORMATION_ROWS, n - col * FORMATION_ROWS);
+  return {
+    x: side * (CONFIG.pitch.width / 4 + col * 3),
+    y: (row - (inCol - 1) / 2) * 3.6,
+    fx: -side,
+    fy: 0,
+  };
+}
+const FORMATION_ROWS = 4;
+
+// A player joining a match in progress starts on their own goal line.
+export function addPlayer(match: Match, p: Player) {
+  const side = p.team === 'gold' ? -1 : 1;
+  const others = match.players.filter(q => q.team === p.team).length;
+  Object.assign(p, { x: side * (CONFIG.pitch.width / 2 - 1.5), y: ((others % 5) - 2) * 2, fx: -side, fy: 0 });
+  match.players.push(p);
 }
 
 export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {

@@ -1,170 +1,110 @@
-import * as THREE from 'three';
 import { CONFIG } from './config';
 import { Bot } from './engine/ai';
-import { createMatch, createPlayer, step, type Input } from './engine/sim';
-import { createBall, rollBall } from './scene/ball';
-import { Footballer } from './scene/footballer';
-import { PlayerGauges } from './scene/gauges';
-import { buildStadium } from './scene/stadium';
-import { Watercolor } from './scene/watercolor';
+import { createMatch, createPlayer, step } from './engine/sim';
+import { enableKeys, keyboardInput } from './game/input';
+import { LocalMatch, RemoteMatch, type ViewState } from './game/state';
+import { GameView } from './game/view';
+import { session } from './net/session';
+import { iceServers } from './net/relay';
+import { inMatch, offerInvite, render } from './ui/menu';
 import './style.css';
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
-document.getElementById('game')!.appendChild(renderer.domElement);
-// Tone mapping and the painted look both happen in this pass.
-const watercolor = new Watercolor(renderer);
+// Picks what's on the pitch from the session: bots playing behind the menu,
+// a solo game, a hosted match, or a guest's view of one.
 
-const scene = new THREE.Scene();
-buildStadium(scene);
+const view = new GameView(document.getElementById('game')!);
 
-// A fixed broadcast camera on the near side, pulled back just far enough
-// that the four corners and both goals stay in view at any window shape.
-const camera = new THREE.PerspectiveCamera(38, 1, 1, 300);
-const LOOK = new THREE.Vector3(0, 0, 0.6);
-const VIEW = new THREE.Vector3(0, 19.5, 21.5).normalize();
-const { width: W, height: H, goalDepth } = CONFIG.pitch;
-const MUST_SEE = [-1, 1].flatMap(sx => [-1, 1].flatMap(sz => [
-  new THREE.Vector3(sx * (W / 2 + goalDepth + 0.6), 0, sz * (H / 2 + 0.8)),
-  // Heads of players standing on the far and near lines.
-  new THREE.Vector3(sx * (W / 2 + 0.5), 2.4, sz * (H / 2 + 0.8)),
-]));
-const projected = new THREE.Vector3();
+type Mode =
+  | { kind: 'attract'; local: LocalMatch }
+  | { kind: 'solo'; local: LocalMatch }
+  | { kind: 'host'; local: LocalMatch }
+  | { kind: 'guest'; remote: RemoteMatch };
 
-function fits() {
-  camera.updateMatrixWorld();
-  // Keep clear of the scoreboard at the top.
-  return MUST_SEE.every(p => {
-    projected.copy(p).project(camera);
-    return Math.abs(projected.x) <= 0.96 && projected.y <= 0.8 && projected.y >= -0.96;
-  });
+// Two bots a side, playing on behind the menu.
+function attract(): Mode {
+  const ids = ['g1', 'g2', 'r1', 'r2'];
+  const match = createMatch(ids.map(id => createPlayer(id, id[0] === 'g' ? 'gold' : 'red')));
+  const bots = ids.map(id => new Bot(id));
+  return { kind: 'attract', local: new LocalMatch(match, () => step(match, Object.fromEntries(bots.map(b => [b.id, b.think(match)])))) };
 }
 
-function resize() {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  renderer.setSize(w, h);
-  watercolor.setSize(w, h);
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-  let near = 5;
-  let far = 250;
-  for (let i = 0; i < 24; i++) {
-    const mid = (near + far) / 2;
-    camera.position.copy(LOOK).addScaledVector(VIEW, mid);
-    camera.lookAt(LOOK);
-    if (fits()) far = mid;
-    else near = mid;
+function solo(): Mode {
+  const match = createMatch([createPlayer(session.me, 'gold'), createPlayer('bot', 'red')]);
+  const bot = new Bot('bot');
+  return { kind: 'solo', local: new LocalMatch(match, () => step(match, { [session.me]: keyboardInput(), bot: bot.think(match) })) };
+}
+
+let mode: Mode = attract();
+
+function pickMode() {
+  const host = session.host;
+  if (session.status === 'solo') {
+    if (mode.kind !== 'solo') mode = solo();
+  } else if (inMatch() && host?.match) {
+    if (mode.kind !== 'host' || mode.local.match !== host.match) {
+      const match = host.match;
+      mode = { kind: 'host', local: new LocalMatch(match, () => host.step(keyboardInput())) };
+    }
+  } else if (inMatch()) {
+    if (mode.kind !== 'guest') mode = { kind: 'guest', remote: new RemoteMatch() };
+  } else if (mode.kind !== 'attract') {
+    mode = attract();
   }
-  camera.position.copy(LOOK).addScaledVector(VIEW, far);
-  camera.lookAt(LOOK);
+  if (mode.kind === 'attract') view.clearBanner();
+  enableKeys(inMatch());
 }
-window.addEventListener('resize', resize);
-resize();
 
-const match = createMatch([createPlayer('me', 'gold'), createPlayer('rival', 'red')]);
-const bot = new Bot('rival');
-const looks = {
-  me: new Footballer({ color: 0xf2b134 }),
-  rival: new Footballer({ color: 0xe2553f }),
-} as Record<string, Footballer>;
-for (const f of Object.values(looks)) {
-  f.group.scale.setScalar(0.975);
-  scene.add(f.group);
-}
-const ball = createBall();
-scene.add(ball);
-
-const gauges = new PlayerGauges();
-scene.add(gauges.group);
-
-// Keyboard: arrows or WASD to run, Shift to sprint, Space or X to kick.
-const held = new Set<string>();
-const KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyX', 'ShiftLeft', 'ShiftRight'];
-window.addEventListener('keydown', e => {
-  if (!KEYS.includes(e.code)) return;
-  e.preventDefault();
-  held.add(e.code);
+session.listen({
+  change() {
+    render();
+    pickMode();
+  },
+  snap(snap) {
+    if (mode.kind === 'guest') mode.remote.push(snap);
+  },
+  events(tick, events) {
+    if (mode.kind === 'guest') mode.remote.pushEvents(tick, events);
+  },
 });
-window.addEventListener('keyup', e => held.delete(e.code));
-window.addEventListener('blur', () => held.clear());
 
-function myInput(): Input {
-  const on = (...codes: string[]) => codes.some(c => held.has(c));
-  return {
-    x: (on('ArrowRight', 'KeyD') ? 1 : 0) - (on('ArrowLeft', 'KeyA') ? 1 : 0),
-    // Up on screen is towards the far side, which is -y in the sim.
-    y: (on('ArrowDown', 'KeyS') ? 1 : 0) - (on('ArrowUp', 'KeyW') ? 1 : 0),
-    kick: on('Space', 'KeyX'),
-    sprint: on('ShiftLeft', 'ShiftRight'),
-  };
-}
-
-const scoreEl = { gold: document.getElementById('score-gold')!, red: document.getElementById('score-red')! };
-const banner = document.getElementById('banner')!;
-
-// Fixed-step sim; the scene draws between the last two steps.
-let prev = snapshot();
-let acc = 0;
+const EMPTY: ViewState = { players: [], ballX: 0, ballY: 0, score: { gold: 0, red: 0 } };
 let last = performance.now();
-
-function snapshot() {
-  return [...match.players.map(p => ({ x: p.x, y: p.y })), { x: match.ball.x, y: match.ball.y }];
-}
+let inputClock = 0;
 
 function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
-  acc += dt;
-  let kickedOff = false;
-  while (acc >= CONFIG.tick) {
-    prev = snapshot();
-    for (const e of step(match, { me: myInput(), rival: bot.think(match) })) {
-      if (e.type === 'kick') {
-        looks[e.player]!.kick(e.power);
-      } else if (e.type === 'goal') {
-        scoreEl[e.team].textContent = String(match.score[e.team]);
-        banner.textContent = 'GOAL!';
-        banner.className = `banner show ${e.team}`;
-      } else if (e.type === 'kickoff') {
-        banner.className = 'banner';
-        kickedOff = true;
-      }
+  let state: ViewState;
+  let me: string | null = null;
+  let names: Map<string, string> | undefined;
+
+  if (mode.kind === 'guest') {
+    // Guests send their input at the sim's rate; the host steps with it.
+    inputClock += dt;
+    while (inputClock >= CONFIG.tick) {
+      session.sendInput(keyboardInput());
+      inputClock -= CONFIG.tick;
     }
-    acc -= CONFIG.tick;
+    view.play(mode.remote.advance(dt));
+    state = mode.remote.state() ?? EMPTY;
+  } else {
+    view.play(mode.local.advance(dt));
+    state = mode.local.state();
   }
-  if (kickedOff) prev = snapshot();
+  if (mode.kind !== 'attract') me = session.me;
+  if (session.room && mode.kind !== 'solo' && mode.kind !== 'attract') {
+    names = new Map(session.room.members.map(m => [m.id, m.name]));
+  }
 
-  const t = acc / CONFIG.tick;
-  const lerp = (i: number, axis: 'x' | 'y', now: number) => prev[i]![axis] + (now - prev[i]![axis]) * t;
-  match.players.forEach((p, i) => {
-    const f = looks[p.id]!;
-    f.group.position.set(lerp(i, 'x', p.x), 0, lerp(i, 'y', p.y));
-    f.update(dt, {
-      speed: Math.hypot(p.vx, p.vy),
-      heading: Math.atan2(p.fx, p.fy),
-      action: p.action,
-      actionT: p.actionT,
-      charge: p.charge,
-      tired: p.tired > 0,
-    });
-  });
-  const bi = match.players.length;
-  const bx = lerp(bi, 'x', match.ball.x);
-  const bz = lerp(bi, 'y', match.ball.y);
-  rollBall(ball, bx - ball.position.x, bz - ball.position.z);
-  ball.position.set(bx, CONFIG.ball.radius, bz);
-
-  // The ring and gauges follow the player you control.
-  const me = match.players[0]!;
-  const mine = looks.me!.group.position;
-  gauges.group.position.x = mine.x;
-  gauges.group.position.z = mine.z;
-  gauges.update(dt, now / 1000, me.stamina, me.tired / CONFIG.stamina.tiredTime, me.action === 'charge', me.charge);
-
-  watercolor.render(scene, camera, now / 1000);
+  view.render(state, dt, now, me, names);
   requestAnimationFrame(frame);
 }
+
+// Get relay credentials ready in the background (only on the live site).
+void iceServers();
+session.restore();
+const invite = session.invitedTo();
+if (session.status === 'home' && invite) offerInvite(invite);
+render();
+pickMode();
 requestAnimationFrame(frame);

@@ -5,14 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#12152a">
   <title>Score</title>
-  <meta name="description" content="Floodlit top-down football.">
+  <meta name="description" content="Floodlit arcade football, drawn in ink and watercolour.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat+Brush&family=Caveat:wght@500;700&display=swap">
 </head>
 <body>
+  <!-- Hand-drawn edges for the menu: ink lines wobble, washes bleed. -->
+  <svg class="defs" aria-hidden="true" focusable="false">
+    <filter id="rough" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4" />
+      <feDisplacementMap in="SourceGraphic" scale="4" />
+    </filter>
+    <filter id="bleed" x="-10%" y="-20%" width="120%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="3" seed="9" />
+      <feDisplacementMap in="SourceGraphic" scale="12" />
+      <feGaussianBlur stdDeviation="0.6" />
+    </filter>
+  </svg>
+
   <div id="game"></div>
-  <header class="scoreboard">
+  <div class="labels" id="labels"></div>
+
+  <header class="scoreboard" id="scoreboard" hidden>
     <span class="team gold">GOLD</span>
     <span class="num" id="score-gold">0</span>
     <span class="dash">-</span>
@@ -20,10 +35,83 @@
     <span class="team red">RED</span>
   </header>
   <p class="banner" id="banner"></p>
-  <p class="hint">
+
+  <nav class="ingame" id="ingame" hidden>
+    <button class="ink-btn" id="leave-match" type="button">Menu</button>
+    <button class="ink-btn" id="end-match" type="button" hidden>Back to lobby</button>
+    <span class="room-tag" id="room-tag"></span>
+  </nav>
+  <p class="hint" id="hint" hidden>
     <kbd>WASD</kbd> run &middot; <kbd>Shift</kbd> sprint &middot;
     <kbd>Space</kbd> with the ball: hold to power a kick &middot; without: tap to poke, hold to slide
   </p>
+
+  <main class="menu" id="menu">
+    <section class="screen home" id="home" hidden>
+      <h1 class="title">Score<b>!</b></h1>
+      <p class="tagline">Floodlit football, drawn by hand.</p>
+      <div class="cards">
+        <section class="card">
+          <h2>Nickname</h2>
+          <p class="card-note">Just a nickname, no real names or contact details needed.</p>
+          <input class="field-input" id="name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Pick a nickname" aria-label="Nickname">
+        </section>
+        <section class="card" id="solo-card">
+          <h2>Solo</h2>
+          <p class="card-note">You against the bot.</p>
+          <button class="brush gold" id="play-solo" type="button">Play solo</button>
+        </section>
+        <section class="card">
+          <h2 id="multi-title">Multiplayer</h2>
+          <p class="card-note" id="multi-note">Join a friend's room by its code, or host your own.</p>
+          <form class="join" id="join-form">
+            <input id="code" maxlength="5" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="CODE" aria-label="Room code">
+            <button class="brush blue" type="submit">Join</button>
+          </form>
+          <div id="create-block">
+            <p class="or"><span>or</span></p>
+            <button class="brush red" id="create" type="button">Host a room</button>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="screen notice" id="connecting" hidden>
+      <p class="card" id="connecting-msg"></p>
+      <button class="ink-btn" id="cancel" type="button">Back</button>
+    </section>
+
+    <section class="screen notice" id="error" hidden>
+      <p class="card" id="error-msg"></p>
+      <button class="ink-btn" id="error-back" type="button">Back</button>
+    </section>
+
+    <section class="screen lobby" id="lobby" hidden>
+      <header class="lobby-head">
+        <h2>Room <span class="code" id="lobby-code"></span></h2>
+        <button class="ink-btn" id="copy-link" type="button">Copy invite link</button>
+      </header>
+      <div class="teams">
+        <section class="card team-col gold">
+          <h3>Gold</h3>
+          <ul id="team-gold"></ul>
+          <button class="brush gold" data-team="gold" type="button">Play for Gold</button>
+        </section>
+        <section class="card team-col red">
+          <h3>Red</h3>
+          <ul id="team-red"></ul>
+          <button class="brush red" data-team="red" type="button">Play for Red</button>
+        </section>
+      </div>
+      <footer class="lobby-foot">
+        <button class="ink-btn" id="lobby-leave" type="button">Leave</button>
+        <button class="brush green big" id="kickoff" type="button">Kick off!</button>
+        <p class="waiting" id="waiting">Waiting for the host to kick off…</p>
+      </footer>
+    </section>
+  </main>
+
+  <p class="toast" id="toast" hidden></p>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

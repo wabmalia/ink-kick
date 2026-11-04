@@ -92,7 +92,7 @@ const fragmentShader = /* glsl */ `
     // Pigment is never neon, and never laid down evenly: big soft blotches
     // where it went on thicker or thinner, with hard wet edges round them.
     float lum = dot(col, vec3(0.299, 0.587, 0.114));
-    col = mix(vec3(lum), col, 0.7);
+    col = mix(vec3(lum), col, 0.85);
     float blotch = fbm(p * 0.006 + 3.7);
     float wet = smoothstep(0.47, 0.5, blotch) - smoothstep(0.5, 0.56, blotch);
     col *= 0.9 + 0.2 * smoothstep(0.3, 0.7, blotch);

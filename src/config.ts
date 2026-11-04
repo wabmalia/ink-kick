@@ -113,4 +113,14 @@ export const CONFIG = {
 
   // Pause after a goal before the kickoff.
   restartDelay: 1.8,
+
+  net: {
+    // The host sends a snapshot every this many ticks (2 is 30 a second).
+    snapshotEvery: 2,
+    // Guests draw this many ticks behind the newest snapshot, so there's
+    // usually a pair to blend between even when one goes missing.
+    delayTicks: 6,
+    // Further off than this, a guest jumps straight to the right time.
+    resyncTicks: 30,
+  },
 } as const;

@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "peerjs": "1.5.4",
     "three": "0.187.0"
   },
   "devDependencies": {

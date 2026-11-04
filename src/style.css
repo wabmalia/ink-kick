@@ -5,6 +5,8 @@
   --red: #e2553f;
   --text: #eef0fa;
   --muted: #9aa0bf;
+  /* Secondary text on the menu cards: about 9:1 on their navy. */
+  --soft: #c9cde4;
 }
 
 * { box-sizing: border-box; }
@@ -66,12 +68,16 @@ html, body {
   bottom: max(12px, env(safe-area-inset-bottom));
   left: 0;
   right: 0;
-  margin: 0;
+  width: fit-content;
+  margin: 0 auto;
+  padding: 3px 12px;
+  border-radius: 10px;
+  background: rgba(13, 16, 38, 0.85);
   text-align: center;
   font-family: 'Caveat', cursive;
-  font-weight: 500;
+  font-weight: 700;
   font-size: 18px;
-  color: var(--muted);
+  color: var(--soft);
 }
 
 kbd {
@@ -81,4 +87,259 @@ kbd {
   border: 1px solid #353b66;
   border-radius: 4px;
   background: rgba(18, 21, 42, 0.8);
+}
+
+[hidden] { display: none !important; }
+
+.defs { position: absolute; width: 0; height: 0; }
+
+:root {
+  --ink: #0d1026;
+  --blue: #3d8bff;
+  --green: #3fbf6a;
+}
+
+/* Names over heads in a room. */
+.labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+.label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-family: 'Caveat', cursive;
+  font-weight: 700;
+  font-size: 17px;
+  white-space: nowrap;
+  text-shadow: 0 1px 0 var(--ink), 0 0 6px rgba(20, 24, 51, 0.9);
+}
+.label[data-team='gold'] { color: #ffd36b; }
+.label[data-team='red'] { color: #ff8a73; }
+
+/* --- Painted pieces ------------------------------------------------------ */
+
+/* A watercolour swatch with an inked outline. The wash and the line are
+   pseudo-elements, so the filters that rough them up leave the text alone. */
+.brush {
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  background: none;
+  padding: 10px 26px 12px;
+  font: inherit;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.brush::before,
+.brush::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+}
+.brush::before {
+  inset: -3px -6px;
+  border-radius: 42% 58% 46% 54% / 58% 44% 56% 42%;
+  background: var(--wash);
+  filter: url(#bleed);
+}
+.brush::after {
+  inset: 1px;
+  border: 2.5px solid var(--ink);
+  border-radius: 14px 20px 12px 22px;
+  filter: url(#rough);
+  opacity: 0.8;
+}
+.brush:hover { transform: rotate(-1.5deg) scale(1.04); }
+.brush:active { transform: rotate(1deg) scale(0.98); }
+.brush:disabled { cursor: default; transform: none; }
+.brush:disabled::before { filter: url(#bleed) saturate(0.35) brightness(1.15); }
+.brush:disabled::after { opacity: 0.5; }
+.brush:focus-visible { outline: none; }
+.brush:focus-visible::after { opacity: 1; border-width: 3.5px; }
+.brush.big { font-size: 34px; padding: 14px 40px 16px; }
+
+/* Pigment pools darker at one edge and lifts paler at another. */
+.brush.gold { --wash: radial-gradient(circle at 28% 32%, #ffeab0 0, transparent 42%), radial-gradient(circle at 78% 74%, #f5a312 0, transparent 58%), #ffc23a; }
+.brush.red { --wash: radial-gradient(circle at 30% 30%, #ffc2b3 0, transparent 40%), radial-gradient(circle at 76% 76%, #f0553c 0, transparent 60%), #ff7660; }
+.brush.blue { --wash: radial-gradient(circle at 30% 30%, #c7e2ff 0, transparent 40%), radial-gradient(circle at 76% 76%, #4a8af5 0, transparent 60%), #66a6ff; }
+.brush.green { --wash: radial-gradient(circle at 30% 30%, #d2f7d4 0, transparent 40%), radial-gradient(circle at 76% 76%, #36b863 0, transparent 60%), #52d27c; }
+
+/* Quieter buttons: just ink. */
+.ink-btn {
+  position: relative;
+  border: 0;
+  background: none;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 21px;
+  color: var(--text);
+  cursor: pointer;
+}
+.ink-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgba(238, 240, 250, 0.7);
+  border-radius: 10px 14px 9px 15px;
+  filter: url(#rough);
+}
+.ink-btn:hover { color: var(--gold); }
+.ink-btn:hover::after { border-color: var(--gold); }
+
+/* A navy wash on paper, inked round the edge. */
+.card {
+  position: relative;
+  isolation: isolate;
+  padding: 12px 22px 14px;
+  margin: 0;
+}
+.card::before,
+.card::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+}
+.card::before {
+  inset: 0;
+  border-radius: 18px 26px 16px 28px;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(70, 86, 180, 0.22) 0, transparent 45%),
+    radial-gradient(circle at 85% 80%, rgba(8, 10, 24, 0.5) 0, transparent 55%),
+    rgb(24, 28, 56);
+  filter: url(#bleed);
+}
+.card::after {
+  inset: 4px;
+  border: 2.5px solid rgba(238, 240, 250, 0.55);
+  border-radius: 16px 24px 14px 26px;
+  filter: url(#rough);
+}
+.card h2,
+.card h3 { margin: 0 0 8px; font-size: 28px; font-weight: 400; }
+.card-note { margin: 0 0 10px; font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; color: var(--soft); }
+
+/* --- Menu ---------------------------------------------------------------- */
+
+/* Over the stadium, where the bots play on. */
+.menu {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: radial-gradient(ellipse at center, rgba(13, 16, 38, 0.5), rgba(10, 12, 28, 0.9));
+}
+.screen { width: min(760px, 100%); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+.title {
+  position: relative;
+  isolation: isolate;
+  margin: 0;
+  font-size: clamp(52px, 9vw, 84px);
+  font-weight: 400;
+  line-height: 0.9;
+  color: #ffc53d;
+  transform: rotate(-4deg);
+  text-shadow: 3px 4px 0 var(--ink), -2px -1px 0 #ff5e45;
+}
+.title b { font-weight: 400; color: #ff5e45; text-shadow: 3px 4px 0 var(--ink), -2px -1px 0 #ffc53d; }
+/* A splash of red wash behind the word. */
+.title::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 18% -14% 4% -10%;
+  border-radius: 50% 40% 55% 45%;
+  background:
+    radial-gradient(circle at 30% 40%, rgba(255, 94, 69, 0.85) 0, transparent 55%),
+    radial-gradient(circle at 72% 60%, rgba(61, 139, 255, 0.7) 0, transparent 50%);
+  filter: url(#bleed) blur(2px);
+  opacity: 0.75;
+}
+.tagline { margin: -4px 0 4px; font-family: 'Caveat', cursive; font-weight: 700; font-size: 24px; color: var(--text); text-shadow: 0 1px 2px var(--ink), 0 0 10px rgba(13, 16, 38, 0.9); }
+
+.cards { display: flex; flex-direction: column; gap: 12px; width: min(460px, 100%); }
+.cards .card { display: flex; flex-direction: column; align-items: stretch; }
+/* Every card: title, a line saying what it's for, then its controls. */
+.cards .card h2 { margin-bottom: 2px; }
+.cards .card > .brush,
+#create-block .brush { align-self: center; }
+#create-block { display: flex; flex-direction: column; }
+
+.field-input,
+.join input {
+  font: inherit;
+  font-family: 'Caveat Brush', cursive;
+  font-size: 24px;
+  color: var(--text);
+  background: #0d1024;
+  border: 0;
+  border-bottom: 2.5px solid rgba(238, 240, 250, 0.75);
+  border-radius: 6px 6px 2px 2px;
+  padding: 6px 10px;
+  outline: none;
+}
+.field-input:focus,
+.join input:focus { border-bottom-color: var(--gold); }
+.join { display: flex; gap: 14px; align-items: center; width: 100%; }
+.field-input::placeholder,
+.join input::placeholder { color: #9aa0bf; opacity: 1; }
+.join input { width: 6.5ch; letter-spacing: 0.15em; text-transform: uppercase; flex: 1; }
+
+.or { width: 100%; margin: 8px 0; display: flex; align-items: center; gap: 10px; font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; color: var(--soft); }
+.or::before,
+.or::after { content: ''; flex: 1; border-top: 2px solid rgba(238, 240, 250, 0.45); filter: url(#rough); }
+
+.notice .card { max-width: 520px; font-family: 'Caveat', cursive; font-size: 24px; text-align: center; }
+
+/* --- Lobby --------------------------------------------------------------- */
+
+.lobby-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; flex-wrap: wrap; }
+.lobby-head h2 { margin: 0; font-size: 36px; font-weight: 400; }
+.code { color: var(--gold); letter-spacing: 0.12em; }
+
+.teams { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; width: 100%; }
+.team-col { display: flex; flex-direction: column; align-items: center; min-height: 260px; }
+.team-col.gold h3 { color: #ffc53d; }
+.team-col.red h3 { color: #ff6e55; }
+.team-col ul { list-style: none; margin: 0 0 16px; padding: 0; width: 100%; flex: 1; font-family: 'Caveat', cursive; font-size: 24px; }
+.team-col li { padding: 3px 4px; display: flex; gap: 8px; align-items: baseline; }
+.team-col li.me { color: var(--gold); }
+.team-col li.away { color: var(--muted); }
+.team-col li small { font-size: 18px; color: var(--soft); }
+
+.lobby-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; }
+.waiting { margin: 0; font-family: 'Caveat', cursive; font-weight: 700; font-size: 22px; color: var(--soft); }
+
+/* --- In a match ---------------------------------------------------------- */
+
+.ingame {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.room-tag { font-size: 20px; color: var(--soft); padding: 2px 10px; border-radius: 8px; background: rgba(13, 16, 38, 0.85); }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 56px;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 8px 18px;
+  font-family: 'Caveat', cursive;
+  font-size: 22px;
+  background: rgba(18, 21, 42, 0.92);
+  border: 2px solid rgba(238, 240, 250, 0.5);
+  border-radius: 12px 16px 10px 18px;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .teams { grid-template-columns: 1fr; }
 }
