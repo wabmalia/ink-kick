@@ -13,6 +13,11 @@ function link() {
   return { l, sent, state };
 }
 
+// Lets play start straight away, rather than after the coin toss.
+function skipCoin(r: HostRoom) {
+  r.match!.holdFor = 0;
+}
+
 function room() {
   return new HostRoom('ABCDE', 'host', 'Hosty', { change: () => {} });
 }
@@ -65,6 +70,7 @@ describe('host room', () => {
     const r = room();
     r.join('a', 'Ana', link().l);
     r.start();
+    skipCoin(r);
     r.input('a', { seq: 2, ...idle, y: 1 });
     r.input('a', { seq: 1, ...idle, y: -1 });
     for (let i = 0; i < 30; i++) r.step(idle);
@@ -76,18 +82,22 @@ describe('host room', () => {
     const a = link();
     r.join('a', 'Ana', a.l);
     r.start();
-    // Gold's host runs at the ball for two seconds.
-    for (let i = 0; i < 120; i++) r.step({ ...idle, x: 1 });
+    r.step(idle);
+    skipCoin(r);
+    // The host runs towards the far touchline, clear of everyone, for two seconds.
+    for (let i = 0; i < 120; i++) r.step({ ...idle, y: -1 });
     const snaps = a.state.filter(m => m.t === 'snap');
-    expect(snaps).toHaveLength(120 / CONFIG.net.snapshotEvery);
-    expect(a.sent.some(m => m.t === 'events' && m.events.some(e => e.type === 'trap'))).toBe(true);
+    expect(snaps).toHaveLength(Math.floor(121 / CONFIG.net.snapshotEvery));
+    expect(a.sent.some(m => m.t === 'events' && m.events.some(e => e.type === 'coin'))).toBe(true);
 
     const remote = new RemoteMatch();
     for (const m of snaps) if (m.t === 'snap') remote.push(m.snap);
     remote.advance(0);
     const drawn = remote.state()!;
     const host = drawn.players.find(p => p.id === 'host')!;
-    expect(host.x).toBeGreaterThan(r.match!.players[0]!.x - 3);
-    expect(host.x).toBeLessThan(r.match!.players[0]!.x);
+    // Drawn a little behind where the host really is.
+    const actual = r.match!.players[0]!.y;
+    expect(host.y).toBeGreaterThan(actual);
+    expect(host.y).toBeLessThan(actual + 3);
   });
 });

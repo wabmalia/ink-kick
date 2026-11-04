@@ -94,7 +94,8 @@ export class HostRoom {
     this.members = this.members.filter(m => m.connected);
     this.phase = 'match';
     this.tick = 0;
-    this.match = createMatch(this.members.map(m => createPlayer(m.id, m.team)));
+    const kickoff = Math.random() < 0.5 ? 'gold' : 'red';
+    this.match = createMatch(this.members.map(m => createPlayer(m.id, m.team)), { kickoff, coin: true });
     this.changed();
   }
 

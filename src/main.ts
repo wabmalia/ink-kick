@@ -6,6 +6,7 @@ import { LocalMatch, RemoteMatch, type ViewState } from './game/state';
 import { GameView } from './game/view';
 import { session } from './net/session';
 import { iceServers } from './net/relay';
+import { helpOpen, onHelp } from './ui/help';
 import { inMatch, offerInvite, render } from './ui/menu';
 import './style.css';
 
@@ -29,7 +30,8 @@ function attract(): Mode {
 }
 
 function solo(): Mode {
-  const match = createMatch([createPlayer(session.me, 'gold'), createPlayer('bot', 'red')]);
+  const kickoff = Math.random() < 0.5 ? 'gold' : 'red';
+  const match = createMatch([createPlayer(session.me, 'gold'), createPlayer('bot', 'red')], { kickoff, coin: true });
   const bot = new Bot('bot');
   return { kind: 'solo', local: new LocalMatch(match, () => step(match, { [session.me]: keyboardInput(), bot: bot.think(match) })) };
 }
@@ -37,6 +39,7 @@ function solo(): Mode {
 let mode: Mode = attract();
 
 function pickMode() {
+  const before = mode;
   const host = session.host;
   if (session.status === 'solo') {
     if (mode.kind !== 'solo') mode = solo();
@@ -50,9 +53,11 @@ function pickMode() {
   } else if (mode.kind !== 'attract') {
     mode = attract();
   }
-  if (mode.kind === 'attract') view.clearBanner();
-  enableKeys(inMatch());
+  if (mode !== before) view.clearBanner();
+  // Keys steer only in a match, and not while the help is up.
+  enableKeys(inMatch() && !helpOpen());
 }
+onHelp(pickMode);
 
 session.listen({
   change() {
@@ -88,7 +93,8 @@ function frame(now: number) {
     view.play(mode.remote.advance(dt));
     state = mode.remote.state() ?? EMPTY;
   } else {
-    view.play(mode.local.advance(dt));
+    // A solo game waits while the help is open; anything with others can't.
+    if (!(mode.kind === 'solo' && helpOpen())) view.play(mode.local.advance(dt));
     state = mode.local.state();
   }
   if (mode.kind !== 'attract') me = session.me;

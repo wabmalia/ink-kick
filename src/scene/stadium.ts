@@ -46,7 +46,7 @@ function pitchTexture() {
   ctx.moveTo(m(0, 'x'), m(-H / 2, 'y'));
   ctx.lineTo(m(0, 'x'), m(H / 2, 'y'));
   ctx.stroke();
-  arc(0, 0, 2.8);
+  arc(0, 0, CONFIG.pitch.centreCircle);
   spot(0, 0);
   for (const side of [-1, 1]) {
     const line = (side * W) / 2;

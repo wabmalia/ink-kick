@@ -13,6 +13,22 @@ import type { ViewState } from './state';
 
 const KIT: Record<Team, number> = { gold: 0xf2b134, red: 0xe2553f };
 
+// The coin toss, in seconds from the coin going up: the camera holds on the
+// centre circle, then pulls back to the broadcast view while the captains
+// jog to their places and the referee heads off.
+const TOSS_OUT_START = 1.9;
+const TOSS_OUT_END = CONFIG.coinTime - 0.1;
+// Where the captains face the referee, who stands behind the ball.
+const TOSS_SPOT: Record<Team, { x: number; y: number }> = { gold: { x: -1.5, y: 0.3 }, red: { x: 1.5, y: 0.3 } };
+const REF_SPOT = { x: 0, y: -1.1 };
+const REF_EXIT = { x: 0, y: -(CONFIG.pitch.height / 2 + 2) };
+
+const smooth = (t: number) => {
+  const c = Math.min(1, Math.max(0, t));
+  return c * c * (3 - 2 * c);
+};
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
 export class GameView {
   private renderer = new THREE.WebGLRenderer({ antialias: true });
   private watercolor: Watercolor;
@@ -26,6 +42,15 @@ export class GameView {
   private scoreEl: Record<Team, HTMLElement>;
   private banner: HTMLElement;
   private labelLayer: HTMLElement;
+  private coinTimer: ReturnType<typeof setTimeout> | undefined;
+  // The broadcast camera, and the close-up on the centre circle for the toss.
+  private broadcast = { pos: new THREE.Vector3(), look: new THREE.Vector3(0, 0, 0.6) };
+  private closeUp = { pos: new THREE.Vector3(), look: new THREE.Vector3(0, 0.6, 0) };
+  private referee = new Footballer({ color: 0x2b2f3a });
+  // While the toss plays: seconds since it began, and each team's captain
+  // (picked on the first frame drawn).
+  private toss: { t: number; captains: Map<string, Team> | null } | null = null;
+  private last = new Map<string, { x: number; y: number }>();
 
   constructor(host: HTMLElement) {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -36,6 +61,9 @@ export class GameView {
     this.watercolor = new Watercolor(this.renderer);
     buildStadium(this.scene);
     this.scene.add(this.ball, this.gauges.group);
+    this.referee.group.scale.setScalar(0.975);
+    this.referee.group.visible = false;
+    this.scene.add(this.referee.group);
     this.scoreEl = { gold: document.getElementById('score-gold')!, red: document.getElementById('score-red')! };
     this.banner = document.getElementById('banner')!;
     this.labelLayer = document.getElementById('labels')!;
@@ -80,6 +108,23 @@ export class GameView {
       else near = mid;
     }
     place(far);
+    this.broadcast.pos.copy(camera.position);
+    this.broadcast.look.copy(look);
+    // Lower and close, the centre circle filling the screen.
+    const closeView = new THREE.Vector3(0, 0.55, 1).normalize();
+    this.closeUp.pos.copy(this.closeUp.look).addScaledVector(closeView, 9 * Math.max(1, 1.5 / camera.aspect));
+    this.frame(this.toss ? this.zoom() : 1);
+  }
+
+  // How far the camera has pulled back from the close-up, 0 to 1.
+  private zoom() {
+    return this.toss ? smooth((this.toss.t - TOSS_OUT_START) / (TOSS_OUT_END - TOSS_OUT_START)) : 1;
+  }
+
+  private frame(out: number) {
+    this.camera.position.lerpVectors(this.closeUp.pos, this.broadcast.pos, out);
+    this.camera.lookAt(this.projected.lerpVectors(this.closeUp.look, this.broadcast.look, out));
+    this.camera.updateMatrixWorld();
   }
 
   private footballer(id: string, team: Team) {
@@ -107,26 +152,62 @@ export class GameView {
         this.banner.className = `banner show ${e.team}`;
       } else if (e.type === 'kickoff') {
         this.banner.className = 'banner';
+      } else if (e.type === 'coin') {
+        this.tossCoin(e.team);
       }
     }
   }
 
   // me: whose ring and gauges to show, if anyone's. names: shown over heads.
   render(state: ViewState, dt: number, now: number, me: string | null, names?: Map<string, string>) {
+    const toss = this.toss;
+    if (toss) {
+      toss.t += dt;
+      // One captain a side: whoever stands nearest the spot.
+      toss.captains ??= new Map(
+        (['gold', 'red'] as const).flatMap(team => {
+          const mine = state.players.filter(p => p.team === team);
+          mine.sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y));
+          return mine[0] ? [[mine[0].id, team] as const] : [];
+        }),
+      );
+      if (toss.t > CONFIG.coinTime) this.toss = null;
+    }
+    const out = this.zoom();
+    this.frame(out);
+
     const seen = new Set<string>();
     for (const p of state.players) {
       seen.add(p.id);
       const f = this.footballer(p.id, p.team);
-      f.group.position.set(p.x, 0, p.y);
+      let { x, y } = p;
+      let heading = Math.atan2(p.fx, p.fy);
+      let speed = Math.hypot(p.vx, p.vy);
+      const captain = toss?.captains?.get(p.id);
+      if (captain) {
+        // From facing the referee to their kickoff place, jogging there.
+        const spot = TOSS_SPOT[captain];
+        x = lerp(spot.x, p.x, out);
+        y = lerp(spot.y, p.y, out);
+        const was = this.last.get(p.id) ?? { x, y };
+        const dx = x - was.x;
+        const dy = y - was.y;
+        speed = dt > 0 ? Math.hypot(dx, dy) / dt : 0;
+        heading = speed > 0.3 ? Math.atan2(dx, dy) : Math.atan2(REF_SPOT.x - x, REF_SPOT.y - y);
+        if (out >= 1) heading = Math.atan2(p.fx, p.fy);
+      }
+      this.last.set(p.id, { x, y });
+      f.group.position.set(x, 0, y);
       f.update(dt, {
-        speed: Math.hypot(p.vx, p.vy),
-        heading: Math.atan2(p.fx, p.fy),
+        speed,
+        heading,
         action: p.action,
         actionT: p.actionT,
         charge: p.charge,
         tired: p.tired > 0,
       });
     }
+    this.drawReferee(dt, out);
     for (const [id, { f }] of this.footballers) {
       if (seen.has(id)) continue;
       this.scene.remove(f.group);
@@ -139,7 +220,9 @@ export class GameView {
     const mine = state.players.find(p => p.id === me);
     this.gauges.group.visible = !!mine;
     if (mine) {
-      this.gauges.group.position.set(mine.x, this.gauges.group.position.y, mine.y);
+      // Where it's drawn, which during the toss isn't where the sim has it.
+      const at = this.last.get(mine.id) ?? mine;
+      this.gauges.group.position.set(at.x, this.gauges.group.position.y, at.y);
       this.gauges.update(dt, now / 1000, mine.stamina, mine.tired, mine.action === 'charge', mine.charge);
     }
 
@@ -147,6 +230,30 @@ export class GameView {
     this.scoreEl.red.textContent = String(state.score.red);
     this.drawLabels(state, names);
     this.watercolor.render(this.scene, this.camera, now / 1000);
+  }
+
+  // Facing the camera behind the ball for the toss, arm up as the coin
+  // goes, then jogging off over the far touchline.
+  private drawReferee(dt: number, out: number) {
+    const ref = this.referee;
+    ref.group.visible = !!this.toss;
+    if (!this.toss) return;
+    const t = this.toss.t;
+    const leaving = out > 0;
+    const x = lerp(REF_SPOT.x, REF_EXIT.x, out);
+    const y = lerp(REF_SPOT.y, REF_EXIT.y, out);
+    const was = ref.group.position;
+    const speed = dt > 0 ? Math.hypot(x - was.x, y - was.z) / dt : 0;
+    ref.group.position.set(x, 0, y);
+    ref.update(dt, {
+      speed: leaving ? speed : 0,
+      heading: leaving ? Math.PI : 0,
+      action: 'none',
+      actionT: 0,
+      charge: 0,
+      tired: false,
+      armUp: smooth(t / 0.15) * (1 - smooth((t - 0.5) / 0.3)),
+    });
   }
 
   private drawLabels(state: ViewState, names?: Map<string, string>) {
@@ -165,7 +272,8 @@ export class GameView {
         }
         el.textContent = name;
         el.dataset.team = p.team;
-        this.projected.set(p.x, 2.1, p.y).project(this.camera);
+        const at = this.last.get(p.id) ?? p;
+        this.projected.set(at.x, 2.1, at.y).project(this.camera);
         el.style.transform = `translate(${(this.projected.x + 1) * 50}vw, ${(1 - this.projected.y) * 50}vh) translate(-50%, -100%)`;
       }
     }
@@ -176,7 +284,27 @@ export class GameView {
     }
   }
 
+  // Spins the coin and lands it on the team that kicks off. Restarting the
+  // element restarts its animations.
+  private tossCoin(team: Team) {
+    const toss = document.getElementById('coin-toss')!;
+    const coin = document.getElementById('coin')!;
+    const text = document.getElementById('coin-text')!;
+    coin.style.setProperty('--end', `${team === 'gold' ? 1800 : 1980}deg`);
+    text.textContent = `${team === 'gold' ? 'Gold' : 'Red'} kicks off!`;
+    text.className = `coin-text ${team}`;
+    toss.hidden = true;
+    void toss.offsetWidth;
+    toss.hidden = false;
+    this.toss = { t: 0, captains: null };
+    clearTimeout(this.coinTimer);
+    this.coinTimer = setTimeout(() => (toss.hidden = true), CONFIG.coinTime * 1000);
+  }
+
   clearBanner() {
     this.banner.className = 'banner';
+    clearTimeout(this.coinTimer);
+    document.getElementById('coin-toss')!.hidden = true;
+    this.toss = null;
   }
 }

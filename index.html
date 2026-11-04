@@ -35,16 +35,57 @@
     <span class="team red">RED</span>
   </header>
   <p class="banner" id="banner"></p>
+  <div class="coin-toss" id="coin-toss" hidden>
+    <div class="coin" id="coin">
+      <span class="face gold">G</span>
+      <span class="face red">R</span>
+    </div>
+    <p class="coin-text" id="coin-text"></p>
+  </div>
 
   <nav class="ingame" id="ingame" hidden>
     <button class="ink-btn" id="leave-match" type="button">Menu</button>
     <button class="ink-btn" id="end-match" type="button" hidden>Back to lobby</button>
     <span class="room-tag" id="room-tag"></span>
   </nav>
-  <p class="hint" id="hint" hidden>
-    <kbd>WASD</kbd> run &middot; <kbd>Shift</kbd> sprint &middot;
-    <kbd>Space</kbd> with the ball: hold to power a kick &middot; without: tap to poke, hold to slide
-  </p>
+  <button class="ink-btn help-btn" id="help-open" type="button" aria-haspopup="dialog">
+    <span class="key small" aria-hidden="true">H</span> How to play
+  </button>
+
+  <dialog class="help card" id="help" aria-labelledby="help-title">
+    <h2 id="help-title">How to play</h2>
+    <dl class="controls">
+      <dt>
+        <span class="keys cluster">
+          <span class="key up">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>
+        </span>
+        <span class="or-word">or</span>
+        <span class="keys cluster">
+          <span class="key up" aria-label="Up">&uarr;</span><span class="key" aria-label="Left">&larr;</span><span class="key" aria-label="Down">&darr;</span><span class="key" aria-label="Right">&rarr;</span>
+        </span>
+      </dt>
+      <dd><b>Run.</b> With the ball at your feet you turn more slowly, so it swings round you.</dd>
+
+      <dt><span class="key wide">Shift</span></dt>
+      <dd><b>Sprint</b> until your stamina runs dry, then you tire for a moment. Stamina shows left of the ring under you.</dd>
+
+      <dt><span class="key space">Space</span><span class="hold">hold</span></dt>
+      <dd><b>With the ball: kick.</b> Hold to power it up, release to strike. Short is a pass, long is a shot. Power shows right of the ring.</dd>
+
+      <dt><span class="key space short">Space</span><span class="plus">+</span><span class="key wide">Shift</span></dt>
+      <dd><b>Fake.</b> Tap sprint while charging and the kick is called off, the ball kept.</dd>
+
+      <dt><span class="key space">Space</span><span class="hold">tap / hold</span></dt>
+      <dd><b>Without the ball: tackle.</b> Tap to poke a foot in, hold to slide. Slide straight into the ball to keep it. Nobody can poke the ball off your back.</dd>
+
+      <dt><span class="key">X</span></dt>
+      <dd>Works the same as Space.</dd>
+
+      <dt><span class="key">H</span><span class="key wide">Esc</span></dt>
+      <dd>Open and close this. Esc also leaves a solo game. Solo pauses while this is open.</dd>
+    </dl>
+    <button class="brush gold" id="help-close" type="button">Got it</button>
+  </dialog>
 
   <main class="menu" id="menu">
     <section class="screen home" id="home" hidden>

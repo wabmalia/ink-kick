@@ -5,8 +5,10 @@ import { createMatch, createPlayer, step, type Input, type Match, type Player, t
 const idle: Input = { x: 0, y: 0, kick: false, sprint: false };
 const ticks = (seconds: number) => Math.round(seconds / CONFIG.tick);
 
+// A loose ball on the spot, so tests place it where they want.
 function setup() {
   const match = createMatch([createPlayer('me', 'gold'), createPlayer('them', 'red')]);
+  match.owner = null;
   return { match, me: match.players[0]!, them: match.players[1]! };
 }
 
@@ -29,16 +31,58 @@ function moveTo(p: Player, x: number, y: number, fx = 1, fy = 0) {
 }
 
 describe('sim', () => {
-  it('lines the teams up in their own halves at kickoff', () => {
-    const { match, me, them } = setup();
-    expect(me.x).toBeLessThan(0);
-    expect(them.x).toBeGreaterThan(0);
+  it('lines the teams up in their own halves, the kicking team on the ball', () => {
+    const match = createMatch([createPlayer('me', 'gold'), createPlayer('mate', 'gold'), createPlayer('them', 'red')], { kickoff: 'red' });
+    const [me, mate, them] = match.players;
+    expect(me!.x).toBeLessThan(0);
+    expect(mate!.x).toBeLessThan(0);
+    expect(them!.x).toBeGreaterThan(0);
     expect(match.ball).toMatchObject({ x: 0, y: 0 });
-    expect(match.owner).toBeNull();
+    expect(match.owner).toBe('them');
+    expect(them!.x - match.ball.x).toBeCloseTo(CONFIG.dribble.distance);
+  });
+
+  it('opens with a coin toss, everyone held still until it lands', () => {
+    const match = createMatch([createPlayer('me', 'gold'), createPlayer('them', 'red')], { kickoff: 'gold', coin: true });
+    const first = run(match, 1, { me: { x: 1 } });
+    expect(first).toEqual([{ type: 'coin', team: 'gold' }]);
+    const me = match.players[0]!;
+    const startX = me.x;
+    run(match, ticks(CONFIG.coinTime) - 2, { me: { x: 1 } });
+    expect(me.x).toBe(startX);
+    run(match, ticks(0.5), { me: { x: 1 } });
+    expect(me.x).toBeGreaterThan(startX);
+  });
+
+  it('keeps teams in their halves and defenders out of the circle until the kickoff is taken', () => {
+    const match = createMatch([createPlayer('me', 'gold'), createPlayer('mate', 'gold'), createPlayer('them', 'red')], { kickoff: 'gold' });
+    const [, mate, them] = match.players;
+    // Red charges the kicker; gold's spare man runs for the other half.
+    run(match, ticks(2), { them: { x: -1 }, mate: { x: 1 } });
+    expect(Math.hypot(them!.x, them!.y)).toBeGreaterThanOrEqual(CONFIG.pitch.centreCircle + them!.r - 1e-9);
+    expect(mate!.x).toBeLessThanOrEqual(-mate!.r);
+    expect(match.owner).toBe('me');
+
+    // The kicker moves the ball: everyone's free.
+    run(match, ticks(0.3), { me: { y: 1 } });
+    expect(match.kickoffHeld).toBe(false);
+    run(match, ticks(1.5), { them: { x: -1 }, mate: { x: 1 } });
+    expect(mate!.x).toBeGreaterThan(0);
+    // Red got through the circle it was held out of.
+    expect(them!.x).toBeLessThan(CONFIG.pitch.centreCircle);
+  });
+
+  it('gives the next kickoff to the team that conceded', () => {
+    const { match } = setup();
+    Object.assign(match.ball, { x: 12, y: 0, vx: 15, vy: 0 });
+    run(match, 30 + ticks(CONFIG.restartDelay) + 1);
+    expect(match.score.gold).toBe(1);
+    expect(match.owner).toBe('them');
   });
 
   it('runs at run speed and sprints faster', () => {
     const { match, me } = setup();
+    moveTo(me, -10, 0);
     run(match, ticks(0.6), { me: { y: 1 } });
     expect(me.vy).toBeCloseTo(CONFIG.player.runSpeed, 0);
     run(match, ticks(0.6), { me: { y: 1, sprint: true } });
@@ -90,6 +134,19 @@ describe('sim', () => {
     const shot = launch(CONFIG.kick.chargeTime);
     expect(pass).toBeGreaterThan(CONFIG.kick.passSpeed * 0.9);
     expect(shot).toBeGreaterThan(CONFIG.kick.shotSpeed * 0.9);
+  });
+
+  it('calls a charged kick off with a tap of sprint, keeping the ball', () => {
+    const { match, me } = setup();
+    giveBall(match, me);
+    run(match, ticks(0.4), { me: { kick: true } });
+    const feint = run(match, 1, { me: { kick: true, sprint: true } });
+    expect(feint).toEqual([{ type: 'feint', player: 'me' }]);
+    expect(me.action).toBe('none');
+    // Letting go afterwards doesn't kick.
+    const after = run(match, ticks(0.3));
+    expect(after.some(e => e.type === 'kick')).toBe(false);
+    expect(match.owner).toBe('me');
   });
 
   it('slows the player while charging', () => {
@@ -217,6 +274,15 @@ describe('sim', () => {
     expect(later).toContainEqual({ type: 'kickoff' });
     expect(match.ball).toMatchObject({ x: 0, y: 0, vx: 0, vy: 0 });
     expect(match.score).toEqual({ gold: 1, red: 0 });
+  });
+
+  it("doesn't score when the ball is dribbled over the end line beside the goal", () => {
+    const { match, me } = setup();
+    moveTo(me, 12, 5);
+    giveBall(match, me);
+    const events = run(match, ticks(1.5), { me: { x: 1 } });
+    expect(events.some(e => e.type === 'goal')).toBe(false);
+    expect(match.ball.x).toBeLessThanOrEqual(CONFIG.pitch.width / 2 - match.ball.r);
   });
 
   it('scores for red in the gold goal', () => {

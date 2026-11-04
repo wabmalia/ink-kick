@@ -1,6 +1,7 @@
 import type { Team } from '../engine/sim';
 import { normalizeCode, type MemberView } from '../net/protocol';
 import { session } from '../net/session';
+import { helpOpen } from './help';
 
 // The screens over the stadium: home, connecting, error and the lobby, and
 // the buttons shown during a match. Everything is drawn from the session.
@@ -68,7 +69,6 @@ function memberItem(m: MemberView) {
 export function render() {
   const playing = inMatch();
   $('scoreboard').hidden = !playing;
-  $('hint').hidden = !playing;
   $('ingame').hidden = !playing;
 
   if (playing) {
@@ -150,7 +150,7 @@ $('copy-link').addEventListener('click', async () => {
   }
 });
 
-// Esc leaves a solo game.
+// Esc leaves a solo game (when it isn't closing the help dialog).
 window.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && session.status === 'solo') session.leave();
+  if (e.key === 'Escape' && session.status === 'solo' && !helpOpen()) session.leave();
 });

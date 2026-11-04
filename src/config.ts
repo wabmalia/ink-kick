@@ -10,6 +10,9 @@ export const CONFIG = {
     goalDepth: 1.5,
     // How far past the lines players may roam.
     margin: 2.5,
+    // Radius of the centre circle, which the defending team keeps out of at
+    // a kickoff.
+    centreCircle: 2.8,
   },
 
   player: {
@@ -113,6 +116,12 @@ export const CONFIG = {
 
   // Pause after a goal before the kickoff.
   restartDelay: 1.8,
+  // At a kickoff, the ball counts as played once it's this far off the spot.
+  kickoffPlayed: 0.1,
+  // How long everyone waits for the coin toss at the start of a match:
+  // the toss up close, then the camera pulling back as the captains take
+  // their places.
+  coinTime: 3.6,
 
   net: {
     // The host sends a snapshot every this many ticks (2 is 30 a second).

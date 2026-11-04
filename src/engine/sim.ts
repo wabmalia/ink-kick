@@ -50,6 +50,7 @@ export interface Player extends Disc {
   // Whether the current poke or slide already touched the ball.
   struck: boolean;
   kickDown: boolean;
+  sprintDown: boolean;
 }
 
 export interface Input {
@@ -71,6 +72,14 @@ export interface Match {
   score: Record<Team, number>;
   // Counts down after a goal; the kickoff happens when it reaches 0.
   restartIn: number;
+  // The team that takes the next kickoff: whoever conceded the last goal.
+  kickoffTeam: Team;
+  // Counts down while everyone waits for the coin toss; nobody moves.
+  holdFor: number;
+  coinPending: boolean;
+  // From a kickoff until the ball is played: everyone stays in their own
+  // half, and the defending team out of the centre circle.
+  kickoffHeld: boolean;
 }
 
 export type SimEvent =
@@ -79,7 +88,10 @@ export type SimEvent =
   | { type: 'poke'; player: string }
   | { type: 'slide'; player: string }
   | { type: 'steal'; player: string; from: string }
+  | { type: 'feint'; player: string }
   | { type: 'goal'; team: Team }
+  // At the start of a match: who the coin gave the kickoff to.
+  | { type: 'coin'; team: Team }
   | { type: 'kickoff' };
 
 const still = () => ({ vx: 0, vy: 0 });
@@ -93,11 +105,13 @@ export function createPlayer(id: string, team: Team): Player {
     fx: team === 'gold' ? 1 : -1, fy: 0,
     action: 'none', actionT: 0, charge: 0,
     stamina: 1, tired: 0, sprinting: false,
-    cooldown: 0, struck: false, kickDown: false,
+    cooldown: 0, struck: false, kickDown: false, sprintDown: false,
   };
 }
 
-export function createMatch(players: Player[]): Match {
+// kickoff: the team starting on the ball. coin: open with a coin toss
+// (a 'coin' event, then everyone held still while it plays).
+export function createMatch(players: Player[], opts: { kickoff?: Team; coin?: boolean } = {}): Match {
   const b = CONFIG.ball;
   const { width, goalWidth } = CONFIG.pitch;
   const post = (x: number, y: number): Disc => ({
@@ -111,6 +125,10 @@ export function createMatch(players: Player[]): Match {
     pullingIn: 0,
     score: { gold: 0, red: 0 },
     restartIn: 0,
+    kickoffTeam: opts.kickoff ?? 'gold',
+    holdFor: opts.coin ? CONFIG.coinTime : 0,
+    coinPending: !!opts.coin,
+    kickoffHeld: true,
   };
   kickoff(match);
   return match;
@@ -121,6 +139,7 @@ export function kickoff(match: Match) {
   Object.assign(match.ball, { x: 0, y: 0, ...still() });
   match.owner = null;
   match.pullingIn = 0;
+  match.kickoffHeld = true;
   for (const team of ['gold', 'red'] as const) {
     match.players.filter(p => p.team === team).forEach((p, i, mine) => {
       Object.assign(p, {
@@ -128,6 +147,16 @@ export function kickoff(match: Match) {
         action: 'none', actionT: 0, charge: 0, cooldown: 0,
       });
     });
+  }
+  // Whoever of the kicking team stands nearest the spot steps up to it,
+  // already on the ball.
+  const kicker = match.players
+    .filter(p => p.team === match.kickoffTeam)
+    .sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y))[0];
+  if (kicker) {
+    const side = kicker.team === 'gold' ? -1 : 1;
+    Object.assign(kicker, { x: side * CONFIG.dribble.distance, y: 0, fx: -side, fy: 0 });
+    match.owner = kicker.id;
   }
 }
 
@@ -160,6 +189,21 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
   const dt = CONFIG.tick;
   const { ball } = match;
   const byId = (id: string | null) => match.players.find(p => p.id === id);
+
+  if (match.coinPending) {
+    match.coinPending = false;
+    events.push({ type: 'coin', team: match.kickoffTeam });
+  }
+  if (match.holdFor > 0) {
+    match.holdFor = Math.max(0, match.holdFor - dt);
+    // Buttons held through the toss don't fire the moment it ends.
+    for (const p of match.players) {
+      const input = inputs[p.id] ?? NO_INPUT;
+      p.kickDown = input.kick;
+      p.sprintDown = input.sprint;
+    }
+    return events;
+  }
 
   for (const p of match.players) control(match, p, inputs[p.id] ?? NO_INPUT, events);
 
@@ -196,6 +240,10 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
   for (const p of players) tackle(match, p, events);
 
   for (const p of players) keepPlayerIn(p);
+  if (match.kickoffHeld) {
+    if (Math.hypot(ball.x, ball.y) > CONFIG.kickoffPlayed) match.kickoffHeld = false;
+    else for (const p of players) keepKickoffShape(p, p.team !== match.kickoffTeam);
+  }
   keepBallIn(ball);
 
   match.pullingIn = Math.max(0, match.pullingIn - dt);
@@ -221,6 +269,7 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
     const scorer = goalScoredBy(ball);
     if (scorer) {
       match.score[scorer]++;
+      match.kickoffTeam = scorer === 'gold' ? 'red' : 'gold';
       match.restartIn = CONFIG.restartDelay;
       match.owner = null;
       events.push({ type: 'goal', team: scorer });
@@ -250,7 +299,9 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
   const { tackle, kick } = CONFIG;
   const pressed = input.kick && !p.kickDown;
   const released = !input.kick && p.kickDown;
+  const sprintPressed = input.sprint && !p.sprintDown;
   p.kickDown = input.kick;
+  p.sprintDown = input.sprint;
   p.actionT += dt;
   p.cooldown = Math.max(0, p.cooldown - dt);
   const hasBall = match.owner === p.id;
@@ -261,7 +312,12 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
       break;
     case 'charge':
       p.charge = Math.min(1, p.actionT / kick.chargeTime);
-      if (released) {
+      if (sprintPressed) {
+        // A dummy: the kick is called off, the ball kept.
+        p.charge = 0;
+        setAction(p, 'none');
+        events.push({ type: 'feint', player: p.id });
+      } else if (released) {
         const speed = kick.passSpeed + (kick.shotSpeed - kick.passSpeed) * p.charge;
         match.ball.vx = p.fx * speed;
         match.ball.vy = p.fy * speed;
@@ -490,13 +546,36 @@ function keepPlayerIn(p: Player) {
   wall(p, 'y', -height / 2 - margin + p.r, height / 2 + margin - p.r);
 }
 
+// Before the kickoff is taken: own half only, and the defending team outside
+// the centre circle.
+function keepKickoffShape(p: Player, defending: boolean) {
+  if (p.team === 'gold') wall(p, 'x', -Infinity, -p.r);
+  else wall(p, 'x', p.r, Infinity);
+  if (!defending) return;
+  const min = CONFIG.pitch.centreCircle + p.r;
+  const dist = Math.hypot(p.x, p.y);
+  if (dist >= min) return;
+  // Pushed back out to the circle, towards their own side if dead centre.
+  const nx = dist > 1e-6 ? p.x / dist : p.team === 'gold' ? -1 : 1;
+  const ny = dist > 1e-6 ? p.y / dist : 0;
+  p.x = nx * min;
+  p.y = ny * min;
+  const inward = p.vx * nx + p.vy * ny;
+  if (inward < 0) {
+    p.vx -= inward * nx;
+    p.vy -= inward * ny;
+  }
+}
+
 // The pitch lines are walls for the ball, except the goal mouths, which open
 // into a net. The posts are discs, so the corners of the mouth round off.
+// Past the end line only counts as in the net within the mouth's width;
+// anywhere else the line holds it, even when it's dribbled into.
 function keepBallIn(ball: Disc) {
   const { width, height, goalWidth, goalDepth } = CONFIG.pitch;
   const half = width / 2;
   const goalHalf = goalWidth / 2;
-  if (Math.abs(ball.x) > half) {
+  if (Math.abs(ball.x) > half && Math.abs(ball.y) < goalHalf) {
     wall(ball, 'y', -goalHalf + ball.r, goalHalf - ball.r);
     wall(ball, 'x', -half - goalDepth + ball.r, half + goalDepth - ball.r);
   } else {

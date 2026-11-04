@@ -26,6 +26,8 @@ export interface Pose {
   actionT: number;
   charge: number;
   tired: boolean;
+  // 0..1: right arm raised overhead, as a referee tossing the coin.
+  armUp?: number;
 }
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
@@ -232,6 +234,7 @@ export class Footballer {
     this.kneeL.rotation.x = kneeL;
     this.kneeR.rotation.x = kneeR;
     this.shoulderL.rotation.x = shoulderL;
+    if (pose.armUp) shoulderR += (-2.7 - shoulderR) * pose.armUp;
     this.shoulderR.rotation.x = shoulderR;
     this.shoulderL.rotation.z = spread;
     this.shoulderR.rotation.z = -spread;

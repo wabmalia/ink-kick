@@ -63,31 +63,6 @@ html, body {
 .banner.gold { color: var(--gold); }
 .banner.red { color: var(--red); }
 
-.hint {
-  position: fixed;
-  bottom: max(12px, env(safe-area-inset-bottom));
-  left: 0;
-  right: 0;
-  width: fit-content;
-  margin: 0 auto;
-  padding: 3px 12px;
-  border-radius: 10px;
-  background: rgba(13, 16, 38, 0.85);
-  text-align: center;
-  font-family: 'Caveat', cursive;
-  font-weight: 700;
-  font-size: 18px;
-  color: var(--soft);
-}
-
-kbd {
-  font-family: inherit;
-  color: var(--text);
-  padding: 1px 5px;
-  border: 1px solid #353b66;
-  border-radius: 4px;
-  background: rgba(18, 21, 42, 0.8);
-}
 
 [hidden] { display: none !important; }
 
@@ -343,3 +318,137 @@ kbd {
 @media (max-width: 640px) {
   .teams { grid-template-columns: 1fr; }
 }
+
+/* --- Coin toss ----------------------------------------------------------- */
+
+.coin-toss {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  /* The coin goes up over the referee's head; the call lands below the
+     centre circle. */
+  grid-template-rows: auto 1fr auto;
+  place-content: stretch center;
+  justify-items: center;
+  padding: 9vh 0 12vh;
+  pointer-events: none;
+  perspective: 800px;
+}
+.coin {
+  position: relative;
+  width: 130px;
+  height: 130px;
+  transform-style: preserve-3d;
+  /* --end: whole turns, plus half a turn when red comes up. */
+  animation: toss 1.7s cubic-bezier(0.25, 0.7, 0.35, 1) forwards;
+}
+.face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 4px solid var(--ink);
+  font-size: 76px;
+  line-height: 1;
+  color: var(--ink);
+  backface-visibility: hidden;
+  box-shadow: inset 0 0 0 6px rgba(255, 255, 255, 0.35), 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.face.gold { background: radial-gradient(circle at 32% 30%, #ffeab0 0, transparent 45%), radial-gradient(circle at 72% 75%, #f5a312 0, transparent 60%), #ffc23a; }
+.face.red { background: radial-gradient(circle at 32% 30%, #ffc2b3 0, transparent 45%), radial-gradient(circle at 72% 75%, #f0553c 0, transparent 60%), #ff7660; transform: rotateY(180deg); }
+
+@keyframes toss {
+  0% { transform: translateY(40px) rotateY(0) scale(0.5); }
+  45% { transform: translateY(-150px) rotateY(calc(var(--end) * 0.55)) scale(1.15); }
+  100% { transform: translateY(0) rotateY(var(--end)) scale(1); }
+}
+
+.coin-text {
+  grid-row: 3;
+  margin: 0;
+  font-size: clamp(40px, 7vw, 64px);
+  text-shadow: 3px 3px 0 var(--ink), 0 0 16px rgba(13, 16, 38, 0.8);
+  opacity: 0;
+  animation: land 0.3s 1.6s ease-out forwards;
+}
+.coin-text.gold { color: #ffc53d; }
+.coin-text.red { color: #ff7660; }
+@keyframes land {
+  from { opacity: 0; transform: scale(0.7); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* --- How to play --------------------------------------------------------- */
+
+.help-btn {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(13, 16, 38, 0.85);
+  border-radius: 10px 14px 9px 15px;
+}
+
+.help {
+  width: min(640px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+  border: 0;
+  color: var(--text);
+  background: none;
+  padding: 22px 28px 24px;
+  /* The card style zeroes margins; dialogs centre with auto ones. */
+  margin: auto;
+}
+.help::backdrop { background: rgba(8, 10, 24, 0.7); }
+.help[open] { display: flex; flex-direction: column; align-items: center; }
+.help h2 { align-self: flex-start; }
+
+.controls {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px 20px;
+  align-items: center;
+  margin: 4px 0 20px;
+  width: 100%;
+}
+.controls dt { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.controls dd { margin: 0; font-family: 'Caveat', cursive; font-weight: 700; font-size: 20px; line-height: 1.15; color: var(--soft); }
+.controls dd b { color: var(--text); }
+.or-word,
+.hold,
+.plus { font-family: 'Caveat', cursive; font-weight: 700; font-size: 18px; color: var(--soft); }
+
+/* Keycaps: a pale cap with a darker skirt under it, as on a real board. */
+.key {
+  display: inline-grid;
+  place-items: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: #232742;
+  background: linear-gradient(180deg, #fbf9f3 0%, #e4dfd3 100%);
+  border: 1px solid #a49e90;
+  box-shadow: 0 3px 0 #8c8678, 0 4px 6px rgba(0, 0, 0, 0.45), inset 0 1px 0 #fff;
+  transform: translateY(-2px);
+}
+.key.small { min-width: 22px; height: 22px; padding: 0 5px; font-size: 12px; border-radius: 5px; box-shadow: 0 2px 0 #8c8678, inset 0 1px 0 #fff; transform: translateY(-1px); }
+.key.wide { min-width: 62px; }
+.key.space { min-width: 130px; }
+.key.space.short { min-width: 80px; }
+.keys.cluster {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 34px);
+  grid-template-rows: 34px 34px;
+  gap: 5px;
+}
+.keys.cluster .key { min-width: 0; padding: 0; }
+.keys.cluster .up { grid-column: 2; grid-row: 1; }
+.keys.cluster .key:not(.up) { grid-row: 2; }
