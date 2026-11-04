@@ -68,7 +68,6 @@ function memberItem(m: MemberView) {
 
 export function render() {
   const playing = inMatch();
-  $('scoreboard').hidden = !playing;
   $('ingame').hidden = !playing;
 
   if (playing) {

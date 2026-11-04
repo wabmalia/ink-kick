@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
-// Draws the scene as ink and watercolour. The scene renders twice, once for
-// colour and depth and once for normals, then one full-screen pass:
-//   - ink outlines from depth and normal edges, uneven in weight with the
+// Draws the scene as ink and watercolour. The scene renders once, for colour
+// and depth, then one full-screen pass:
+//   - ink outlines from depth edges and creases, uneven in weight with the
 //     odd gap, and redrawn a few times a second like hand-drawn frames;
 //   - colour as layered washes: softly posterised, bleeding a little, with
 //     pigment pooling darker where washes meet;
@@ -22,7 +22,6 @@ const vertexShader = /* glsl */ `
 const fragmentShader = /* glsl */ `
   uniform sampler2D tColor;
   uniform sampler2D tDepth;
-  uniform sampler2D tNormal;
   uniform vec2 resolution;
   uniform float pixelRatio;
   uniform float boil;
@@ -118,11 +117,14 @@ const fragmentShader = /* glsl */ `
     float dd = abs(viewDepth(iuv + dx) - d) + abs(viewDepth(iuv - dx) - d)
              + abs(viewDepth(iuv + dy) - d) + abs(viewDepth(iuv - dy) - d);
     float depthEdge = smoothstep(0.012, 0.05, dd / d);
-    vec3 n = texture2D(tNormal, iuv).xyz;
-    float nd = length(texture2D(tNormal, iuv + dx).xyz - n) + length(texture2D(tNormal, iuv - dx).xyz - n)
-             + length(texture2D(tNormal, iuv + dy).xyz - n) + length(texture2D(tNormal, iuv - dy).xyz - n);
+    // Creases, from the depth alone: 1/depth changes evenly across a flat
+    // surface on screen, so where its second difference isn't zero the
+    // surface bends. This saves drawing the scene again for its normals.
+    float inv = 1.0 / d;
+    float crease = abs(1.0 / viewDepth(iuv + dx) + 1.0 / viewDepth(iuv - dx) - 2.0 * inv)
+                 + abs(1.0 / viewDepth(iuv + dy) + 1.0 / viewDepth(iuv - dy) - 2.0 * inv);
     // High enough that a round stick's own curve doesn't read as an edge.
-    float normalEdge = smoothstep(1.0, 1.8, nd);
+    float normalEdge = smoothstep(0.006, 0.02, crease / inv);
     float ink = max(depthEdge, normalEdge);
     // Lift the pen now and then.
     ink *= 0.7 + 0.3 * smoothstep(0.2, 0.45, noise(p * 0.09 + boil * 5.3));
@@ -134,9 +136,6 @@ const fragmentShader = /* glsl */ `
 
 export class Watercolor {
   private color: THREE.WebGLRenderTarget;
-  private normals: THREE.WebGLRenderTarget;
-  private normalMaterial = new THREE.MeshNormalMaterial();
-  private normalBackground = new THREE.Color(0.5, 0.5, 1);
   private quad: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   private quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
@@ -146,7 +145,6 @@ export class Watercolor {
       samples: 4,
       depthTexture: new THREE.DepthTexture(1, 1),
     });
-    this.normals = new THREE.WebGLRenderTarget(1, 1);
     this.quad = new THREE.Mesh(
       new THREE.PlaneGeometry(2, 2),
       new THREE.ShaderMaterial({
@@ -157,7 +155,6 @@ export class Watercolor {
         uniforms: {
           tColor: { value: this.color.texture },
           tDepth: { value: this.color.depthTexture },
-          tNormal: { value: this.normals.texture },
           resolution: { value: new THREE.Vector2(1, 1) },
           pixelRatio: { value: 1 },
           boil: { value: 0 },
@@ -173,7 +170,6 @@ export class Watercolor {
     const w = Math.floor(width * ratio);
     const h = Math.floor(height * ratio);
     this.color.setSize(w, h);
-    this.normals.setSize(w, h);
     const u = this.quad.material.uniforms;
     u.resolution!.value.set(w, h);
     u.pixelRatio!.value = ratio;
@@ -188,20 +184,6 @@ export class Watercolor {
 
     renderer.setRenderTarget(this.color);
     renderer.render(scene, camera);
-
-    // Normals reuse this frame's shadow maps.
-    const background = scene.background;
-    const fog = scene.fog;
-    renderer.shadowMap.autoUpdate = false;
-    scene.overrideMaterial = this.normalMaterial;
-    scene.background = this.normalBackground;
-    scene.fog = null;
-    renderer.setRenderTarget(this.normals);
-    renderer.render(scene, camera);
-    scene.overrideMaterial = null;
-    scene.background = background;
-    scene.fog = fog;
-    renderer.shadowMap.autoUpdate = true;
 
     renderer.setRenderTarget(null);
     renderer.render(this.quad, this.quadCamera);

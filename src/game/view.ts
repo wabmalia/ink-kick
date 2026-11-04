@@ -3,8 +3,10 @@ import { CONFIG } from '../config';
 import type { SimEvent, Team } from '../engine/sim';
 import { createBall, rollBall } from '../scene/ball';
 import { Footballer } from '../scene/footballer';
+import { StickmanBatch } from '../scene/stickmen';
 import { PlayerGauges } from '../scene/gauges';
 import { BRIGHT, GRASS_DROPS, PAINTS, Splashes, TURF_DROPS } from '../scene/splashes';
+import { Billboard } from '../scene/billboard';
 import { buildStadium } from '../scene/stadium';
 import { Watercolor } from '../scene/watercolor';
 import type { ViewState } from './state';
@@ -44,7 +46,7 @@ export class GameView {
   private footballers = new Map<string, { team: Team; f: Footballer }>();
   private labels = new Map<string, HTMLElement>();
   private projected = new THREE.Vector3();
-  private scoreEl: Record<Team, HTMLElement>;
+  private billboard = new Billboard();
   private banner: HTMLElement;
   private labelLayer: HTMLElement;
   private coinTimer: ReturnType<typeof setTimeout> | undefined;
@@ -52,6 +54,7 @@ export class GameView {
   private broadcast = { pos: new THREE.Vector3(), look: new THREE.Vector3(0, 0, 0.6) };
   private closeUp = { pos: new THREE.Vector3(), look: new THREE.Vector3(0, 0.6, 0) };
   private referee = new Footballer({ color: 0x2b2f3a });
+  private stickmen: StickmanBatch;
   // While the toss plays: seconds since it began, and each team's captain
   // (picked on the first frame drawn).
   private toss: { t: number; captains: Map<string, Team> | null } | null = null;
@@ -74,10 +77,11 @@ export class GameView {
     this.watercolor = new Watercolor(this.renderer);
     buildStadium(this.scene);
     this.scene.add(this.ball, this.gauges.group, this.splashes.mesh);
+    this.stickmen = new StickmanBatch(this.scene);
     this.referee.group.scale.setScalar(0.975);
     this.referee.group.visible = false;
-    this.scene.add(this.referee.group);
-    this.scoreEl = { gold: document.getElementById('score-gold')!, red: document.getElementById('score-red')! };
+    this.stickmen.add(this.referee);
+    this.scene.add(this.billboard.group);
     this.banner = document.getElementById('banner')!;
     this.labelLayer = document.getElementById('labels')!;
     window.addEventListener('resize', () => this.resize());
@@ -107,7 +111,7 @@ export class GameView {
       camera.lookAt(look);
       camera.updateMatrixWorld();
     };
-    // Keep clear of the scoreboard at the top.
+    // Keep clear of the buttons at the top.
     const fits = () => mustSee.every(p => {
       this.projected.copy(p).project(camera);
       return Math.abs(this.projected.x) <= 0.96 && this.projected.y <= 0.8 && this.projected.y >= -0.96;
@@ -122,6 +126,7 @@ export class GameView {
     }
     place(far);
     this.broadcast.pos.copy(camera.position);
+    this.billboard.place(camera);
     this.broadcast.look.copy(look);
     // Lower and close, the centre circle filling the screen.
     const closeView = new THREE.Vector3(0, 0.55, 1).normalize();
@@ -143,13 +148,13 @@ export class GameView {
   private footballer(id: string, team: Team) {
     let entry = this.footballers.get(id);
     if (entry && entry.team !== team) {
-      this.scene.remove(entry.f.group);
+      this.stickmen.remove(entry.f);
       entry = undefined;
     }
     if (!entry) {
       const f = new Footballer({ color: KIT[team] });
       f.group.scale.setScalar(0.975);
-      this.scene.add(f.group);
+      this.stickmen.add(f);
       entry = { team, f };
       this.footballers.set(id, entry);
     }
@@ -224,11 +229,12 @@ export class GameView {
       });
     }
     this.drawReferee(dt, out);
+    this.stickmen.flush();
     this.ballSplashes(state, dt);
     this.splashes.update(dt);
     for (const [id, { f }] of this.footballers) {
       if (seen.has(id)) continue;
-      this.scene.remove(f.group);
+      this.stickmen.remove(f);
       this.footballers.delete(id);
     }
 
@@ -244,8 +250,7 @@ export class GameView {
       this.gauges.update(dt, now / 1000, mine.stamina, mine.tired, mine.action === 'charge', mine.charge);
     }
 
-    this.scoreEl.gold.textContent = String(state.score.gold);
-    this.scoreEl.red.textContent = String(state.score.red);
+    this.billboard.setScore(state.score);
     this.drawLabels(state, names);
     this.watercolor.render(this.scene, this.camera, now / 1000);
   }

@@ -10,6 +10,22 @@ export interface Kit {
   color: number;
 }
 
+// The shapes a stickman is made of, shared by every one of them.
+export type Part = 'torso' | 'head' | 'upperArm' | 'forearm' | 'thigh' | 'shin' | 'foot';
+// A stick hanging from its joint, length to the next joint.
+const stick = (length: number, radius: number) => () => new THREE.CapsuleGeometry(radius, length - radius, 4, 10);
+export const PART_GEOMETRY: Record<Part, () => THREE.BufferGeometry> = {
+  torso: () => new THREE.CapsuleGeometry(0.1, 0.46, 4, 10),
+  head: () => new THREE.SphereGeometry(0.19, 20, 14),
+  upperArm: stick(0.28, 0.07),
+  forearm: stick(0.27, 0.065),
+  thigh: stick(0.43, 0.08),
+  shin: stick(0.43, 0.072),
+  foot: () => new THREE.SphereGeometry(0.07, 10, 8),
+};
+const HEAD = 0xf4efe4;
+const INK = 0x1d2140;
+
 // Metres of ground per full stride (two steps).
 const STRIDE = 1.7;
 const RUN_SPEED = 7;
@@ -62,21 +78,18 @@ export class Footballer {
   // Blend weights that ease the slide pose in and out.
   private slideW = 0;
 
-  constructor(kit: Kit) {
-    const limb = new THREE.MeshStandardMaterial({ color: kit.color, roughness: 0.8 });
-    const head = new THREE.MeshStandardMaterial({ color: 0xf4efe4, roughness: 0.9 });
-    const ink = new THREE.MeshStandardMaterial({ color: 0x1d2140, roughness: 0.9 });
+  // Each drawn piece: which shared part it is, the joint-space slot that
+  // places it, and its colour. StickmanBatch draws them all, instanced.
+  readonly pieces: { part: Part; slot: THREE.Object3D; color: number }[] = [];
 
-    const add = (parent: THREE.Object3D, geo: THREE.BufferGeometry, m: THREE.Material, y: number, x = 0, z = 0) => {
-      const mesh = new THREE.Mesh(geo, m);
-      mesh.position.set(x, y, z);
-      mesh.castShadow = true;
-      parent.add(mesh);
-      return mesh;
+  constructor(kit: Kit) {
+    const add = (parent: THREE.Object3D, part: Part, color: number, y: number, x = 0, z = 0) => {
+      const slot = new THREE.Object3D();
+      slot.position.set(x, y, z);
+      parent.add(slot);
+      this.pieces.push({ part, slot, color });
+      return slot;
     };
-    // A stick hanging down from its joint, length to the next joint.
-    const stick = (parent: THREE.Object3D, length: number, radius: number) =>
-      add(parent, new THREE.CapsuleGeometry(radius, length - radius, 4, 10), limb, -length / 2);
 
     this.group.add(this.body);
 
@@ -84,29 +97,29 @@ export class Footballer {
     pelvis.position.y = 0.92;
     this.body.add(pelvis);
 
-        pelvis.add(this.torso);
-    add(this.torso, new THREE.CapsuleGeometry(0.1, 0.46, 4, 10), limb, 0.3);
-    add(this.torso, new THREE.SphereGeometry(0.19, 20, 14), head, 0.8);
+    pelvis.add(this.torso);
+    add(this.torso, 'torso', kit.color, 0.3);
+    add(this.torso, 'head', HEAD, 0.8);
 
     for (const [shoulder, elbow, side] of [[this.shoulderL, this.elbowL, 1], [this.shoulderR, this.elbowR, -1]] as const) {
       shoulder.position.set(side * 0.06, 0.52, 0);
       shoulder.rotation.z = side * 0.12;
       this.torso.add(shoulder);
-      stick(shoulder, 0.28, 0.07);
+      add(shoulder, 'upperArm', kit.color, -0.14);
       elbow.position.y = -0.28;
       shoulder.add(elbow);
-      stick(elbow, 0.27, 0.065);
+      add(elbow, 'forearm', kit.color, -0.135);
     }
 
     for (const [hip, knee, side] of [[this.hipL, this.kneeL, 1], [this.hipR, this.kneeR, -1]] as const) {
       hip.position.set(side * 0.06, 0.0, 0);
       pelvis.add(hip);
-      stick(hip, 0.43, 0.08);
+      add(hip, 'thigh', kit.color, -0.215);
       knee.position.y = -0.43;
       hip.add(knee);
-      stick(knee, 0.43, 0.072);
+      add(knee, 'shin', kit.color, -0.215);
       // A small dab of a foot, pointing forward.
-      add(knee, new THREE.SphereGeometry(0.07, 10, 8), ink, -0.45, 0, 0.05).scale.set(0.9, 0.7, 1.5);
+      add(knee, 'foot', INK, -0.45, 0, 0.05).scale.set(0.9, 0.7, 1.5);
     }
   }
 

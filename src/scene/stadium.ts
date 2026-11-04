@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { adBoards } from './ads';
 import { CONFIG } from '../config';
 
 // The static set: striped pitch with its markings, goals with nets, stands
@@ -310,9 +312,43 @@ function netTexture() {
   return tex;
 }
 
+function scaleUvs(geo: THREE.BufferGeometry, u: number, v: number) {
+  const uv = geo.attributes.uv!;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * u, uv.getY(i) * v);
+}
+
+let netMaterial: THREE.MeshStandardMaterial | null = null;
+const NET_MATERIAL = () =>
+  (netMaterial ??= new THREE.MeshStandardMaterial({ map: netTexture(), transparent: true, alphaTest: 0.2, side: THREE.DoubleSide, roughness: 1 }));
+let frameMaterial: THREE.MeshStandardMaterial | null = null;
+const FRAME_MATERIAL = () => (frameMaterial ??= new THREE.MeshStandardMaterial({ color: 0xf4f5fb, roughness: 0.35 }));
+
+// Merges every mesh in a group that never moves into one mesh per material
+// (and shadow setting), so the stadium costs a handful of draws, not dozens.
+function bake(group: THREE.Group, scene: THREE.Scene) {
+  group.updateMatrixWorld(true);
+  const sets = new Map<string, { material: THREE.Material; cast: boolean; receive: boolean; geos: THREE.BufferGeometry[] }>();
+  group.traverse(o => {
+    if (!(o instanceof THREE.Mesh)) return;
+    const material = o.material as THREE.Material;
+    const key = `${material.uuid}:${o.castShadow}:${o.receiveShadow}`;
+    let set = sets.get(key);
+    if (!set) sets.set(key, (set = { material, cast: o.castShadow, receive: o.receiveShadow, geos: [] }));
+    const geo = (o.geometry as THREE.BufferGeometry).clone().applyMatrix4(o.matrixWorld);
+    set.geos.push(geo);
+  });
+  for (const { material, cast, receive, geos } of sets.values()) {
+    const merged = new THREE.Mesh(mergeGeometries(geos)!, material);
+    merged.castShadow = cast;
+    merged.receiveShadow = receive;
+    scene.add(merged);
+    for (const g of geos) g.dispose();
+  }
+}
+
 function goal(side: number) {
   const group = new THREE.Group();
-  const white = new THREE.MeshStandardMaterial({ color: 0xf4f5fb, roughness: 0.35 });
+  const white = FRAME_MATERIAL();
   const r = CONFIG.post.radius * 0.7;
   const line = (side * W) / 2;
   for (const s of [-1, 1]) {
@@ -330,13 +366,12 @@ function goal(side: number) {
   // Net: back, two sides and a roof, sloping down to the back.
   const backX = line + side * goalDepth;
   const backH = GOAL_HEIGHT * 0.7;
-  const tex = netTexture();
+  // The tiling goes in the UVs, so every piece of net shares one material
+  // and they bake into a single mesh.
   const net = (w: number, h: number, repeatW: number, repeatH: number) => {
-    const t = tex.clone();
-    t.repeat.set(repeatW, repeatH);
-    t.needsUpdate = true;
-    const m = new THREE.MeshStandardMaterial({ map: t, transparent: true, alphaTest: 0.2, side: THREE.DoubleSide, roughness: 1 });
-    return new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
+    const geo = new THREE.PlaneGeometry(w, h);
+    scaleUvs(geo, repeatW, repeatH);
+    return new THREE.Mesh(geo, NET_MATERIAL());
   };
   const back = net(goalWidth, backH, goalWidth * 4, backH * 4);
   back.position.set(backX, backH / 2, 0);
@@ -350,11 +385,8 @@ function goal(side: number) {
     shape.lineTo(0, GOAL_HEIGHT);
     const geo = new THREE.ShapeGeometry(shape);
     // ShapeGeometry UVs are in shape units; scale them into net squares.
-    const uv = geo.attributes.uv!;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 4, uv.getY(i) * 4);
-    const t = tex.clone();
-    t.needsUpdate = true;
-    const sideNet = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: t, transparent: true, alphaTest: 0.2, side: THREE.DoubleSide }));
+    scaleUvs(geo, 4, 4);
+    const sideNet = new THREE.Mesh(geo, NET_MATERIAL());
     sideNet.position.set(line, 0, (s * goalWidth) / 2);
     sideNet.scale.x = side;
     group.add(sideNet);
@@ -383,7 +415,7 @@ const STEP_DEPTH = 1.1;
 const STEP_RISE = 0.55;
 const CROWD_COLORS = [0xf2b134, 0xf2b134, 0xe2553f, 0xe2553f, 0xeef0fa, 0x353b66, 0x9aa0bf, 0x1d2140];
 
-function stands(scene: THREE.Scene) {
+function stands(scene: THREE.Scene, fixed: THREE.Group) {
   const front = 2;
   const terraces: Terrace[] = [
     { x: 0, z: -(H / 2 + APRON + front), out: new THREE.Vector2(0, -1), length: W + APRON * 2 + 6 },
@@ -392,12 +424,25 @@ function stands(scene: THREE.Scene) {
     { x: W / 2 + APRON + front, z: 0, out: new THREE.Vector2(1, 0), length: H + APRON * 2 },
   ];
   const concrete = new THREE.MeshStandardMaterial({ color: 0x353b66, roughness: 0.9 });
-  const fan = new THREE.BoxGeometry(0.42, 0.62, 0.34);
-  fan.translate(0, 0.31, 0);
   const spacing = 0.62;
   let total = 0;
   for (const t of terraces) total += ROWS * Math.floor(t.length / spacing);
-  const crowd = new THREE.InstancedMesh(fan, new THREE.MeshStandardMaterial({ roughness: 0.9 }), total);
+  // The crowd: low-poly stickmen, drawn as three batches (bodies, heads and
+  // arms) however many there are. They catch no shadows and cast none.
+  const crowdMaterial = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+  const body = new THREE.CapsuleGeometry(0.085, 0.3, 2, 6);
+  body.translate(0, 0.3, 0);
+  const head = new THREE.SphereGeometry(0.13, 7, 5);
+  head.translate(0, 0.66, 0);
+  const arm = new THREE.CapsuleGeometry(0.035, 0.26, 1, 4);
+  // Hanging from the shoulder.
+  arm.translate(0, -0.15, 0);
+  const bodies = new THREE.InstancedMesh(body, crowdMaterial, total);
+  const heads = new THREE.InstancedMesh(head, crowdMaterial, total);
+  const arms = new THREE.InstancedMesh(arm, crowdMaterial, total * 2);
+  const armLocal = new THREE.Matrix4();
+  const armRot = new THREE.Matrix4();
+  const paper = new THREE.Color(0xf4efe4);
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const color = new THREE.Color();
@@ -413,7 +458,7 @@ function stands(scene: THREE.Scene) {
       step.position.set(t.x + t.out.x * d, top / 2, t.z + t.out.y * d);
       step.rotation.y = yaw;
       step.receiveShadow = true;
-      scene.add(step);
+      fixed.add(step);
       const seats = Math.floor(t.length / spacing);
       for (let i = 0; i < seats; i++) {
         const a = (i - (seats - 1) / 2) * spacing + (Math.random() - 0.5) * 0.12;
@@ -421,16 +466,28 @@ function stands(scene: THREE.Scene) {
         // Empty seats here and there.
         const s = Math.random() < 0.12 ? 0 : 0.85 + Math.random() * 0.3;
         m.compose(pos, q, new THREE.Vector3(s, s, s));
-        crowd.setMatrixAt(n, m);
-        crowd.setColorAt(n, color.setHex(CROWD_COLORS[Math.floor(Math.random() * CROWD_COLORS.length)]!));
+        color.setHex(CROWD_COLORS[Math.floor(Math.random() * CROWD_COLORS.length)]!);
+        bodies.setMatrixAt(n, m);
+        bodies.setColorAt(n, color);
+        heads.setMatrixAt(n, m);
+        heads.setColorAt(n, paper);
+        // Arms down, up in a V cheering, or just the one waving.
+        const pose = Math.random();
+        for (const side of [-1, 1]) {
+          const up = pose < 0.3 || (pose < 0.45 && side > 0);
+          const angle = side * (up ? Math.PI - 0.45 - Math.random() * 0.3 : 0.12 + Math.random() * 0.15);
+          armLocal.makeTranslation(side * 0.08, 0.46, 0).multiply(armRot.makeRotationZ(angle));
+          arms.setMatrixAt(n * 2 + (side > 0 ? 1 : 0), armLocal.premultiply(m));
+          arms.setColorAt(n * 2 + (side > 0 ? 1 : 0), color);
+        }
         n++;
       }
     }
   }
-  scene.add(crowd);
+  scene.add(bodies, heads, arms);
 }
 
-function floodlights(scene: THREE.Scene) {
+function floodlights(scene: THREE.Scene, fixed: THREE.Group) {
   const steel = new THREE.MeshStandardMaterial({ color: 0x4a5080, roughness: 0.6, metalness: 0.4 });
   const lamp = new THREE.MeshStandardMaterial({ color: 0xfff6dd, emissive: 0xfff3d0, emissiveIntensity: 3 });
   const height = 22;
@@ -441,7 +498,7 @@ function floodlights(scene: THREE.Scene) {
       const z = sz * (H / 2 + APRON + 8);
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.45, height, 10), steel);
       pole.position.set(x, height / 2, z);
-      scene.add(pole);
+      fixed.add(pole);
       const head = new THREE.Group();
       head.position.set(x, height + 1, z);
       head.lookAt(0, 0, 0);
@@ -454,7 +511,7 @@ function floodlights(scene: THREE.Scene) {
           head.add(bulb);
         }
       }
-      scene.add(head);
+      fixed.add(head);
 
       const spot = new THREE.SpotLight(0xfff1d6, 2.2, 0, 0.62, 0.65, 0);
       spot.position.copy(head.position);
@@ -491,7 +548,12 @@ export function buildStadium(scene: THREE.Scene) {
   ground.receiveShadow = true;
   scene.add(ground);
 
-  scene.add(goal(-1), goal(1));
-  stands(scene);
-  return { lights: floodlights(scene) };
+  // Everything that never moves is built here, then baked.
+  const fixed = new THREE.Group();
+  fixed.add(goal(-1), goal(1));
+  stands(scene, fixed);
+  adBoards(fixed);
+  const lights = floodlights(scene, fixed);
+  bake(fixed, scene);
+  return { lights };
 }

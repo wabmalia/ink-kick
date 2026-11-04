@@ -22,27 +22,6 @@ html, body {
 
 #game canvas { display: block; }
 
-.scoreboard {
-  position: fixed;
-  top: max(12px, env(safe-area-inset-top));
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 18px;
-  border-radius: 14px 9px 16px 8px;
-  background: rgba(18, 21, 42, 0.82);
-  border: 2px solid #353b66;
-  font-weight: 700;
-}
-
-.team { font-size: 20px; letter-spacing: 0.06em; }
-.team.gold { color: var(--gold); }
-.team.red { color: var(--red); }
-.num { font-size: 32px; font-weight: 900; min-width: 1ch; text-align: center; }
-.dash { color: var(--muted); }
-
 .banner {
   position: fixed;
   top: 38%;
