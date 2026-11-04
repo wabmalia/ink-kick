@@ -63,6 +63,9 @@ export const CONFIG = {
     // Knocked further than this from that spot, the ball is loose.
     loseDistance: 0.5,
     speedFactor: 0.92,
+    // Speed kept while turning 90 degrees or more with the ball; less sharp
+    // turns lose less.
+    turnSlowdown: 0.65,
     // No trapping for this long after losing the ball.
     lostCooldown: 0.25,
   },
@@ -79,9 +82,9 @@ export const CONFIG = {
   },
 
   tackle: {
-    // Released before this it's a poke; held past it, a slide.
-    tapTime: 0.18,
-    holdMoveFactor: 0.85,
+    // A tackle is a poke with the ball this close, edge to edge (or the
+    // dribbler within pokeBodyReach); any further, it's a slide.
+    pokeRange: 0.9,
     pokeTime: 0.25,
     // Radius around the poking foot that reaches the ball.
     pokeReach: 0.7,
@@ -112,6 +115,10 @@ export const CONFIG = {
     stumbleTime: 0.5,
     // A player robbed of the ball can't trap it for this long.
     stealCooldown: 0.6,
+    // A slide through a dribbler's back knocks the ball on ahead of them at
+    // this speed, and the slider can't trap it for this long.
+    rearKnock: 2.5,
+    rearSlideCooldown: 0.9,
   },
 
   // Pause after a goal before the kickoff.

@@ -162,8 +162,7 @@ describe('sim', () => {
     moveTo(them, 0, 0, 1, 0);
     giveBall(match, them);
     moveTo(me, match.ball.x + 1.1, 0, -1, 0);
-    run(match, 2, { me: { kick: true } });
-    const events = run(match, ticks(0.2));
+    const events = [...run(match, 2, { me: { kick: true } }), ...run(match, ticks(0.2))];
     expect(events).toContainEqual({ type: 'poke', player: 'me' });
     expect(events).toContainEqual({ type: 'steal', player: 'me', from: 'them' });
     expect(them.cooldown).toBeGreaterThan(0);
@@ -178,26 +177,37 @@ describe('sim', () => {
     // Level with the dribbler, the ball past them.
     Object.assign(match.ball, { x: 0.9 });
     moveTo(me, 0, -(me.r + them.r + 0.2), 0, 1);
-    run(match, 2, { me: { kick: true } });
-    const events = run(match, ticks(0.4));
+    const events = [...run(match, 2, { me: { kick: true } }), ...run(match, ticks(0.4))];
     expect(events).toContainEqual({ type: 'steal', player: 'me', from: 'them' });
   });
 
-  it('lets a dribbler shield the ball from a poke behind them', () => {
+  it('slides instead of poking from behind a dribbler', () => {
     const { match, me, them } = setup();
     moveTo(them, 0, 0, 1, 0);
     giveBall(match, them);
+    // On their back, close enough to poke if they were facing the other way.
     moveTo(me, -(me.r + them.r + 0.3), 0, 1, 0);
-    run(match, 2, { me: { kick: true } });
-    const events = run(match, ticks(0.4));
-    expect(events.some(e => e.type === 'steal')).toBe(false);
-    expect(match.owner).toBe('them');
+    const events = run(match, ticks(0.4), { me: { kick: true } });
+    expect(events).toContainEqual({ type: 'slide', player: 'me' });
+    expect(events.some(e => e.type === 'poke')).toBe(false);
+    // Knocked off it, but the ball squirts on ahead of them, not to the slider.
+    expect(events).toContainEqual({ type: 'steal', player: 'me', from: 'them' });
+    expect(events.some(e => e.type === 'trap' && e.player === 'me')).toBe(false);
+    expect(match.ball.x).toBeGreaterThan(them.x);
   });
 
-  it('slides on a long press, then gets up slowly', () => {
+  it('pokes when the ball is close, whatever the press', () => {
+    const { match, me } = setup();
+    moveTo(me, -1.2, 0);
+    const events = run(match, ticks(0.5), { me: { kick: true } });
+    expect(events).toContainEqual({ type: 'poke', player: 'me' });
+    expect(events.some(e => e.type === 'slide')).toBe(false);
+  });
+
+  it('slides when the ball is out of poke range, then gets up slowly', () => {
     const { match, me } = setup();
     moveTo(me, -10, 0);
-    const events = run(match, ticks(CONFIG.tackle.tapTime + 0.05), { me: { kick: true } });
+    const events = run(match, 2, { me: { kick: true } });
     expect(events).toContainEqual({ type: 'slide', player: 'me' });
     expect(me.vx).toBeGreaterThan(CONFIG.player.sprintSpeed);
     run(match, ticks(CONFIG.tackle.slideTime), { me: { kick: true } });

@@ -5,8 +5,8 @@ import type { Action, Input, SimEvent, Team } from '../engine/sim';
 // choices; and 'state', unordered, for inputs and snapshots, so a lost
 // packet never holds up the ones behind it.
 
-// Bumped whenever the messages change, so pages on different versions never meet.
-export const PEER_PREFIX = 'score-v1-';
+// Room codes are registered with the PeerJS broker under this prefix.
+export const PEER_PREFIX = 'score-';
 export const NAME_MAX = 16;
 
 export interface MemberView {
@@ -23,7 +23,7 @@ export interface RoomView {
   members: MemberView[];
 }
 
-export const ACTIONS: Action[] = ['none', 'charge', 'hold', 'poke', 'slide', 'recover', 'stumble'];
+export const ACTIONS: Action[] = ['none', 'charge', 'poke', 'slide', 'recover', 'stumble'];
 
 // One player in a snapshot, packed to keep it small:
 // [id, team (0 gold, 1 red), x, y, vx, vy, fx, fy, action, actionT, charge,

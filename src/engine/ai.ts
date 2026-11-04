@@ -52,12 +52,13 @@ export class Bot {
     } else if (match.owner) {
       sprint = toBall > 3 && me.stamina > 0.3;
       if (this.tackleWait <= 0 && me.action === 'none') {
-        // Hesitates in range before poking, so it can be dribbled past.
+        // Hesitates in range before poking, so it can be dribbled past;
+        // now and then slides in from a little further out.
         if (toBall < 1.7 && Math.random() < 0.025) {
           this.holdFor = CONFIG.tick;
           this.tackleWait = 1.5;
         } else if (toBall > 2.4 && toBall < 3.4 && Math.random() < 0.02) {
-          this.holdFor = CONFIG.tackle.tapTime + 0.1;
+          this.holdFor = CONFIG.tick;
           this.tackleWait = 2;
         }
       }

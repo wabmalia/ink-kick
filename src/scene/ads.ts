@@ -7,25 +7,29 @@ import { CONFIG } from '../config';
 
 interface Ad {
   name: string;
-  line: string;
   wash: string;
   ink: string;
 }
 
 const ADS: Ad[] = [
-  { name: 'Dribble Cola', line: 'Sticks to your feet', wash: '#ff5e45', ink: '#fff4e0' },
-  { name: 'Wet Paint', line: 'Insurance for the splash zone', wash: '#3d8bff', ink: '#fffbe8' },
-  { name: 'Offside Pizza', line: 'Always just ahead', wash: '#ffc23a', ink: '#1d2140' },
-  { name: 'Top Bins', line: 'Crisps for the far corner', wash: '#2ec4b6', ink: '#0d1026' },
-  { name: 'Inkwell Bank', line: 'Your savings, in black and white', wash: '#1f2552', ink: '#ffc53d' },
-  { name: 'Stickman Gym', line: 'All limbs, no torso day', wash: '#8a5cff', ink: '#fff4e0' },
-  { name: 'Nutmeg & Co.', line: 'Through the legs since 1872', wash: '#ff5e8a', ink: '#fff4e0' },
-  { name: 'Splash & Dash', line: 'Car wash. Pitch wash. Ball wash.', wash: '#52d27c', ink: '#0d1026' },
+  { name: 'Dribble Cola', wash: '#ff5e45', ink: '#fff4e0' },
+  { name: 'Wet Paint', wash: '#3d8bff', ink: '#fffbe8' },
+  { name: 'Offside Pizza', wash: '#ffc23a', ink: '#1d2140' },
+  { name: 'Top Bins', wash: '#2ec4b6', ink: '#0d1026' },
+  { name: 'Inkwell Bank', wash: '#1f2552', ink: '#ffc53d' },
+  { name: 'Stickman Gym', wash: '#8a5cff', ink: '#fff4e0' },
+  { name: 'Nutmeg & Co.', wash: '#ff5e8a', ink: '#fff4e0' },
+  { name: 'Splash & Dash', wash: '#52d27c', ink: '#0d1026' },
 ];
 
-const PANEL_W = 512;
-const PANEL_H = 112;
-const BOARD = { len: 4.4, h: 0.85, gap: 0.12 };
+// Twice the board's size on screen at the broadcast camera, and the same
+// shape as a board, so the lettering isn't stretched.
+const BOARD = { len: 4.4, h: 1.05, gap: 0.12 };
+const PANEL_W = 1024;
+const PANEL_H = Math.round((PANEL_W * BOARD.h) / BOARD.len);
+// The lettering's dark or light outline, opposite its fill, so it survives
+// the paint pass's wobble and bleed.
+const outline = (ink: string) => (parseInt(ink.slice(1, 3), 16) > 128 ? '#0d1026' : '#fff4e0');
 
 function paintAds(canvas: HTMLCanvasElement) {
   const ctx = canvas.getContext('2d')!;
@@ -34,20 +38,30 @@ function paintAds(canvas: HTMLCanvasElement) {
     ctx.fillStyle = ad.wash;
     ctx.fillRect(0, y, PANEL_W, PANEL_H);
     // Lifted and pooled pigment, so no two boards are flat colour.
-    for (const [x, r, a] of [[90, 140, 0.25], [430, 160, -0.22], [260, 90, 0.15]] as const) {
+    for (const [fx, fr, a] of [[0.18, 0.27, 0.25], [0.84, 0.31, -0.22], [0.51, 0.18, 0.15]] as const) {
+      const x = fx * PANEL_W;
+      const r = fr * PANEL_W;
       const g = ctx.createRadialGradient(x, y + PANEL_H / 2, 0, x, y + PANEL_H / 2, r);
       g.addColorStop(0, a > 0 ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${-a})`);
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.fillRect(0, y, PANEL_W, PANEL_H);
     }
-    ctx.fillStyle = ad.ink;
+    // Just the name, as big as fits.
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = "54px 'Caveat Brush', cursive";
-    ctx.fillText(ad.name, PANEL_W / 2, y + 44);
-    ctx.font = "700 26px 'Caveat', cursive";
-    ctx.fillText(ad.line, PANEL_W / 2, y + 86);
+    let size = PANEL_H * 0.78;
+    ctx.font = `${size}px 'Caveat Brush', cursive`;
+    const fit = (PANEL_W * 0.88) / ctx.measureText(ad.name).width;
+    if (fit < 1) size *= fit;
+    ctx.font = `${size}px 'Caveat Brush', cursive`;
+    const cy = y + PANEL_H * 0.54;
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = size * 0.12;
+    ctx.strokeStyle = outline(ad.ink);
+    ctx.strokeText(ad.name, PANEL_W / 2, cy);
+    ctx.fillStyle = ad.ink;
+    ctx.fillText(ad.name, PANEL_W / 2, cy);
   });
 }
 
@@ -58,9 +72,11 @@ function adsTexture() {
   paintAds(canvas);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  // Sharp at a glancing angle too, for the boards behind the goals (three.js
+  // caps this at what the GPU allows).
+  tex.anisotropy = 16;
   // The fonts may still be loading the first time: paint again once they're in.
-  void Promise.all([document.fonts.load("54px 'Caveat Brush'"), document.fonts.load("700 26px 'Caveat'")]).then(() => {
+  void document.fonts.load("80px 'Caveat Brush'").then(() => {
     paintAds(canvas);
     tex.needsUpdate = true;
   });

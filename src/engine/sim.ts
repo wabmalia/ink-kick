@@ -5,7 +5,8 @@ import { CONFIG } from '../config';
 // red attacks -x.
 //
 // One button does everything: with the ball, hold to charge a kick and
-// release to strike it; without, tap to poke a foot in or hold to slide.
+// release to strike it; without, press to tackle, which pokes a foot in when
+// the ball is close and slides in when it isn't.
 
 export type Team = 'gold' | 'red';
 
@@ -13,8 +14,6 @@ export type Action =
   | 'none'
   // Kick button held with the ball, building power.
   | 'charge'
-  // Kick button held without the ball, not yet long enough to slide.
-  | 'hold'
   | 'poke'
   | 'slide'
   | 'recover'
@@ -308,7 +307,20 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
 
   switch (p.action) {
     case 'none':
-      if (pressed) setAction(p, hasBall ? 'charge' : 'hold');
+      if (!pressed) break;
+      if (hasBall) {
+        setAction(p, 'charge');
+      } else if (inPokeRange(match, p)) {
+        setAction(p, 'poke');
+        p.vx += p.fx * tackle.pokeLunge;
+        p.vy += p.fy * tackle.pokeLunge;
+        events.push({ type: 'poke', player: p.id });
+      } else {
+        setAction(p, 'slide');
+        p.vx = p.fx * tackle.slideSpeed;
+        p.vy = p.fy * tackle.slideSpeed;
+        events.push({ type: 'slide', player: p.id });
+      }
       break;
     case 'charge':
       p.charge = Math.min(1, p.actionT / kick.chargeTime);
@@ -326,22 +338,6 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
         events.push({ type: 'kick', player: p.id, power: p.charge });
         p.charge = 0;
         setAction(p, 'none');
-      }
-      break;
-    case 'hold':
-      // Trapping the ball mid-press turns it into a charge.
-      if (hasBall) {
-        p.action = 'charge';
-      } else if (released) {
-        setAction(p, 'poke');
-        p.vx += p.fx * tackle.pokeLunge;
-        p.vy += p.fy * tackle.pokeLunge;
-        events.push({ type: 'poke', player: p.id });
-      } else if (p.actionT >= tackle.tapTime) {
-        setAction(p, 'slide');
-        p.vx = p.fx * tackle.slideSpeed;
-        p.vy = p.fy * tackle.slideSpeed;
-        events.push({ type: 'slide', player: p.id });
       }
       break;
     case 'poke':
@@ -398,21 +394,67 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
   let speed = p.tired > 0 ? pl.tiredSpeed : p.sprinting ? pl.sprintSpeed : pl.runSpeed;
   if (match.owner === p.id) speed *= CONFIG.dribble.speedFactor;
   if (p.action === 'charge') speed *= kick.moveFactor;
-  if (p.action === 'hold') speed *= tackle.holdMoveFactor;
   if (p.action === 'recover') speed *= tackle.recoverFactor;
 
-  const k = Math.min(1, pl.response * dt);
-  p.vx += (dx * speed - p.vx) * k;
-  p.vy += (dy * speed - p.vy) * k;
-
+  const dribbling = match.owner === p.id;
+  let mx = dx;
+  let my = dy;
   if (moving) {
-    const rate = match.owner === p.id ? pl.turnRateWithBall : pl.turnRate;
+    const rate = dribbling ? pl.turnRateWithBall : pl.turnRate;
     const current = Math.atan2(p.fy, p.fx);
     const turn = angleBetween(current, Math.atan2(dy, dx));
     const a = current + Math.sign(turn) * Math.min(Math.abs(turn), rate * dt);
     p.fx = Math.cos(a);
     p.fy = Math.sin(a);
+    if (dribbling) {
+      // With the ball you run where you face, so a change of direction is a
+      // curve at the turning rate, slowing the sharper the turn.
+      mx = p.fx;
+      my = p.fy;
+      const left = Math.abs(turn) - Math.min(Math.abs(turn), rate * dt);
+      speed *= 1 - (1 - CONFIG.dribble.turnSlowdown) * Math.min(1, left / (Math.PI / 2));
+    }
   }
+
+  const k = Math.min(1, pl.response * dt);
+  p.vx += (mx * speed - p.vx) * k;
+  p.vy += (my * speed - p.vy) * k;
+}
+
+// Whether a tackle pressed now is a poke: the ball is within a foot's reach,
+// or the player on it is close enough to get round. Not from behind a
+// dribbler, where a poke can't reach: that press is a slide instead.
+function inPokeRange(match: Match, p: Player) {
+  const { ball } = match;
+  const owner = match.players.find(q => q.id === match.owner);
+  if (owner && owner !== p && isBehind(owner, p)) return false;
+  if (Math.hypot(ball.x - p.x, ball.y - p.y) - p.r - ball.r <= CONFIG.tackle.pokeRange) return true;
+  return !!owner && owner !== p && Math.hypot(owner.x - p.x, owner.y - p.y) - p.r - owner.r <= CONFIG.tackle.pokeBodyReach;
+}
+
+// A slide through the back of a dribbler: they're knocked off balance and
+// the ball squirts on ahead of them, loose, while the slider on the ground
+// can't trap it for a moment. A scramble rather than a clean steal, until
+// there are fouls to pay for it.
+function rearSlide(match: Match, p: Player, q: Player, events: SimEvent[]) {
+  const t = CONFIG.tackle;
+  events.push({ type: 'steal', player: p.id, from: q.id });
+  loseBall(match, q, t.stealCooldown);
+  match.ball.vx = q.fx * t.rearKnock + q.vx * 0.3;
+  match.ball.vy = q.fy * t.rearKnock + q.vy * 0.3;
+  p.cooldown = Math.max(p.cooldown, t.rearSlideCooldown);
+  p.struck = true;
+  setAction(q, 'stumble');
+  q.vx += p.fx * 3;
+  q.vy += p.fy * 3;
+}
+
+// Whether p is in the arc behind a dribbler that their body shields.
+function isBehind(dribbler: Player, p: Player) {
+  const dx = p.x - dribbler.x;
+  const dy = p.y - dribbler.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  return (dribbler.fx * dx + dribbler.fy * dy) / dist < CONFIG.tackle.shieldCos;
 }
 
 // Pokes and slides reaching the ball, and slides taking players out.
@@ -436,13 +478,18 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
     const dx = p.x - victim.x;
     const dy = p.y - victim.y;
     const dist = Math.hypot(dx, dy) || 1;
-    const behind = (victim.fx * dx + victim.fy * dy) / dist < t.shieldCos;
+    const behind = isBehind(victim, p);
     bodyHit = !behind
       && dist < p.r + victim.r + t.pokeBodyReach
       && p.fx * -dx + p.fy * -dy > 0;
     if (behind) ballHit = false;
   }
   if (ballHit || bodyHit) {
+    // A slide reaching the ball through a dribbler's back: see rearSlide.
+    if (!poking && victim && isBehind(victim, p)) {
+      rearSlide(match, p, victim, events);
+      return;
+    }
     if (victim) {
       loseBall(match, victim, t.stealCooldown);
       events.push({ type: 'steal', player: p.id, from: victim.id });
@@ -474,6 +521,10 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
   for (const q of match.players) {
     if (q === p || q.action === 'stumble') continue;
     if (Math.hypot(q.x - p.x, q.y - p.y) > p.r + q.r + 0.1) continue;
+    if (match.owner === q.id && isBehind(q, p)) {
+      rearSlide(match, p, q, events);
+      continue;
+    }
     if (match.owner === q.id) events.push({ type: 'steal', player: p.id, from: q.id });
     loseBall(match, q, t.stealCooldown);
     setAction(q, 'stumble');
