@@ -46,18 +46,19 @@ export const DUMMY_SPOT = { x: 6.5, y: 0 };
 
 // Beyond the gates, either side, and one in the duel box.
 const PROP_SPOTS = [
-  { x: -11.5, y: -2.5 },
-  { x: -11.5, y: 2.5 },
+  { x: -11, y: -2.6 },
+  { x: -11, y: 2.6 },
   { x: -3.5, y: 2 },
   { x: 11.5, y: -2.5 },
   { x: 11.5, y: 2.5 },
 ];
-const ME_START = { x: -12.5, y: 0 };
-const BALL_START = { x: -11.5, y: 0 };
-// The bot gives a ball it won back after this long; the dummy picks up a
-// loose ball lying in its box after this long.
+// Clear of the attributes panel on the left.
+const ME_START = { x: -10.6, y: -1.2 };
+const BALL_START = { x: -11, y: 0.4 };
+// The bot gives a ball it won back after this long; the dummy gets its ball
+// back this long after you win it, wherever it went.
 const GIVE_BACK = 0.6;
-const PICK_UP = 0.8;
+const RESET = 1;
 // How fast the dummy turns to face you, radians per second.
 const DUMMY_TURN = 2.2;
 
@@ -92,7 +93,7 @@ export class Training {
   private brain = new Bot('bot');
   // Whether the dummy has a ball: the real one (it owns it) or its prop.
   private dummyArmed = true;
-  private dummyLoose = 0;
+  private dummyReset = 0;
   private runs = new Map<Lane, Run>();
   private results = new Map<Lane, TrainingStats['lanes'][number]>();
   private duel: TrainingStats['duel'] = { challenges: 0, lost: 0, held: null, best: null };
@@ -213,8 +214,8 @@ export class Training {
     return { x: 0, y: 0, kick: false, sprint: false };
   }
 
-  // Swaps the real ball in and out of the dummy's feet, and has it pick up a
-  // ball left lying in its box.
+  // Swaps the real ball in and out of the dummy's feet, and gives it the
+  // ball back a moment after you win it.
   private tendDummy() {
     const { match, me, dummy } = this;
     const meIn = inBox(TACKLE, me);
@@ -233,11 +234,18 @@ export class Training {
       match.owner = null;
       Object.assign(match.ball, { x: near.x, y: near.y, vx: 0, vy: 0 });
     } else if (!this.dummyArmed) {
-      // Won off it: once the ball lies loose in its box, it takes it back.
-      const loose = match.owner === null && inBox(TACKLE, match.ball);
-      this.dummyLoose = loose ? this.dummyLoose + CONFIG.tick : 0;
-      if (this.dummyLoose >= PICK_UP) {
-        this.dummyLoose = 0;
+      // Won off it: while you're still in its box, a moment later the ball
+      // is back at its feet, even from yours, ready for the next go. Carry
+      // it out and it waits for you to come back.
+      this.dummyReset = meIn ? this.dummyReset + CONFIG.tick : 0;
+      if (this.dummyReset >= RESET) {
+        this.dummyReset = 0;
+        if (match.owner === me.id) {
+          me.cooldown = Math.max(me.cooldown, 0.4);
+          // A kick being charged is called off with the ball gone.
+          if (me.action === 'charge') me.action = 'none';
+          me.charge = 0;
+        }
         this.giveDummy();
       }
     }

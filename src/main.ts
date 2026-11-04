@@ -8,6 +8,11 @@ import { GameView } from './game/view';
 import { session } from './net/session';
 import { iceServers } from './net/relay';
 import { helpOpen, onHelp } from './ui/help';
+
+// The help, or what the attributes do: either one pauses a game played alone
+// and takes the keys.
+const attrInfo = document.getElementById('attr-info') as HTMLDialogElement;
+const dialogOpen = () => helpOpen() || attrInfo.open;
 import { inMatch, offerInvite, render } from './ui/menu';
 import { paintMenu } from './ui/wash';
 import { currentAttributes, mountLocker, onAttributes } from './ui/locker';
@@ -75,9 +80,10 @@ function pickMode() {
   document.getElementById('train-panel')!.hidden = !trainingOn;
   document.getElementById('train-hud')!.hidden = !trainingOn;
   // Keys steer only in a match, and not while the help is up.
-  enableKeys(inMatch() && !helpOpen());
+  enableKeys(inMatch() && !dialogOpen());
 }
 onHelp(pickMode);
+attrInfo.addEventListener('close', pickMode);
 
 session.listen({
   change() {
@@ -114,7 +120,7 @@ function frame(now: number) {
     state = mode.remote.state() ?? EMPTY;
   } else {
     // A solo game waits while the help is open; anything with others can't.
-    if (!((mode.kind === 'solo' || mode.kind === 'training') && helpOpen())) view.play(mode.local.advance(dt));
+    if (!((mode.kind === 'solo' || mode.kind === 'training') && dialogOpen())) view.play(mode.local.advance(dt));
     state = mode.local.state();
     if (mode.kind === 'training') {
       state.props = mode.training.drawnProps();
@@ -139,5 +145,7 @@ if (session.status === 'home' && invite) offerInvite(invite);
 render();
 pickMode();
 mountLocker();
+// After the locker's own handler has opened it.
+for (const b of document.querySelectorAll('[data-attr-info]')) b.addEventListener('click', pickMode);
 paintMenu();
 requestAnimationFrame(frame);

@@ -76,6 +76,9 @@ export class PlayerGauges {
     flatGroup.add(new THREE.Mesh(new THREE.RingGeometry(RING[0], RING[1], 48), flat(GOLD, 0.85)));
     this.stamina = new Gauge(-1, flatGroup);
     this.power = new Gauge(1, flatGroup);
+    // After the grass, which is see-through too: sorted by distance alone,
+    // the grass painted over these whenever you were on the far half.
+    flatGroup.traverse(o => (o.renderOrder = 1));
   }
 
   // tired is the fraction of the tired spell left, 0 when not tired.

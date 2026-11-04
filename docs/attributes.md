@@ -53,7 +53,7 @@ screen and to tune one at a time.
 | Tackling | Poke range, edge to edge (8% a point) | 0.41 m | 0.60 m | 0.84 m |
 | Tackling | Slide reach | 0.63 m | 0.75 m | 0.90 m |
 | Tackling | Controlled-slide angle | 29° | 35° | 42° |
-| Strength | Tackles ridden from a Tackling 5 | 0% | 0% | 42% |
+| Strength | Tackles ridden from a Tackling 5 | 0% | 15% | 51% |
 | Strength | Knock before losing the ball | 0.42 m | 0.50 m | 0.60 m |
 | Strength | Off balance after being slid into | 0.60 s | 0.50 s | 0.42 s |
 | Strength | Shove on others in a slide | 2.52 m/s | 3.00 m/s | 3.60 m/s |
@@ -66,10 +66,12 @@ screen and to tune one at a time.
 - **Power 10 shots (39.6 m/s)** cross the 30 m pitch in under a second. Worth
   pairing with kick inaccuracy at full power if shots get too strong.
 - **Tackling and Strength meet in a duel.** A poke or slide that reaches a
-  dribbler wins it with chance `(tackling m / strength m)³`, capped at 1. So
-  a dribbler no stronger than the tackler always loses it, as before, and a
-  stronger one shrugs some off: Strength 10 rides about 42% of tackles from
-  a Tackling 5 and none from a Tackling 10. (Shrinking the tackler's reach
+  dribbler wins it with chance `0.85 × (tackling m / strength m)³`, capped
+  at 1 (`tackle.holdBase`, `tackle.holdPower`). Level players win 85%;
+  Strength 10 rides about half the tackles from a Tackling 5; Strength 3 or
+  less against a Tackling 5 rides none, and Tackling 7 or more against a
+  Strength 5 always wins. It works both ways: low Strength loses the ball
+  more, not just high Strength keeping it. (Shrinking the tackler's reach
   instead was tried first and did nothing: pokes connect well inside their
   reach.) Rear slides aren't contested; they're a scramble until fouls.
 - Attributes are chosen before a match and sent once with the room, so they

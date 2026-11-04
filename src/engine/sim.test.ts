@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../config';
+import { evenAttributes } from '../game/attributes';
 import { createMatch, createPlayer, step, type Input, type Match, type Player, type SimEvent } from './sim';
 
 const idle: Input = { x: 0, y: 0, kick: false, sprint: false };
 const ticks = (seconds: number) => Math.round(seconds / CONFIG.tick);
 
+// Tackling 5 against Strength 3: every tackle that reaches wins, so these
+// tests don't depend on the dice (stats.test.ts covers riding tackles).
+const SURE = { ...evenAttributes(), strength: 3 };
+
 // A loose ball on the spot, so tests place it where they want.
 function setup() {
-  const match = createMatch([createPlayer('me', 'gold'), createPlayer('them', 'red')]);
+  const match = createMatch([createPlayer('me', 'gold', SURE), createPlayer('them', 'red', SURE)]);
   match.owner = null;
   return { match, me: match.players[0]!, them: match.players[1]! };
 }
@@ -299,5 +304,31 @@ describe('sim', () => {
     const { match } = setup();
     Object.assign(match.ball, { x: -12, y: 1, vx: -15, vy: 0 });
     expect(run(match, 30)).toContainEqual({ type: 'goal', team: 'red' });
+  });
+
+  it('turning back with the ball stops, pivots and goes back along the same line', () => {
+    for (const sprint of [false, true]) {
+      const { match, me, them } = setup();
+      moveTo(them, 10, 8);
+      moveTo(me, -6, 0);
+      match.kickoffHeld = false;
+      giveBall(match, me);
+      run(match, 60, { me: { x: 1, sprint } });
+      const y0 = me.y;
+      const x0 = me.x;
+      let wide = 0;
+      let past = 0;
+      for (let i = 0; i < ticks(1); i++) {
+        run(match, 1, { me: { x: -1, sprint } });
+        wide = Math.max(wide, Math.abs(me.y - y0));
+        past = Math.max(past, me.x - x0);
+        expect(match.owner).toBe('me');
+      }
+      // Along the same line: it used to loop 2 to 3 m wide and run 1.3 to
+      // 1.9 m on.
+      expect(wide).toBeLessThan(0.1);
+      expect(past).toBeLessThan(0.6);
+      expect(me.vx).toBeLessThan(-3);
+    }
   });
 });

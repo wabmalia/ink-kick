@@ -63,9 +63,17 @@ export const CONFIG = {
     // Knocked further than this from that spot, the ball is loose.
     loseDistance: 0.5,
     speedFactor: 0.92,
-    // Speed kept while turning 90 degrees or more with the ball; less sharp
-    // turns lose less.
+    // Speed kept while turning 90 degrees with the ball; less sharp turns
+    // lose less, and sharper ones more, down to reverseKeep for an about
+    // turn: you stop, turn with the ball and go.
     turnSlowdown: 0.65,
+    reverseKeep: 0.08,
+    // Turning with the ball is this many times quicker standing still than
+    // at a run, so a reversal is a pivot rather than a loop.
+    pivotBoost: 2.2,
+    // Slower than this with the ball, you turn on the spot and move along
+    // the way you're pressing, rather than curving.
+    pivotSpeed: 1,
     // No trapping for this long after losing the ball.
     lostCooldown: 0.25,
   },
@@ -115,8 +123,10 @@ export const CONFIG = {
     // this speed.
     stumbleTime: 0.5,
     slideShove: 3,
-    // A tackle on a stronger dribbler wins with chance (tackling / strength)
-    // to this power, as attribute multipliers.
+    // A tackle that reaches a dribbler wins with chance holdBase times
+    // (tackling / strength) to the holdPower, as attribute multipliers,
+    // capped at 1: level players win holdBase of them.
+    holdBase: 0.85,
     holdPower: 3,
     // A player robbed of the ball can't trap it for this long.
     stealCooldown: 0.6,

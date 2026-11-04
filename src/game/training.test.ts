@@ -85,7 +85,8 @@ describe('training ground', () => {
   });
 
   it('the dummy holds a ball once you step into its box, and counts a won poke', () => {
-    const t = new Training('me', evenAttributes());
+    // Tackling 9 against the dummy's Strength 5: the poke always wins.
+    const t = new Training('me', { ...evenAttributes(), tackling: 9, pace: 1 });
     const dummy = t.match.players.find(p => p.id === 'dummy')!;
     // Face it from inside its box, close enough to poke.
     const me = at(t, DUMMY_SPOT.x - 1.6, DUMMY_SPOT.y);
@@ -98,5 +99,27 @@ describe('training ground', () => {
     const tackle = t.stats().tackle;
     expect(tackle.pokes).toBe(1);
     expect(tackle.pokesWon).toBe(1);
+  });
+
+  it('the dummy has its ball back a moment after each win, so you can go again', () => {
+    const t = new Training('me', { ...evenAttributes(), tackling: 9, pace: 1 });
+    const me = t.match.players[0]!;
+    const dummy = t.match.players.find(p => p.id === 'dummy')!;
+    Object.assign(me, { x: DUMMY_SPOT.x - 3, y: 0, vx: 0, vy: 0 });
+    for (let rep = 0; rep < 5; rep++) {
+      // Walk at it until the ball is close, poke, then stand there.
+      for (let i = 0; i < ticks(5); i++) {
+        const b = t.match.ball;
+        if (t.match.owner === dummy.id && Math.hypot(b.x - me.x, b.y - me.y) - me.r - b.r < 0.4) break;
+        const dx = dummy.x - me.x;
+        const dy = dummy.y - me.y;
+        const l = Math.hypot(dx, dy) || 1;
+        t.step(go(dx / l, dy / l));
+      }
+      t.step(go(0, 0, { kick: true }));
+      for (let i = 0; i < ticks(1.6); i++) t.step(go(0, 0));
+      expect(t.match.owner).toBe(dummy.id);
+    }
+    expect(t.stats().tackle).toMatchObject({ pokes: 5, pokesWon: 5 });
   });
 });

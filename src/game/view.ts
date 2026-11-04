@@ -16,6 +16,7 @@ import type { ViewState } from './state';
 // whoever is running the match, and plays the events that come with it.
 
 const KIT: Record<Team, number> = { gold: 0xf2b134, red: 0xe2553f };
+const DUMMY_KIT = 0xa7adc4;
 // Paler versions, for the splatter a kick throws up.
 const KIT_LIGHT: Record<Team, number> = { gold: 0xffe3a0, red: 0xffb4a6 };
 // Ground covered per footstep splash, in metres.
@@ -158,7 +159,8 @@ export class GameView {
       entry = undefined;
     }
     if (!entry) {
-      const f = new Footballer({ color: KIT[team] });
+      // The training ground's tackle dummy is grey, not a team's colour.
+      const f = new Footballer({ color: id === 'dummy' ? DUMMY_KIT : KIT[team] });
       f.group.scale.setScalar(0.975);
       this.stickmen.add(f);
       entry = { team, f };
@@ -191,6 +193,8 @@ export class GameView {
       this.scene.add(this.training);
     }
     if (this.training) this.training.visible = on;
+    // No score to keep.
+    this.billboard.group.visible = !on;
   }
 
   private drawReach(reach?: { x: number; y: number; r: number }) {

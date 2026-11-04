@@ -68,7 +68,7 @@ describe('stats from attributes', () => {
     expect(press(5)).toBe('slide');
   });
 
-  it('a stronger dribbler shrugs off some tackles; a level one never does', () => {
+  it('dribblers ride some tackles, more the stronger they are', () => {
     // Pokes from up close, side on, over many seeded matches: the share won.
     const winRate = (tackling: number, strength: number) => {
       let won = 0;
@@ -90,12 +90,13 @@ describe('stats from attributes', () => {
       }
       return won / tries;
     };
-    expect(winRate(5, 5)).toBe(1);
+    // Level: about 85%.
+    expect(winRate(5, 5)).toBeGreaterThan(0.7);
+    expect(winRate(5, 5)).toBeLessThan(0.97);
     expect(winRate(5, 1)).toBe(1);
-    // (1 / 1.2) cubed: about 58%.
-    expect(winRate(5, 10)).toBeGreaterThan(0.4);
-    expect(winRate(5, 10)).toBeLessThan(0.75);
-    // A strong tackler evens it out.
-    expect(winRate(10, 10)).toBe(1);
+    // 0.85 × (1 / 1.2)³: about 49%.
+    expect(winRate(5, 10)).toBeGreaterThan(0.3);
+    expect(winRate(5, 10)).toBeLessThan(0.68);
+    expect(winRate(10, 5)).toBe(1);
   });
 });

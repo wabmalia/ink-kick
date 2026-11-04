@@ -418,19 +418,44 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
   let mx = dx;
   let my = dy;
   if (moving) {
-    const rate = dribbling ? p.stats.turnRateWithBall : pl.turnRate;
+    let rate = pl.turnRate;
+    if (dribbling) {
+      // Quicker to turn the slower you're going: a pivot when stopped, so
+      // a reversal brakes, turns with the ball and goes, rather than
+      // looping round at speed.
+      const slow = 1 - Math.min(1, Math.hypot(p.vx, p.vy) / p.stats.runSpeed);
+      rate = p.stats.turnRateWithBall * (1 + (CONFIG.dribble.pivotBoost - 1) * slow * slow);
+    }
     const current = Math.atan2(p.fy, p.fx);
     const turn = angleBetween(current, Math.atan2(dy, dx));
     const a = current + Math.sign(turn) * Math.min(Math.abs(turn), rate * dt);
     p.fx = Math.cos(a);
     p.fy = Math.sin(a);
     if (dribbling) {
-      // With the ball you run where you face, so a change of direction is a
-      // curve at the turning rate, slowing the sharper the turn.
-      mx = p.fx;
-      my = p.fy;
+      // With the ball, a cut is a curve: moving across the way you're
+      // pressing, you run where you face. Otherwise (moving away from it,
+      // nearly stopped, or already going that way) you move along the line
+      // you're pressing: turning back on yourself you slow along it, turn
+      // with the ball on the spot and go back the way you came, rather than
+      // looping round.
+      const v = Math.hypot(p.vx, p.vy);
+      const along = (p.vx * dx + p.vy * dy) / (v || 1);
+      const across = v >= CONFIG.dribble.pivotSpeed && along > -0.5 && along < 0.7;
+      if (across) {
+        mx = p.fx;
+        my = p.fy;
+      }
+      // Speed kept for the turn still to make: down to turnSlowdown at 90
+      // degrees, then on down to reverseKeep for a full about turn.
       const left = Math.abs(turn) - Math.min(Math.abs(turn), rate * dt);
-      speed *= 1 - (1 - p.stats.turnSlowdown) * Math.min(1, left / (Math.PI / 2));
+      const quarter = Math.PI / 2;
+      // No sprinting round a turn back on yourself with the ball: running
+      // pace at most.
+      if (left > quarter) speed = Math.min(speed, p.stats.runSpeed * p.stats.dribbleSpeed);
+      const { reverseKeep } = CONFIG.dribble;
+      speed *= left <= quarter
+        ? 1 - (1 - p.stats.turnSlowdown) * (left / quarter)
+        : p.stats.turnSlowdown - (p.stats.turnSlowdown - reverseKeep) * Math.min(1, (left - quarter) / quarter);
     }
   }
 
@@ -467,12 +492,13 @@ function rearSlide(match: Match, p: Player, q: Player, events: SimEvent[]) {
   q.vy += p.fy * p.stats.shove;
 }
 
-// A tackle that reaches a dribbler stronger than the tackler can fail: the
-// chance it wins is (tackling / strength) cubed, as multipliers, capped at
-// 1. Level or weaker dribblers always lose it, as before; a 10 against a 5
-// shrugs off about four in ten.
+// A tackle that reaches a dribbler can be ridden: it wins with chance
+// 0.85 × (tackling / strength)³, as multipliers, capped at 1. Level players
+// win 85%; Strength 10 against a 5 rides about half; Strength 3 or less
+// against a 5 never rides one.
 function beatsHold(match: Match, p: Player, victim: Player) {
-  const chance = Math.min(1, (p.stats.tackleFactor / victim.stats.holdFactor) ** CONFIG.tackle.holdPower);
+  const { holdBase, holdPower } = CONFIG.tackle;
+  const chance = Math.min(1, holdBase * (p.stats.tackleFactor / victim.stats.holdFactor) ** holdPower);
   return chance >= 1 || random(match) < chance;
 }
 
