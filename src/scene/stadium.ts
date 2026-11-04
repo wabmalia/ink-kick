@@ -81,6 +81,10 @@ function netTexture() {
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
+  // No mipmaps: averaged down, the thin lines fade below the alphaTest and
+  // whole nets vanish (Chromium picks those levels sooner than Firefox).
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
   return tex;
 }
 
