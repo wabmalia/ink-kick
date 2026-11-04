@@ -28,7 +28,7 @@ function toast(text: string) {
 
 /** True while a match is on screen: no menu, keys steer the player. */
 export function inMatch() {
-  return session.status === 'solo' || (session.status === 'room' && session.room?.phase === 'match');
+  return session.status === 'solo' || session.status === 'training' || (session.status === 'room' && session.room?.phase === 'match');
 }
 
 function show(screen: keyof typeof screens | null) {
@@ -72,7 +72,7 @@ export function render() {
 
   if (playing) {
     show(null);
-    const solo = session.status === 'solo';
+    const solo = session.status === 'solo' || session.status === 'training';
     $('leave-match').textContent = solo ? 'Menu' : session.isHost ? 'Close room' : 'Leave';
     $('end-match').hidden = !session.isHost;
     $('room-tag').textContent = solo ? '' : `Room ${session.code}${session.linked ? '' : ' · reconnecting…'}`;
@@ -115,6 +115,10 @@ nameInput.addEventListener('change', () => session.setName(nameInput.value));
 codeInput.addEventListener('input', () => (codeInput.value = normalizeCode(codeInput.value)));
 
 $('play-solo').addEventListener('click', () => session.playSolo());
+$('train').addEventListener('click', () => {
+  session.setName(nameInput.value);
+  session.train();
+});
 $('create').addEventListener('click', () => {
   session.setName(nameInput.value);
   session.hostRoom();
@@ -149,7 +153,9 @@ $('copy-link').addEventListener('click', async () => {
   }
 });
 
-// Esc leaves a solo game (when it isn't closing the help dialog).
+// Esc leaves a solo game or the training ground (when it isn't closing a
+// dialog: the help, or what the attributes do).
 window.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && session.status === 'solo' && !helpOpen()) session.leave();
+  const dialogOpen = helpOpen() || !!document.querySelector('dialog[open]');
+  if (e.key === 'Escape' && (session.status === 'solo' || session.status === 'training') && !dialogOpen) session.leave();
 });

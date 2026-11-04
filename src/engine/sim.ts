@@ -84,6 +84,10 @@ export interface Match {
   // From a kickoff until the ball is played: everyone stays in their own
   // half, and the defending team out of the centre circle.
   kickoffHeld: boolean;
+  // The training ground: no goals, no kickoffs, roam anywhere.
+  practice: boolean;
+  // State of the match's random numbers.
+  seed: number;
 }
 
 export type SimEvent =
@@ -93,6 +97,8 @@ export type SimEvent =
   | { type: 'slide'; player: string }
   | { type: 'steal'; player: string; from: string }
   | { type: 'feint'; player: string }
+  // A dribbler riding a tackle that reached them.
+  | { type: 'shrug'; player: string; from: string }
   | { type: 'goal'; team: Team }
   // At the start of a match: who the coin gave the kickoff to.
   | { type: 'coin'; team: Team }
@@ -116,7 +122,7 @@ export function createPlayer(id: string, team: Team, attrs?: Attributes): Player
 
 // kickoff: the team starting on the ball. coin: open with a coin toss
 // (a 'coin' event, then everyone held still while it plays).
-export function createMatch(players: Player[], opts: { kickoff?: Team; coin?: boolean } = {}): Match {
+export function createMatch(players: Player[], opts: { kickoff?: Team; coin?: boolean; practice?: boolean; seed?: number } = {}): Match {
   const b = CONFIG.ball;
   const { width, goalWidth } = CONFIG.pitch;
   const post = (x: number, y: number): Disc => ({
@@ -134,8 +140,14 @@ export function createMatch(players: Player[], opts: { kickoff?: Team; coin?: bo
     holdFor: opts.coin ? CONFIG.coinTime : 0,
     coinPending: !!opts.coin,
     kickoffHeld: true,
+    practice: !!opts.practice,
+    seed: opts.seed ?? Math.floor(Math.random() * 2 ** 32),
   };
   kickoff(match);
+  if (match.practice) {
+    match.kickoffHeld = false;
+    match.owner = null;
+  }
   return match;
 }
 
@@ -270,7 +282,7 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
       kickoff(match);
       events.push({ type: 'kickoff' });
     }
-  } else {
+  } else if (!match.practice) {
     const scorer = goalScoredBy(ball);
     if (scorer) {
       match.score[scorer]++;
@@ -455,6 +467,30 @@ function rearSlide(match: Match, p: Player, q: Player, events: SimEvent[]) {
   q.vy += p.fy * p.stats.shove;
 }
 
+// A tackle that reaches a dribbler stronger than the tackler can fail: the
+// chance it wins is (tackling / strength) cubed, as multipliers, capped at
+// 1. Level or weaker dribblers always lose it, as before; a 10 against a 5
+// shrugs off about four in ten.
+function beatsHold(match: Match, p: Player, victim: Player) {
+  const chance = Math.min(1, (p.stats.tackleFactor / victim.stats.holdFactor) ** CONFIG.tackle.holdPower);
+  return chance >= 1 || random(match) < chance;
+}
+
+// The dribbler rides the challenge: the tackle is spent, the ball kept.
+function shrug(p: Player, victim: Player, events: SimEvent[]) {
+  p.struck = true;
+  events.push({ type: 'shrug', player: victim.id, from: p.id });
+}
+
+// The match's own random numbers (mulberry32), so a seeded match replays the
+// same. Only the host's sim draws them.
+function random(match: Match) {
+  let t = (match.seed = (match.seed + 0x6d2b79f5) | 0);
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
 // Whether p is in the arc behind a dribbler that their body shields.
 function isBehind(dribbler: Player, p: Player) {
   const dx = p.x - dribbler.x;
@@ -473,8 +509,8 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
   const poking = p.action === 'poke';
   const footX = p.x + p.fx * (p.r + (poking ? 0.3 : 0.2));
   const footY = p.y + p.fy * (p.r + (poking ? 0.3 : 0.2));
-  const reach = ball.r + (poking ? t.pokeReach : p.stats.slideReach);
   const victim = match.players.find(q => q.id === match.owner);
+  const reach = ball.r + (poking ? t.pokeReach * p.stats.tackleFactor : p.stats.slideReach);
   let ballHit = Math.hypot(ball.x - footX, ball.y - footY) < reach;
   // A poke also gets round the dribbler's body to a ball out of reach, as
   // long as the poker is facing them. Neither works from behind: a dribbler
@@ -486,7 +522,7 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
     const dist = Math.hypot(dx, dy) || 1;
     const behind = isBehind(victim, p);
     bodyHit = !behind
-      && dist < p.r + victim.r + t.pokeBodyReach
+      && dist < p.r + victim.r + t.pokeBodyReach * p.stats.tackleFactor
       && p.fx * -dx + p.fy * -dy > 0;
     if (behind) ballHit = false;
   }
@@ -494,6 +530,10 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
     // A slide reaching the ball through a dribbler's back: see rearSlide.
     if (!poking && victim && isBehind(victim, p)) {
       rearSlide(match, p, victim, events);
+      return;
+    }
+    if (victim && victim !== p && !beatsHold(match, p, victim)) {
+      shrug(p, victim, events);
       return;
     }
     if (victim) {
@@ -530,6 +570,10 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
     if (match.owner === q.id && isBehind(q, p)) {
       rearSlide(match, p, q, events);
       continue;
+    }
+    if (match.owner === q.id && !beatsHold(match, p, q)) {
+      shrug(p, q, events);
+      return;
     }
     if (match.owner === q.id) events.push({ type: 'steal', player: p.id, from: q.id });
     loseBall(match, q, t.stealCooldown);

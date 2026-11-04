@@ -29,7 +29,7 @@ describe('stats from attributes', () => {
     expect(statsFor(build('pace', 1)).sprintSpeed).toBeCloseTo(6.3, 2);
     expect(1 / statsFor(build('stamina', 10)).drain).toBeCloseTo(3.6, 2);
     expect(statsFor(build('power', 10)).shotSpeed).toBeCloseTo(39.6, 2);
-    expect(statsFor(build('tackling', 1)).pokeRange).toBeCloseTo(0.756, 3);
+    expect(statsFor(build('tackling', 1)).pokeRange).toBeCloseTo(0.408, 3);
     expect(statsFor(build('strength', 10)).loseDistance).toBeCloseTo(0.6, 3);
     expect(statsFor(build('dribbling', 1)).turnSlowdown).toBeCloseTo(0.583, 3);
   });
@@ -58,13 +58,44 @@ describe('stats from attributes', () => {
       const match = createMatch([createPlayer('me', 'gold', build('tackling', tackling)), createPlayer('them', 'red')]);
       match.owner = null;
       const [me] = match.players;
-      // The ball 1m away, edge to edge: past a 5's poke range, inside a 10's.
-      Object.assign(me!, { x: -1 - me!.r - match.ball.r, y: 0, fx: 1, fy: 0 });
+      // The ball 0.66m away, edge to edge: past a 5's poke range, inside a 10's.
+      Object.assign(me!, { x: -0.66 - me!.r - match.ball.r, y: 0, fx: 1, fy: 0 });
       Object.assign(match.players[1]!, { x: 6, y: 6 });
       run(match, 1, { me: { kick: true } });
       return me!.action;
     };
     expect(press(10)).toBe('poke');
     expect(press(5)).toBe('slide');
+  });
+
+  it('a stronger dribbler shrugs off some tackles; a level one never does', () => {
+    // Pokes from up close, side on, over many seeded matches: the share won.
+    const winRate = (tackling: number, strength: number) => {
+      let won = 0;
+      const tries = 60;
+      for (let seed = 1; seed <= tries; seed++) {
+        const match = createMatch([
+          createPlayer('me', 'gold', { ...evenAttributes(), tackling }),
+          createPlayer('them', 'red', { ...evenAttributes(), strength }),
+        ], { seed });
+        const [me, them] = match.players;
+        const by = CONFIG.dribble.distance;
+        Object.assign(them!, { x: 0, y: 0, vx: 0, vy: 0, fx: 0, fy: 1 });
+        Object.assign(match.ball, { x: 0, y: by, vx: 0, vy: 0 });
+        match.owner = 'them';
+        Object.assign(me!, { x: -1.2, y: by, vx: 0, vy: 0, fx: 1, fy: 0 });
+        run(match, 1, { me: { kick: true }, them: {} });
+        run(match, ticks(0.3), { me: {}, them: {} });
+        if (match.owner !== 'them') won++;
+      }
+      return won / tries;
+    };
+    expect(winRate(5, 5)).toBe(1);
+    expect(winRate(5, 1)).toBe(1);
+    // (1 / 1.2) cubed: about 58%.
+    expect(winRate(5, 10)).toBeGreaterThan(0.4);
+    expect(winRate(5, 10)).toBeLessThan(0.75);
+    // A strong tackler evens it out.
+    expect(winRate(10, 10)).toBe(1);
   });
 });

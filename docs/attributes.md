@@ -31,7 +31,7 @@ own values when a match starts. The global `CONFIG` values are what a 5 gives.
 | Dribbling | Tighter, faster turns with the ball | `player.turnRateWithBall`, `dribble.turnSlowdown`, `dribble.speedFactor` |
 | Power | Harder shots, charged sooner | `kick.shotSpeed`, `kick.chargeTime` |
 | Tackling | Pokes and slides that reach and keep the ball | `tackle.pokeRange`, `tackle.slideReach`, `tackle.slideControlCos` |
-| Strength | Hold off challenges, get up sooner, shove harder | `dribble.loseDistance`, `tackle.stumbleTime`, the slide shove |
+| Strength | Ride tackles, hold off bumps, get up sooner, shove harder | the hold chance, `dribble.loseDistance`, `tackle.stumbleTime`, `tackle.slideShove` |
 
 Each touches two or three values, so it stays easy to explain on a stats
 screen and to tune one at a time.
@@ -50,9 +50,10 @@ screen and to tune one at a time.
 | Dribbling | Speed with the ball, vs without | 90% | 92% | 93% |
 | Power | Full-power shot | 27.7 m/s | 33.0 m/s | 39.6 m/s |
 | Power | Time to full power | 0.83 s | 0.70 s | 0.58 s |
-| Tackling | Poke range, edge to edge | 0.76 m | 0.90 m | 1.08 m |
+| Tackling | Poke range, edge to edge (8% a point) | 0.41 m | 0.60 m | 0.84 m |
 | Tackling | Slide reach | 0.63 m | 0.75 m | 0.90 m |
 | Tackling | Controlled-slide angle | 29° | 35° | 42° |
+| Strength | Tackles ridden from a Tackling 5 | 0% | 0% | 42% |
 | Strength | Knock before losing the ball | 0.42 m | 0.50 m | 0.60 m |
 | Strength | Off balance after being slid into | 0.60 s | 0.50 s | 0.42 s |
 | Strength | Shove on others in a slide | 2.52 m/s | 3.00 m/s | 3.60 m/s |
@@ -64,8 +65,13 @@ screen and to tune one at a time.
   need a smaller step.
 - **Power 10 shots (39.6 m/s)** cross the 30 m pitch in under a second. Worth
   pairing with kick inaccuracy at full power if shots get too strong.
-- **Tackling and Strength meet in a duel.** A tackler's reach is checked
-  against the dribbler's hold, so the two partly cancel; test them together.
+- **Tackling and Strength meet in a duel.** A poke or slide that reaches a
+  dribbler wins it with chance `(tackling m / strength m)³`, capped at 1. So
+  a dribbler no stronger than the tackler always loses it, as before, and a
+  stronger one shrugs some off: Strength 10 rides about 42% of tackles from
+  a Tackling 5 and none from a Tackling 10. (Shrinking the tackler's reach
+  instead was tried first and did nothing: pokes connect well inside their
+  reach.) Rear slides aren't contested; they're a scramble until fouls.
 - Attributes are chosen before a match and sent once with the room, so they
   add nothing to the per-tick network traffic.
 - Not included yet: **passing accuracy** (kicks go exactly where you face, so

@@ -22,16 +22,33 @@ const svgEl = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<strin
 };
 
 let attrs = loadAttributes();
+// Every chart on the page redraws on any change, and listeners (the training
+// ground) hear about it.
+const charts: (() => void)[] = [];
+const listeners = new Set<(attrs: Attributes) => void>();
+
+export const currentAttributes = () => attrs;
+export const onAttributes = (fn: (attrs: Attributes) => void) => listeners.add(fn);
+
+function change(next: Attributes) {
+  if (next === attrs) return;
+  attrs = next;
+  saveAttributes(attrs);
+  charts.forEach(draw => draw());
+  listeners.forEach(fn => fn(attrs));
+}
 
 // The info button's dialog: what each attribute does. Esc, Got it or a click
 // outside closes it.
 function infoDialog() {
   const dialog = document.getElementById('attr-info') as HTMLDialogElement;
-  document.getElementById('attr-info-open')!.addEventListener('click', () => {
-    dialog.showModal();
-    // The dialog itself, so Got it doesn't open wearing the focus ring.
-    dialog.focus();
-  });
+  for (const button of document.querySelectorAll('[data-attr-info]')) {
+    button.addEventListener('click', () => {
+      dialog.showModal();
+      // The dialog itself, so Got it doesn't open wearing the focus ring.
+      dialog.focus();
+    });
+  }
   document.getElementById('attr-info-close')!.addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', e => {
     const r = dialog.getBoundingClientRect();
@@ -39,8 +56,14 @@ function infoDialog() {
   });
 }
 
-export function mountLocker(host: HTMLElement, left: HTMLElement) {
+/** The home screen's chart, the training ground's, and the info dialog. */
+export function mountLocker() {
   infoDialog();
+  mountChart(document.getElementById('radar')!, document.getElementById('spare')!);
+  mountChart(document.getElementById('train-radar')!, document.getElementById('train-spare')!);
+}
+
+function mountChart(host: HTMLElement, left: HTMLElement) {
   const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, class: 'radar', 'aria-hidden': 'true' });
   for (const v of [5, 10]) {
     svg.append(svgEl('polygon', { class: `ring ring-${v}`, points: ATTRIBUTES.map((_, i) => point(i, v).join(',')).join(' ') }));
@@ -73,10 +96,10 @@ export function mountLocker(host: HTMLElement, left: HTMLElement) {
       b.className = 'step';
       b.textContent = text;
       b.setAttribute('aria-label', `${label} ${LABELS[a]}`);
-      b.addEventListener('click', () => {
-        attrs = act(attrs, a);
-        saveAttributes(attrs);
-        draw();
+      b.addEventListener('click', e => {
+        change(act(attrs, a));
+        // Clicked with the mouse in a match, give the keys back to the game.
+        if (e.detail > 0 && host.closest('.train-panel')) b.blur();
       });
       return b;
     };
@@ -108,5 +131,6 @@ export function mountLocker(host: HTMLElement, left: HTMLElement) {
     left.textContent = `${n} point${n === 1 ? '' : 's'} available`;
     left.classList.toggle('to-spend', n > 0);
   };
+  charts.push(draw);
   draw();
 }

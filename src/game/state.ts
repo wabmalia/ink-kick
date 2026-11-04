@@ -27,6 +27,10 @@ export interface ViewState {
   ballX: number;
   ballY: number;
   score: Record<Team, number>;
+  // Spare balls lying about the training ground.
+  props?: { x: number; y: number }[];
+  // On the training ground: the ring around you showing your poke range.
+  reach?: { x: number; y: number; r: number };
 }
 
 const round = (v: number) => Math.round(v * 1000) / 1000;

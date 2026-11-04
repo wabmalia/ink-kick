@@ -12,7 +12,7 @@ import { loadAttributes } from '../game/attributes';
 // room over PeerJS, the others join by code. Each guest opens two
 // connections to the host (see protocol.ts). Screens listen for changes.
 
-export type Status = 'home' | 'connecting' | 'room' | 'solo' | 'error';
+export type Status = 'home' | 'connecting' | 'room' | 'solo' | 'training' | 'error';
 
 export interface SessionListener {
   change?(): void;
@@ -108,6 +108,12 @@ class Session {
     this.teardown();
     this.set({ status: 'solo' });
     location.hash = '#/solo';
+  }
+
+  train() {
+    this.teardown();
+    this.set({ status: 'training' });
+    location.hash = '#/train';
   }
 
   // Hosting ---------------------------------------------------------------
@@ -348,6 +354,7 @@ class Session {
     const [, kind, raw] = location.hash.split('/');
     const code = (raw ?? '').toUpperCase();
     if (kind === 'solo') this.playSolo();
+    else if (kind === 'train') this.train();
     else if (kind === 'host' && code && store.get(sessionStorage, HOST_KEY) === code) this.hostRoom(code);
     else if (kind === 'join' && code && store.get(sessionStorage, 'score.joined') === code) this.joinRoom(code);
   }

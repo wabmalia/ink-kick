@@ -84,7 +84,7 @@ export const CONFIG = {
   tackle: {
     // A tackle is a poke with the ball this close, edge to edge (or the
     // dribbler within pokeBodyReach); any further, it's a slide.
-    pokeRange: 0.9,
+    pokeRange: 0.6,
     pokeTime: 0.25,
     // Radius around the poking foot that reaches the ball.
     pokeReach: 0.7,
@@ -115,6 +115,9 @@ export const CONFIG = {
     // this speed.
     stumbleTime: 0.5,
     slideShove: 3,
+    // A tackle on a stronger dribbler wins with chance (tackling / strength)
+    // to this power, as attribute multipliers.
+    holdPower: 3,
     // A player robbed of the ball can't trap it for this long.
     stealCooldown: 0.6,
     // A slide through a dribbler's back knocks the ball on ahead of them at

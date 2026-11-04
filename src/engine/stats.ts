@@ -25,10 +25,16 @@ export interface Stats {
   stumbleTime: number;
   // How hard this player's slide shoves others aside.
   shove: number;
+  // In a challenge for the ball, the tackler's reach is scaled by their
+  // tackle factor over the dribbler's hold factor.
+  tackleFactor: number;
+  holdFactor: number;
 }
 
 export const STEP = 0.04;
-export const multiplier = (value: number) => 1 + STEP * (value - 5);
+export const multiplier = (value: number, step = STEP) => 1 + step * (value - 5);
+// Poke range moves twice as far per point, so the ring you see changes.
+export const POKE_STEP = 0.08;
 
 export function statsFor(attrs: Attributes = evenAttributes()): Stats {
   const m = (k: keyof Attributes) => multiplier(attrs[k]);
@@ -46,11 +52,13 @@ export function statsFor(attrs: Attributes = evenAttributes()): Stats {
     dribbleSpeed: keep(dribble.speedFactor, m('dribbling')),
     shotSpeed: kick.shotSpeed * m('power'),
     chargeTime: kick.chargeTime / m('power'),
-    pokeRange: tackle.pokeRange * m('tackling'),
+    pokeRange: tackle.pokeRange * multiplier(attrs.tackling, POKE_STEP),
     slideReach: tackle.slideReach * m('tackling'),
     slideControlCos: Math.cos(Math.acos(tackle.slideControlCos) * m('tackling')),
     loseDistance: dribble.loseDistance * m('strength'),
     stumbleTime: tackle.stumbleTime / m('strength'),
     shove: tackle.slideShove * m('strength'),
+    tackleFactor: m('tackling'),
+    holdFactor: m('strength'),
   };
 }

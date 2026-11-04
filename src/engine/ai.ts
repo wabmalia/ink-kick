@@ -54,7 +54,7 @@ export class Bot {
       if (this.tackleWait <= 0 && me.action === 'none') {
         // Hesitates in range before poking, so it can be dribbled past;
         // now and then slides in from a little further out.
-        if (toBall < 1.7 && Math.random() < 0.025) {
+        if (toBall < 1.25 && Math.random() < 0.025) {
           this.holdFor = CONFIG.tick;
           this.tackleWait = 1.5;
         } else if (toBall > 2.4 && toBall < 3.4 && Math.random() < 0.02) {

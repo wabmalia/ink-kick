@@ -8,6 +8,7 @@ import { PlayerGauges } from '../scene/gauges';
 import { BRIGHT, GRASS_DROPS, PAINTS, Splashes, TURF_DROPS } from '../scene/splashes';
 import { Billboard } from '../scene/billboard';
 import { buildStadium } from '../scene/stadium';
+import { buildReachRing, buildTraining } from '../scene/training';
 import { Watercolor } from '../scene/watercolor';
 import type { ViewState } from './state';
 
@@ -67,6 +68,11 @@ export class GameView {
   // The ball as drawn last frame and its velocity then, to spot it rolling
   // and bouncing off walls; and ground covered since it last kicked up turf.
   private lastBall = { x: 0, y: 0, vx: 0, vy: 0, roll: 0 };
+  // The training ground's markings, built the first time it's shown, and
+  // the spare balls drawn there.
+  private training: THREE.Group | null = null;
+  private props: THREE.Mesh[] = [];
+  private reachRing: { ring: THREE.Mesh; label: THREE.Mesh } | null = null;
 
   constructor(host: HTMLElement) {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -178,6 +184,44 @@ export class GameView {
     }
   }
 
+  /** Shows or hides the training ground's markings. */
+  setTraining(on: boolean) {
+    if (on && !this.training) {
+      this.training = buildTraining();
+      this.scene.add(this.training);
+    }
+    if (this.training) this.training.visible = on;
+  }
+
+  private drawReach(reach?: { x: number; y: number; r: number }) {
+    if (reach && !this.reachRing) {
+      this.reachRing = buildReachRing();
+      this.scene.add(this.reachRing.ring, this.reachRing.label);
+    }
+    if (!this.reachRing) return;
+    const { ring, label } = this.reachRing;
+    ring.visible = label.visible = !!reach;
+    if (reach) {
+      ring.position.set(reach.x, ring.position.y, reach.y);
+      ring.scale.set(reach.r, reach.r, 1);
+      // Just below the ring, on the near side.
+      label.position.set(reach.x, label.position.y, reach.y + reach.r + 0.5);
+    }
+  }
+
+  private drawProps(props: { x: number; y: number }[] = []) {
+    while (this.props.length < props.length) {
+      const ball = createBall();
+      this.scene.add(ball);
+      this.props.push(ball);
+    }
+    this.props.forEach((ball, i) => {
+      const p = props[i];
+      ball.visible = !!p;
+      if (p) ball.position.set(p.x, CONFIG.ball.radius, p.y);
+    });
+  }
+
   // me: whose ring and gauges to show, if anyone's. names: shown over heads.
   render(state: ViewState, dt: number, now: number, me: string | null, names?: Map<string, string>) {
     const toss = this.toss;
@@ -240,6 +284,8 @@ export class GameView {
 
     rollBall(this.ball, state.ballX - this.ball.position.x, state.ballY - this.ball.position.z);
     this.ball.position.set(state.ballX, CONFIG.ball.radius, state.ballY);
+    this.drawProps(state.props);
+    this.drawReach(state.reach);
 
     const mine = state.players.find(p => p.id === me);
     this.gauges.group.visible = !!mine;
