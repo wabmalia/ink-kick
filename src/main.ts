@@ -9,6 +9,7 @@ import { iceServers } from './net/relay';
 import { helpOpen, onHelp } from './ui/help';
 import { inMatch, offerInvite, render } from './ui/menu';
 import { paintMenu } from './ui/wash';
+import { mountLocker } from './ui/locker';
 import './style.css';
 
 // Picks what's on the pitch from the session: bots playing behind the menu,
@@ -114,5 +115,6 @@ const invite = session.invitedTo();
 if (session.status === 'home' && invite) offerInvite(invite);
 render();
 pickMode();
+mountLocker(document.getElementById('radar')!, document.getElementById('spare')!);
 paintMenu();
 requestAnimationFrame(frame);

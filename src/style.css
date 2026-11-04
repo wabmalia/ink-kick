@@ -338,6 +338,24 @@ html, body {
   to { opacity: 1; transform: scale(1); }
 }
 
+/* --- Attributes info ----------------------------------------------------- */
+
+/* A small ink button, painted like the others, in the card's corner. */
+.info-btn {
+  position: absolute;
+  z-index: 1;
+  top: 10px;
+  right: 12px;
+  padding: 4px 13px 6px;
+  font-size: 22px;
+  line-height: 1;
+}
+.info .card-note { align-self: stretch; }
+.attr-list { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; margin: 6px 0 16px; align-self: stretch; }
+.attr-list dt { font-family: 'Caveat Brush', cursive; font-size: 22px; color: var(--gold); }
+.attr-list dd { margin: 0; font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; line-height: 1.15; color: var(--text); }
+.info .card-note.small { margin-bottom: 16px; }
+
 /* --- How to play --------------------------------------------------------- */
 
 .help-btn {
@@ -416,4 +434,70 @@ html, body {
 
 @media (max-height: 620px) {
   .help { max-height: calc(100% - 32px); overflow-y: auto; }
+}
+
+/* --- Locker room --------------------------------------------------------- */
+
+.cards { width: min(600px, 100%); }
+.cards .card.locker { position: relative; display: grid; grid-template-columns: 1fr 300px; column-gap: 12px; grid-template-rows: auto auto 1fr; }
+/* The chart sits beside the title, note and nickname, all the card's height. */
+.locker-body { display: contents; }
+.locker-chart { grid-column: 2; grid-row: 1 / span 3; align-self: center; margin: 0 0 -4px; display: flex; flex-direction: column; align-items: center; }
+.locker-name { align-self: center; }
+.locker-name { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; color: var(--soft); }
+.card-note.small { margin: 0; font-size: 18px; line-height: 1.1; }
+.spare { margin: 8px 0 0; font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; color: var(--soft); }
+.spare.to-spend { color: var(--gold); }
+
+.radar-wrap { position: relative; width: 300px; height: 214px; }
+.corner { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.corner-name { font-family: 'Caveat', cursive; font-weight: 700; font-size: 19px; line-height: 1; color: var(--text); }
+.corner-row { display: flex; align-items: center; gap: 2px; }
+.corner-value { width: 22px; font-family: 'Caveat Brush', cursive; font-size: 21px; line-height: 1; text-align: center; color: var(--gold); }
+.step {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid rgba(238, 240, 250, 0.7);
+  border-radius: 50%;
+  background: #0d1024;
+  color: var(--text);
+  font: 700 15px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+.step:hover,
+.step:focus-visible { border-color: var(--gold); color: var(--gold); outline: none; }
+.step:focus-visible { box-shadow: 0 0 0 2px #0d1024, 0 0 0 4px var(--gold); }
+.step[aria-disabled='true'] { opacity: 0.3; cursor: default; border-color: rgba(238, 240, 250, 0.7); color: var(--text); }
+
+.radar { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+.radar .ring { fill: none; stroke: rgba(238, 240, 250, 0.22); stroke-width: 1.5; }
+.radar .ring-10 { stroke: rgba(238, 240, 250, 0.4); stroke-dasharray: 4 4; }
+.radar .spoke { stroke: rgba(238, 240, 250, 0.2); stroke-width: 1.2; }
+.radar .shape {
+  fill: rgba(255, 215, 116, 0.55);
+  stroke: #ffc23a;
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+.radar .dot { fill: #ffc23a; stroke: var(--ink); stroke-width: 2; }
+
+@media (max-width: 600px) {
+  .cards .card.locker { display: flex; }
+  .locker-chart { align-self: center; }
+}
+
+/* Short windows: a smaller title and tighter cards, so the whole home
+   screen fits without scrolling. */
+@media (max-height: 820px) {
+  .menu { padding: 12px 16px; }
+  .screen { gap: 10px; }
+  .title { font-size: clamp(44px, 7vw, 62px); }
+  .tagline { margin: -6px 0 0; font-size: 21px; }
+  .cards { gap: 10px; }
+  .cards .card { padding: 11px 26px 13px; }
+  .card h2 { font-size: 26px; margin-bottom: 4px; }
+  .card-note { margin-bottom: 6px; }
+  .or { margin: 4px 0; }
 }

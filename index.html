@@ -69,15 +69,41 @@
     <button class="brush gold" id="help-close" type="button">Got it</button>
   </dialog>
 
+  <dialog class="help card info" id="attr-info" aria-labelledby="attr-info-title" tabindex="-1">
+    <h2 id="attr-info-title">Attributes</h2>
+    <p class="card-note">Every player starts with 5 in each. Take points off one to put them on another, between 1 and 10.</p>
+    <dl class="attr-list">
+      <dt>Pace</dt><dd>How fast you run and sprint.</dd>
+      <dt>Stamina</dt><dd>How long you can sprint, and how quickly you get your breath back.</dd>
+      <dt>Dribbling</dt><dd>How sharply you turn with the ball, and how little it slows you down.</dd>
+      <dt>Power</dt><dd>How hard you can shoot, and how quickly a kick charges up.</dd>
+      <dt>Tackling</dt><dd>How far your pokes and slides reach.</dd>
+      <dt>Strength</dt><dd>How hard you are to knock off the ball, and how quickly you recover.</dd>
+    </dl>
+    <p class="card-note small">Not in play yet: for now every player plays the same.</p>
+    <button class="brush gold" id="attr-info-close" type="button">Got it</button>
+  </dialog>
+
   <main class="menu" id="menu">
     <section class="screen home" id="home" hidden>
       <h1 class="title">Score<b>!</b></h1>
       <p class="tagline">Floodlit football, drawn by hand.</p>
       <div class="cards">
-        <section class="card">
-          <h2>Nickname</h2>
-          <p class="card-note">Just a nickname, no real names or contact details needed.</p>
-          <input class="field-input" id="name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Pick a nickname" aria-label="Nickname">
+        <section class="card locker">
+          <h2>Locker room</h2>
+          <button class="ink-btn info-btn" id="attr-info-open" type="button" aria-haspopup="dialog" aria-label="What the attributes do">?</button>
+          <p class="card-note">Who you are, and how you play.</p>
+          <div class="locker-body">
+            <div class="locker-name">
+              <label class="field-label" for="name">Nickname</label>
+              <input class="field-input" id="name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Pick a nickname">
+              <p class="card-note small">No real names or contact details needed.</p>
+            </div>
+            <div class="locker-chart">
+              <div class="radar-wrap" id="radar" role="group" aria-label="Attributes"></div>
+              <p class="spare" id="spare" aria-live="polite"></p>
+            </div>
+          </div>
         </section>
         <section class="card solo" id="solo-card">
           <h2>Solo</h2>
