@@ -27,6 +27,13 @@ stamina (left) when it isn't full and kick power (right) while charging.
   animated in code, the gauges, and `watercolor.ts`, the post-processing pass that
   paints the scene.
 
+## Icons
+
+`public/favicon.png` and `public/apple-touch-icon.png` are painted by
+`iconDataUrl()` in `src/ui/wash.ts`, the title's splash in a square. To
+redraw them, run the dev server and call it from the browser console:
+`(await import('/src/ui/wash.ts')).iconDataUrl(32)` gives a data URL to save.
+
 ## Scripts
 
 - `npm test`: sim tests (Vitest)

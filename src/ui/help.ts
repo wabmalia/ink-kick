@@ -15,8 +15,14 @@ export function onHelp(fn: () => void) {
 
 function toggle(open: boolean) {
   if (open === dialog.open) return;
-  if (open) dialog.showModal();
-  else dialog.close();
+  if (open) {
+    dialog.showModal();
+    // Focus the dialog itself, not its first button, so Got it doesn't open
+    // wearing the keyboard focus ring.
+    dialog.focus();
+  } else {
+    dialog.close();
+  }
 }
 
 dialog.addEventListener('close', () => listeners.forEach(fn => fn()));

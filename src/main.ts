@@ -8,6 +8,7 @@ import { session } from './net/session';
 import { iceServers } from './net/relay';
 import { helpOpen, onHelp } from './ui/help';
 import { inMatch, offerInvite, render } from './ui/menu';
+import { paintMenu } from './ui/wash';
 import './style.css';
 
 // Picks what's on the pitch from the session: bots playing behind the menu,
@@ -113,4 +114,5 @@ const invite = session.invitedTo();
 if (session.status === 'home' && invite) offerInvite(invite);
 render();
 pickMode();
+paintMenu();
 requestAnimationFrame(frame);

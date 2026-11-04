@@ -66,8 +66,6 @@ html, body {
 
 [hidden] { display: none !important; }
 
-.defs { position: absolute; width: 0; height: 0; }
-
 :root {
   --ink: #0d1026;
   --blue: #3d8bff;
@@ -91,11 +89,52 @@ html, body {
 
 /* --- Painted pieces ------------------------------------------------------ */
 
-/* A watercolour swatch with an inked outline. The wash and the line are
-   pseudo-elements, so the filters that rough them up leave the text alone. */
-.brush {
+/* Cards, buttons and the title sit on watercolour painted to their size
+   (see ui/wash.ts): a wandering edge with a dried rim, no inked outline.
+   The paint spills a little past the element, so it's drawn on a
+   pseudo-element that reaches out by --wash-pad. */
+.card,
+.brush,
+.ink-btn,
+.title {
   position: relative;
   isolation: isolate;
+}
+.card::before,
+.brush::before,
+.ink-btn::before,
+.title::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: calc(var(--wash-pad, 0px) * -1);
+  background: var(--wash, none) center / 100% 100% no-repeat;
+  pointer-events: none;
+}
+
+/* Highlighted, a button flicks splatter off its edge. It's painted with
+   the wash, behind it, and springs out on hover or keyboard focus. */
+.brush::after,
+.ink-btn::after {
+  content: '';
+  position: absolute;
+  z-index: -2;
+  inset: calc(var(--splat-pad, 0px) * -1);
+  background: var(--splat, none) center / 100% 100% no-repeat;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.82);
+  transition: opacity 0.12s, transform 0.3s cubic-bezier(0.2, 1.7, 0.4, 1);
+}
+.brush:not(:disabled):hover::after,
+.brush:focus-visible::after,
+.ink-btn:hover::after,
+.ink-btn:focus-visible::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.brush {
   border: 0;
   background: none;
   padding: 10px 26px 12px;
@@ -106,43 +145,21 @@ html, body {
   cursor: pointer;
   transition: transform 0.15s;
 }
-.brush::before,
-.brush::after {
-  content: '';
-  position: absolute;
-  z-index: -1;
-}
-.brush::before {
-  inset: -3px -6px;
-  border-radius: 42% 58% 46% 54% / 58% 44% 56% 42%;
-  background: var(--wash);
-  filter: url(#bleed);
-}
-.brush::after {
-  inset: 1px;
-  border: 2.5px solid var(--ink);
-  border-radius: 14px 20px 12px 22px;
-  filter: url(#rough);
-  opacity: 0.8;
-}
 .brush:hover { transform: rotate(-1.5deg) scale(1.04); }
 .brush:active { transform: rotate(1deg) scale(0.98); }
 .brush:disabled { cursor: default; transform: none; }
-.brush:disabled::before { filter: url(#bleed) saturate(0.35) brightness(1.15); }
-.brush:disabled::after { opacity: 0.5; }
-.brush:focus-visible { outline: none; }
-.brush:focus-visible::after { opacity: 1; border-width: 3.5px; }
+.brush:disabled::before { filter: saturate(0.35) brightness(1.15); }
 .brush.big { font-size: 34px; padding: 14px 40px 16px; }
+/* With no outline to thicken, a dashed ring marks keyboard focus. */
+.brush:focus-visible,
+.ink-btn:focus-visible {
+  outline: 3px dashed var(--text);
+  outline-offset: 5px;
+  border-radius: 14px;
+}
 
-/* Pigment pools darker at one edge and lifts paler at another. */
-.brush.gold { --wash: radial-gradient(circle at 28% 32%, #ffeab0 0, transparent 42%), radial-gradient(circle at 78% 74%, #f5a312 0, transparent 58%), #ffc23a; }
-.brush.red { --wash: radial-gradient(circle at 30% 30%, #ffc2b3 0, transparent 40%), radial-gradient(circle at 76% 76%, #f0553c 0, transparent 60%), #ff7660; }
-.brush.blue { --wash: radial-gradient(circle at 30% 30%, #c7e2ff 0, transparent 40%), radial-gradient(circle at 76% 76%, #4a8af5 0, transparent 60%), #66a6ff; }
-.brush.green { --wash: radial-gradient(circle at 30% 30%, #d2f7d4 0, transparent 40%), radial-gradient(circle at 76% 76%, #36b863 0, transparent 60%), #52d27c; }
-
-/* Quieter buttons: just ink. */
+/* Quieter buttons: a small navy wash. */
 .ink-btn {
-  position: relative;
   border: 0;
   background: none;
   padding: 6px 14px;
@@ -151,44 +168,11 @@ html, body {
   color: var(--text);
   cursor: pointer;
 }
-.ink-btn::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border: 2px solid rgba(238, 240, 250, 0.7);
-  border-radius: 10px 14px 9px 15px;
-  filter: url(#rough);
-}
 .ink-btn:hover { color: var(--gold); }
-.ink-btn:hover::after { border-color: var(--gold); }
 
-/* A navy wash on paper, inked round the edge. */
 .card {
-  position: relative;
-  isolation: isolate;
-  padding: 12px 22px 14px;
+  padding: 16px 28px 18px;
   margin: 0;
-}
-.card::before,
-.card::after {
-  content: '';
-  position: absolute;
-  z-index: -1;
-}
-.card::before {
-  inset: 0;
-  border-radius: 18px 26px 16px 28px;
-  background:
-    radial-gradient(circle at 18% 22%, rgba(70, 86, 180, 0.22) 0, transparent 45%),
-    radial-gradient(circle at 85% 80%, rgba(8, 10, 24, 0.5) 0, transparent 55%),
-    rgb(24, 28, 56);
-  filter: url(#bleed);
-}
-.card::after {
-  inset: 4px;
-  border: 2.5px solid rgba(238, 240, 250, 0.55);
-  border-radius: 16px 24px 14px 26px;
-  filter: url(#rough);
 }
 .card h2,
 .card h3 { margin: 0 0 8px; font-size: 28px; font-weight: 400; }
@@ -220,28 +204,24 @@ html, body {
   text-shadow: 3px 4px 0 var(--ink), -2px -1px 0 #ff5e45;
 }
 .title b { font-weight: 400; color: #ff5e45; text-shadow: 3px 4px 0 var(--ink), -2px -1px 0 #ffc53d; }
-/* A splash of red wash behind the word. */
-.title::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  inset: 18% -14% 4% -10%;
-  border-radius: 50% 40% 55% 45%;
-  background:
-    radial-gradient(circle at 30% 40%, rgba(255, 94, 69, 0.85) 0, transparent 55%),
-    radial-gradient(circle at 72% 60%, rgba(61, 139, 255, 0.7) 0, transparent 50%);
-  filter: url(#bleed) blur(2px);
-  opacity: 0.75;
-}
 .tagline { margin: -4px 0 4px; font-family: 'Caveat', cursive; font-weight: 700; font-size: 24px; color: var(--text); text-shadow: 0 1px 2px var(--ink), 0 0 10px rgba(13, 16, 38, 0.9); }
 
-.cards { display: flex; flex-direction: column; gap: 12px; width: min(460px, 100%); }
+.cards { display: flex; flex-direction: column; gap: 14px; width: min(520px, 100%); }
 .cards .card { display: flex; flex-direction: column; align-items: stretch; }
 /* Every card: title, a line saying what it's for, then its controls. */
 .cards .card h2 { margin-bottom: 2px; }
 .cards .card > .brush,
 #create-block .brush { align-self: center; }
 #create-block { display: flex; flex-direction: column; }
+/* Solo has a single button: beside the title and description, not under. */
+.cards .card.solo {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 16px;
+}
+.card.solo > .brush { grid-column: 2; grid-row: 1 / span 2; }
+.card.solo .card-note { margin-bottom: 4px; }
 
 .field-input,
 .join input {
@@ -265,7 +245,7 @@ html, body {
 
 .or { width: 100%; margin: 8px 0; display: flex; align-items: center; gap: 10px; font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; color: var(--soft); }
 .or::before,
-.or::after { content: ''; flex: 1; border-top: 2px solid rgba(238, 240, 250, 0.45); filter: url(#rough); }
+.or::after { content: ''; flex: 1; border-top: 2px solid rgba(238, 240, 250, 0.45); }
 
 .notice .card { max-width: 520px; font-family: 'Caveat', cursive; font-size: 24px; text-align: center; }
 
@@ -383,27 +363,29 @@ html, body {
 
 .help-btn {
   position: fixed;
+  /* Over the menu's shade, so it works from the home screen too. */
+  z-index: 2;
   top: max(12px, env(safe-area-inset-top));
   right: 16px;
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(13, 16, 38, 0.85);
-  border-radius: 10px 14px 9px 15px;
 }
 
 .help {
-  width: min(640px, calc(100% - 32px));
-  max-height: calc(100% - 32px);
-  overflow-y: auto;
+  width: min(600px, calc(100% - 32px));
+  /* Short enough not to scroll, so a hovered button's splatter can spill
+     past the edge; very short windows scroll after all. */
+  overflow: visible;
   border: 0;
   color: var(--text);
   background: none;
-  padding: 22px 28px 24px;
+  padding: 32px 40px 32px;
   /* The card style zeroes margins; dialogs centre with auto ones. */
   margin: auto;
 }
 .help::backdrop { background: rgba(8, 10, 24, 0.7); }
+.help:focus { outline: none; }
 .help[open] { display: flex; flex-direction: column; align-items: center; }
 .help h2 { align-self: flex-start; }
 
@@ -412,7 +394,7 @@ html, body {
   grid-template-columns: auto 1fr;
   gap: 14px 20px;
   align-items: center;
-  margin: 4px 0 20px;
+  margin: 8px 0 26px;
   width: 100%;
 }
 .controls dt { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
@@ -452,3 +434,7 @@ html, body {
 .keys.cluster .key { min-width: 0; padding: 0; }
 .keys.cluster .up { grid-column: 2; grid-row: 1; }
 .keys.cluster .key:not(.up) { grid-row: 2; }
+
+@media (max-height: 620px) {
+  .help { max-height: calc(100% - 32px); overflow-y: auto; }
+}
