@@ -1,4 +1,5 @@
 import type { Action, Input, SimEvent, Team } from '../engine/sim';
+import type { Attributes } from '../game/attributes';
 
 // Messages between the host and guests. Each guest holds two connections to
 // the host: 'control', reliable and ordered, for the room, events and team
@@ -46,7 +47,7 @@ export interface WireInput extends Input {
 }
 
 export type ToHost =
-  | { t: 'hello'; id: string; name: string }
+  | { t: 'hello'; id: string; name: string; attrs: Attributes }
   | { t: 'team'; team: Team }
   | { t: 'input'; input: WireInput };
 

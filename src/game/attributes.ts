@@ -1,6 +1,7 @@
 // A player's attributes: six whole numbers from 1 to 10 that add up to 30,
-// less any points taken off one and not yet spent on another. Set in the Locker room; see docs/attributes.md for what each will do.
-// The sim doesn't use them yet.
+// less any points taken off one and not yet spent on another. Set in the
+// Locker room; engine/stats.ts turns them into a player's speeds and reaches,
+// and docs/attributes.md has the table.
 
 export const ATTRIBUTES = ['pace', 'stamina', 'dribbling', 'power', 'tackling', 'strength'] as const;
 export type Attribute = (typeof ATTRIBUTES)[number];

@@ -47,7 +47,7 @@ export class Bot {
       const aligned = (me.fx * (tx - me.x) + me.fy * (ty - me.y)) / toGoal > 0.92;
       sprint = toGoal > 12 && me.stamina > 0.5;
       if (toGoal < 11 && aligned && this.holdFor <= 0 && me.action === 'none') {
-        this.holdFor = CONFIG.kick.chargeTime * Math.min(1, 0.35 + toGoal / 14);
+        this.holdFor = me.stats.chargeTime * Math.min(1, 0.35 + toGoal / 14);
       }
     } else if (match.owner) {
       sprint = toBall > 3 && me.stamina > 0.3;

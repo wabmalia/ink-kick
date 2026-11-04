@@ -41,7 +41,7 @@ export function toSnapshot(match: Match, tick: number): Snapshot {
       p.id, p.team === 'gold' ? 0 : 1,
       round(p.x), round(p.y), round(p.vx), round(p.vy), round(p.fx), round(p.fy),
       ACTIONS.indexOf(p.action), round(p.actionT), round(p.charge), round(p.stamina),
-      round(p.tired / CONFIG.stamina.tiredTime),
+      round(p.tired / p.stats.tiredTime),
     ]),
   };
 }
@@ -178,7 +178,7 @@ export class LocalMatch {
           x: lerp(from.x, p.x, t), y: lerp(from.y, p.y, t),
           vx: p.vx, vy: p.vy, fx: p.fx, fy: p.fy,
           action: p.action, actionT: p.actionT, charge: p.charge,
-          stamina: p.stamina, tired: p.tired / CONFIG.stamina.tiredTime,
+          stamina: p.stamina, tired: p.tired / p.stats.tiredTime,
         };
       }),
       ballX: lerp(this.prevBall.x, match.ball.x, t),

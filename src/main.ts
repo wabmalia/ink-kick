@@ -1,6 +1,7 @@
 import { CONFIG } from './config';
 import { Bot } from './engine/ai';
 import { createMatch, createPlayer, step } from './engine/sim';
+import { loadAttributes } from './game/attributes';
 import { enableKeys, keyboardInput } from './game/input';
 import { LocalMatch, RemoteMatch, type ViewState } from './game/state';
 import { GameView } from './game/view';
@@ -33,7 +34,7 @@ function attract(): Mode {
 
 function solo(): Mode {
   const kickoff = Math.random() < 0.5 ? 'gold' : 'red';
-  const match = createMatch([createPlayer(session.me, 'gold'), createPlayer('bot', 'red')], { kickoff, coin: true });
+  const match = createMatch([createPlayer(session.me, 'gold', loadAttributes()), createPlayer('bot', 'red')], { kickoff, coin: true });
   const bot = new Bot('bot');
   return { kind: 'solo', local: new LocalMatch(match, () => step(match, { [session.me]: keyboardInput(), bot: bot.think(match) })) };
 }

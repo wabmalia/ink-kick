@@ -1,9 +1,8 @@
 # Player attributes
 
-A guideline for how each player's attributes will change what they can do.
-The Locker room (home screen) already lets players set them; **the sim doesn't
-use them yet**. Every value below is the global `CONFIG` value today, which is
-what a 5 gives.
+How each player's attributes change what they can do. Players set them in
+the Locker room (home screen); `engine/stats.ts` turns them into each player's
+own values when a match starts. The global `CONFIG` values are what a 5 gives.
 
 ## The rules
 
@@ -12,8 +11,8 @@ what a 5 gives.
 - They add up to **30** (6 × 5). In the Locker room you lower one to free a
   point, then spend it on another, so specialising means giving something
   up. Freed points not yet spent are kept as spare; the attributes plus the
-  spare always make 30. (Whether a match should refuse, or fill in, a build
-  with spare points is still to decide.)
+  spare always make 30. Spare points do nothing in a match: they're simply
+  not spent.
 - Each point moves an attribute's values by **4%**: a multiplier of
   `m = 1 + 0.04 × (value − 5)`, so a 1 is `0.84×` and a 10 is `1.20×`.
   That's noticeable without breaking the game, and it keeps every build

@@ -111,8 +111,10 @@ export const CONFIG = {
     // Getting up after a slide, at a fraction of normal speed.
     recoverTime: 0.7,
     recoverFactor: 0.4,
-    // A player taken out by a slide loses control this long.
+    // A player taken out by a slide loses control this long, shoved aside at
+    // this speed.
     stumbleTime: 0.5,
+    slideShove: 3,
     // A player robbed of the ball can't trap it for this long.
     stealCooldown: 0.6,
     // A slide through a dribbler's back knocks the ball on ahead of them at

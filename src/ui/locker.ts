@@ -39,9 +39,6 @@ function infoDialog() {
   });
 }
 
-/** The attributes as set in the Locker room. */
-export const myAttributes = (): Attributes => ({ ...attrs });
-
 export function mountLocker(host: HTMLElement, left: HTMLElement) {
   infoDialog();
   const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, class: 'radar', 'aria-hidden': 'true' });

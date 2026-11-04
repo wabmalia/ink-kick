@@ -6,6 +6,7 @@ import {
   type RoomView, type Snapshot, type ToClient, type ToHost,
 } from './protocol';
 import { HostRoom, type Link } from './room';
+import { loadAttributes } from '../game/attributes';
 
 // The connection side, the same shape as sinkhole's: one browser hosts the
 // room over PeerJS, the others join by code. Each guest opens two
@@ -117,7 +118,7 @@ class Session {
     const code = resumeCode ?? newRoomCode();
     this.role = 'host';
     this.code = code;
-    this.host = new HostRoom(code, this.me, this.name || 'Host', { change: room => this.set({ room }) });
+    this.host = new HostRoom(code, this.me, this.name || 'Host', { change: room => this.set({ room }) }, loadAttributes());
     store.set(sessionStorage, HOST_KEY, code);
     this.set({ status: 'connecting', message: resumeCode ? 'Reopening your room…' : 'Creating room…', room: this.host.view() });
     void this.openHostPeer(code, !resumeCode, 0);
@@ -186,7 +187,7 @@ class Session {
       const msg = d as ToHost;
       if (msg?.t === 'hello' && !id && typeof msg.id === 'string' && msg.id && msg.id !== this.me) {
         id = msg.id;
-        host.join(id, cleanName(msg.name), link);
+        host.join(id, cleanName(msg.name), link, msg.attrs);
       } else if (msg?.t === 'team' && id && validTeam(msg.team)) {
         host.setTeam(id, msg.team);
       }
@@ -263,7 +264,7 @@ class Session {
     conn.on('open', () => {
       clearTimeout(timer);
       this.set({ linked: true });
-      this.sendControl({ t: 'hello', id: this.me, name: this.name || 'Player' });
+      this.sendControl({ t: 'hello', id: this.me, name: this.name || 'Player', attrs: loadAttributes() });
       // Unordered: a lost snapshot is replaced by the next one anyway.
       const state = this.peer!.connect(target, { label: 'state', reliable: false, serialization: 'json', metadata: { id: this.me } });
       this.state = state;

@@ -4,6 +4,7 @@ import {
   type Input, type Match, type SimEvent, type Team,
 } from '../engine/sim';
 import { toSnapshot } from '../game/state';
+import { cleanAttributes, type Attributes } from '../game/attributes';
 import { cleanName, type MemberView, type RoomView, type ToClient, type WireInput } from './protocol';
 
 // The room as the host runs it: who's in, on which team, and the match once
@@ -21,6 +22,7 @@ export interface RoomListener {
 }
 
 interface Member extends MemberView {
+  attrs: Attributes;
   link: Link | null;
   input: WireInput | null;
 }
@@ -33,8 +35,8 @@ export class HostRoom {
   match: Match | null = null;
   tick = 0;
 
-  constructor(readonly code: string, readonly hostId: string, hostName: string, private listener: RoomListener) {
-    this.members.push({ id: hostId, name: cleanName(hostName), team: 'gold', connected: true, link: null, input: null });
+  constructor(readonly code: string, readonly hostId: string, hostName: string, private listener: RoomListener, hostAttrs?: Attributes) {
+    this.members.push({ id: hostId, name: cleanName(hostName), attrs: cleanAttributes(hostAttrs), team: 'gold', connected: true, link: null, input: null });
   }
 
   view(): RoomView {
@@ -54,17 +56,17 @@ export class HostRoom {
 
   // A new guest goes on the team with fewer players; a returning one keeps
   // their place.
-  join(id: string, name: string, link: Link) {
+  join(id: string, name: string, link: Link, attrs?: unknown) {
     let m = this.members.find(x => x.id === id);
     if (m) {
-      Object.assign(m, { name: cleanName(name), connected: true, link, input: null });
+      Object.assign(m, { name: cleanName(name), attrs: cleanAttributes(attrs), connected: true, link, input: null });
     } else {
       const gold = this.members.filter(x => x.team === 'gold').length;
       const red = this.members.length - gold;
-      m = { id, name: cleanName(name), team: red < gold ? 'red' : 'gold', connected: true, link, input: null };
+      m = { id, name: cleanName(name), attrs: cleanAttributes(attrs), team: red < gold ? 'red' : 'gold', connected: true, link, input: null };
       this.members.push(m);
     }
-    if (this.match && !this.match.players.some(p => p.id === id)) addPlayer(this.match, createPlayer(id, m.team));
+    if (this.match && !this.match.players.some(p => p.id === id)) addPlayer(this.match, createPlayer(id, m.team, m.attrs));
     this.changed();
   }
 
@@ -95,7 +97,7 @@ export class HostRoom {
     this.phase = 'match';
     this.tick = 0;
     const kickoff = Math.random() < 0.5 ? 'gold' : 'red';
-    this.match = createMatch(this.members.map(m => createPlayer(m.id, m.team)), { kickoff, coin: true });
+    this.match = createMatch(this.members.map(m => createPlayer(m.id, m.team, m.attrs)), { kickoff, coin: true });
     this.changed();
   }
 
