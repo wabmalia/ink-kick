@@ -9,8 +9,56 @@ const { width: W, height: H, goalWidth, goalDepth } = CONFIG.pitch;
 const GOAL_HEIGHT = 2.2;
 // Grass beyond the lines, up to the stands.
 const APRON = 4;
-const PX = 32;
+const PX = 48;
 
+// A small seeded random, so the pitch is painted the same way every time.
+function seeded(seed: number) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Smooth 1D noise in -1..1, for wobbling a stroke along its length.
+function wobbler(rand: () => number) {
+  const knots = Array.from({ length: 64 }, () => rand() * 2 - 1);
+  return (t: number) => {
+    const i = Math.floor(t);
+    const f = t - i;
+    const a = knots[((i % 64) + 64) % 64]!;
+    const b = knots[(((i + 1) % 64) + 64) % 64]!;
+    return a + (b - a) * f * f * (3 - 2 * f);
+  };
+}
+
+type Pt = [number, number];
+
+// Points every 0.2 m along a straight line, run on a little past each end
+// the way a quick sketch overshoots.
+function segment(x0: number, y0: number, x1: number, y1: number, over = 0.12): Pt[] {
+  const len = Math.hypot(x1 - x0, y1 - y0);
+  const ux = (x1 - x0) / len;
+  const uy = (y1 - y0) / len;
+  const n = Math.max(2, Math.ceil((len + over * 2) / 0.2));
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const d = -over + ((len + over * 2) * i) / n;
+    return [x0 + ux * d, y0 + uy * d];
+  });
+}
+
+function arcPoints(cx: number, cy: number, r: number, a0: number, a1: number): Pt[] {
+  const n = Math.max(8, Math.ceil((Math.abs(a1 - a0) * r) / 0.2));
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const a = a0 + ((a1 - a0) * i) / n;
+    return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+  });
+}
+
+// The pitch as a watercolour: stripes with ragged edges, wet-on-wet washes,
+// blooms and splatter, then the markings in chalk over a faint, slightly
+// misregistered ink line. Painted once, so nothing here flickers.
 function pitchTexture() {
   const gw = W + APRON * 2;
   const gh = H + APRON * 2;
@@ -18,57 +66,231 @@ function pitchTexture() {
   canvas.width = gw * PX;
   canvas.height = gh * PX;
   const ctx = canvas.getContext('2d')!;
+  const rand = seeded(11);
+  const pick = <T,>(xs: T[]) => xs[Math.floor(rand() * xs.length)]!;
+  // Metres from the pitch centre to canvas pixels.
+  const mx = (v: number) => (v + gw / 2) * PX;
+  const my = (v: number) => (v + gh / 2) * PX;
+
+  ctx.fillStyle = '#2c7437';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Mown stripes, each edge laid down by hand.
   const stripe = 4;
   for (let x = 0; x < gw; x += stripe) {
-    ctx.fillStyle = Math.round(x / stripe) % 2 ? '#2f7a3a' : '#2a6e34';
-    ctx.fillRect(x * PX, 0, stripe * PX, gh * PX);
-  }
-  // Metres from the pitch centre to canvas pixels.
-  const m = (v: number, axis: 'x' | 'y') => (v + (axis === 'x' ? gw : gh) / 2) * PX;
-  ctx.strokeStyle = 'rgba(238, 240, 250, 0.9)';
-  ctx.fillStyle = 'rgba(238, 240, 250, 0.9)';
-  ctx.lineWidth = 0.12 * PX;
-  const rect = (x0: number, y0: number, x1: number, y1: number) =>
-    ctx.strokeRect(m(x0, 'x'), m(y0, 'y'), (x1 - x0) * PX, (y1 - y0) * PX);
-  const arc = (x: number, y: number, r: number, a0 = 0, a1 = Math.PI * 2) => {
+    const left = wobbler(rand);
+    const right = wobbler(rand);
     ctx.beginPath();
-    ctx.arc(m(x, 'x'), m(y, 'y'), r * PX, a0, a1);
+    for (let y = 0; y <= gh; y += 0.5) ctx.lineTo((x + left(y * 0.6) * 0.18) * PX, y * PX);
+    for (let y = gh; y >= 0; y -= 0.5) ctx.lineTo((x + stripe + right(y * 0.6) * 0.18) * PX, y * PX);
+    ctx.closePath();
+    ctx.fillStyle = Math.round(x / stripe) % 2 ? 'rgba(66, 150, 70, 0.75)' : 'rgba(30, 98, 48, 0.55)';
+    ctx.fill();
+  }
+
+  // Wet-on-wet: soft washes of neighbouring greens bleeding into each other.
+  const washes = ['#3f9142', '#226230', '#56a447', '#2b7e4d', '#78b04f', '#1f5a3a'];
+  for (let i = 0; i < 160; i++) {
+    const x = rand() * gw;
+    const y = rand() * gh;
+    const r = (0.8 + rand() * 3) * PX;
+    const g = ctx.createRadialGradient(x * PX, y * PX, 0, x * PX, y * PX, r);
+    g.addColorStop(0, pick(washes) + Math.floor(20 + rand() * 30).toString(16));
+    g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x * PX - r, y * PX - r, r * 2, r * 2);
+  }
+
+  // Blooms: where water ran back into a drying wash and pushed the pigment
+  // out into a darker, ragged rim.
+  for (let i = 0; i < 28; i++) {
+    const cx = rand() * gw;
+    const cy = rand() * gh;
+    const r = 0.5 + rand() * 1.6;
+    const edge = wobbler(rand);
+    ctx.beginPath();
+    for (let a = 0; a <= Math.PI * 2 + 0.01; a += 0.15) {
+      const rr = (r + edge(a * 2) * r * 0.25) * PX;
+      ctx.lineTo(cx * PX + Math.cos(a) * rr, cy * PX + Math.sin(a) * rr);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(120, 190, 100, 0.13)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(16, 60, 32, 0.22)';
+    ctx.lineWidth = 0.05 * PX;
     ctx.stroke();
+  }
+
+  // Splatter flicked off the brush.
+  for (let i = 0; i < 70; i++) {
+    const cx = rand() * gw;
+    const cy = rand() * gh;
+    const colour = pick(['rgba(18, 62, 34, 0.45)', 'rgba(150, 200, 90, 0.4)', 'rgba(30, 90, 50, 0.35)']);
+    const dots = 4 + Math.floor(rand() * 10);
+    for (let d = 0; d < dots; d++) {
+      const a = rand() * Math.PI * 2;
+      const dist = rand() * rand() * 0.9;
+      ctx.beginPath();
+      ctx.arc((cx + Math.cos(a) * dist) * PX, (cy + Math.sin(a) * dist) * PX, (0.015 + rand() * 0.06) * PX, 0, Math.PI * 2);
+      ctx.fillStyle = colour;
+      ctx.fill();
+    }
+  }
+
+  // One brush pass along a path: wobbling sideways, swelling and thinning,
+  // and with gaps where the brush ran dry if dry is set.
+  const pass = (pts: Pt[], width: number, colour: string, jitter: number, opts: { shift?: Pt; dry?: boolean } = {}) => {
+    const side = wobbler(rand);
+    const swell = wobbler(rand);
+    const gaps = wobbler(rand);
+    const [sx, sy] = opts.shift ?? [0, 0];
+    const at = (i: number): Pt => {
+      const [x, y] = pts[i]!;
+      const [x2, y2] = pts[Math.min(pts.length - 1, i + 1)]!;
+      const [x1, y1] = pts[Math.max(0, i - 1)]!;
+      const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+      const off = side(i * 0.25) * jitter;
+      return [x - ((y2 - y1) / len) * off + sx, y + ((x2 - x1) / len) * off + sy];
+    };
+    ctx.strokeStyle = colour;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < pts.length - 1; i++) {
+      if (opts.dry && gaps(i * 0.4) < -0.1) continue;
+      const [ax, ay] = at(i);
+      const [bx, by] = at(i + 1);
+      ctx.lineWidth = width * (1 + swell(i * 0.3) * 0.3) * PX;
+      ctx.beginPath();
+      ctx.moveTo(mx(ax), my(ay));
+      ctx.lineTo(mx(bx), my(by));
+      ctx.stroke();
+    }
+  };
+  const mark = (pts: Pt[]) => {
+    pass(pts, 0.17, 'rgba(20, 24, 51, 0.3)', 0.04, { shift: [0.025, 0.02] });
+    pass(pts, 0.12, 'rgba(244, 242, 234, 0.88)', 0.025);
+    pass(pts, 0.05, 'rgba(255, 255, 255, 0.45)', 0.04, { dry: true });
   };
   const spot = (x: number, y: number) => {
     ctx.beginPath();
-    ctx.arc(m(x, 'x'), m(y, 'y'), 0.15 * PX, 0, Math.PI * 2);
+    ctx.arc(mx(x + 0.02), my(y + 0.02), 0.17 * PX, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(20, 24, 51, 0.3)';
     ctx.fill();
+    ctx.beginPath();
+    ctx.arc(mx(x), my(y), 0.14 * PX, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(244, 242, 234, 0.9)';
+    ctx.fill();
+  };
+  const rect = (x0: number, y0: number, x1: number, y1: number) => {
+    mark(segment(x0, y0, x1, y0));
+    mark(segment(x1, y0, x1, y1));
+    mark(segment(x1, y1, x0, y1));
+    mark(segment(x0, y1, x0, y0));
   };
 
   rect(-W / 2, -H / 2, W / 2, H / 2);
-  ctx.beginPath();
-  ctx.moveTo(m(0, 'x'), m(-H / 2, 'y'));
-  ctx.lineTo(m(0, 'x'), m(H / 2, 'y'));
-  ctx.stroke();
-  arc(0, 0, CONFIG.pitch.centreCircle);
+  mark(segment(0, -H / 2, 0, H / 2));
+  // Circles start and finish a touch apart, overlapping, as drawn freehand.
+  mark(arcPoints(0, 0, CONFIG.pitch.centreCircle, -0.2, Math.PI * 2 + 0.05));
   spot(0, 0);
   for (const side of [-1, 1]) {
     const line = (side * W) / 2;
-    const box = 5;
-    rect(Math.min(line, line - side * box), -5, Math.max(line, line - side * box), 5);
+    rect(Math.min(line, line - side * 5), -5, Math.max(line, line - side * 5), 5);
     rect(Math.min(line, line - side * 1.8), -3.6, Math.max(line, line - side * 1.8), 3.6);
     spot(line - side * 3.6, 0);
     // The D, outside the box only.
     const a = Math.acos(1.4 / 2.8);
-    if (side < 0) arc(line + 3.6, 0, 2.8, -a, a);
-    else arc(line - 3.6, 0, 2.8, Math.PI - a, Math.PI + a);
+    if (side < 0) mark(arcPoints(line + 3.6, 0, 2.8, -a, a));
+    else mark(arcPoints(line - 3.6, 0, 2.8, Math.PI - a, Math.PI + a));
     for (const corner of [-1, 1]) {
       const cy = (corner * H) / 2;
       const start = Math.atan2(-corner, -side);
-      arc(line, cy, 0.7, start - Math.PI / 4, start + Math.PI / 4);
+      mark(arcPoints(line, cy, 0.7, start - Math.PI / 4, start + Math.PI / 4));
     }
   }
+
+  raggedEdge(ctx, gw, gh, rand);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
   return { tex, gw, gh };
+}
+
+// No ruled border round the grass: the wash stops at a wandering, rounded
+// edge out in the run-off, where it dried with a darker rim, and spilled
+// past it here and there. Outside the edge the canvas is clear.
+function raggedEdge(ctx: CanvasRenderingContext2D, gw: number, gh: number, rand: () => number) {
+  const inset = 1;
+  const corner = 2.2;
+  const big = wobbler(rand);
+  const fine = wobbler(rand);
+  // Round the inset rectangle, metre by metre, each point pushed in by its
+  // own amount.
+  const x0 = inset + corner;
+  const y0 = inset + corner;
+  const x1 = gw - inset - corner;
+  const y1 = gh - inset - corner;
+  const outline: Pt[] = [];
+  const along = (cx: number, cy: number, a0: number, a1: number) => {
+    for (let i = 0; i <= 12; i++) {
+      const a = a0 + ((a1 - a0) * i) / 12;
+      outline.push([cx + Math.cos(a) * corner, cy + Math.sin(a) * corner]);
+    }
+  };
+  const straight = (ax: number, ay: number, bx: number, by: number) => {
+    const n = Math.ceil(Math.hypot(bx - ax, by - ay) / 0.3);
+    for (let i = 1; i < n; i++) outline.push([ax + ((bx - ax) * i) / n, ay + ((by - ay) * i) / n]);
+  };
+  along(x1, y0, -Math.PI / 2, 0);
+  straight(x1 + corner, y0, x1 + corner, y1);
+  along(x1, y1, 0, Math.PI / 2);
+  straight(x1, y1 + corner, x0, y1 + corner);
+  along(x0, y1, Math.PI / 2, Math.PI);
+  straight(x0 - corner, y1, x0 - corner, y0);
+  along(x0, y0, Math.PI, Math.PI * 1.5);
+  straight(x0, y0 - corner, x1, y0 - corner);
+  const cx = gw / 2;
+  const cy = gh / 2;
+  const edge = outline.map(([x, y], i): Pt => {
+    const dx = cx - x;
+    const dy = cy - y;
+    const len = Math.hypot(dx, dy);
+    const push = big(i * 0.05) * 0.55 + fine(i * 0.4) * 0.12;
+    return [x + (dx / len) * push, y + (dy / len) * push];
+  });
+  const path = () => {
+    ctx.beginPath();
+    for (const [x, y] of edge) ctx.lineTo(x * PX, y * PX);
+    ctx.closePath();
+  };
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-in';
+  path();
+  ctx.fillStyle = '#000';
+  ctx.fill();
+  // The rim, only where there's paint.
+  ctx.globalCompositeOperation = 'source-atop';
+  path();
+  ctx.strokeStyle = 'rgba(14, 52, 28, 0.4)';
+  ctx.lineWidth = 0.28 * PX;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+  ctx.restore();
+
+  // Spills just past the edge.
+  for (let i = 0; i < 26; i++) {
+    const [x, y] = edge[Math.floor(rand() * edge.length)]!;
+    const dx = x - cx;
+    const dy = y - cy;
+    const len = Math.hypot(dx, dy);
+    const out = 0.15 + rand() * 0.45;
+    const r = 0.08 + rand() * 0.3;
+    ctx.beginPath();
+    ctx.arc((x + (dx / len) * out) * PX, (y + (dy / len) * out) * PX, r * PX, 0, Math.PI * 2);
+    ctx.fillStyle = rand() < 0.5 ? 'rgba(38, 110, 52, 0.7)' : 'rgba(26, 86, 44, 0.6)';
+    ctx.fill();
+  }
 }
 
 function netTexture() {
@@ -257,7 +479,8 @@ export function buildStadium(scene: THREE.Scene) {
   scene.add(new THREE.HemisphereLight(0x3a4270, 0x0d0f1e, 0.9));
 
   const { tex, gw, gh } = pitchTexture();
-  const grass = new THREE.Mesh(new THREE.PlaneGeometry(gw, gh), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 }));
+  // Transparent where the painted edge leaves the canvas clear.
+  const grass = new THREE.Mesh(new THREE.PlaneGeometry(gw, gh), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, transparent: true }));
   grass.rotation.x = -Math.PI / 2;
   grass.receiveShadow = true;
   scene.add(grass);

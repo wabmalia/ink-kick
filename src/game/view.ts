@@ -4,6 +4,7 @@ import type { SimEvent, Team } from '../engine/sim';
 import { createBall, rollBall } from '../scene/ball';
 import { Footballer } from '../scene/footballer';
 import { PlayerGauges } from '../scene/gauges';
+import { BRIGHT, GRASS_DROPS, PAINTS, Splashes, TURF_DROPS } from '../scene/splashes';
 import { buildStadium } from '../scene/stadium';
 import { Watercolor } from '../scene/watercolor';
 import type { ViewState } from './state';
@@ -12,6 +13,10 @@ import type { ViewState } from './state';
 // whoever is running the match, and plays the events that come with it.
 
 const KIT: Record<Team, number> = { gold: 0xf2b134, red: 0xe2553f };
+// Paler versions, for the splatter a kick throws up.
+const KIT_LIGHT: Record<Team, number> = { gold: 0xffe3a0, red: 0xffb4a6 };
+// Ground covered per footstep splash, in metres.
+const STEP = 0.85;
 
 // The coin toss, in seconds from the coin going up: the camera holds on the
 // centre circle, then pulls back to the broadcast view while the captains
@@ -51,6 +56,14 @@ export class GameView {
   // (picked on the first frame drawn).
   private toss: { t: number; captains: Map<string, Team> | null } | null = null;
   private last = new Map<string, { x: number; y: number }>();
+  private splashes = new Splashes();
+  // Per player: ground covered since the last footstep, which foot is next,
+  // and time since the last spray of a slide.
+  private strides = new Map<string, { dist: number; foot: number; spray: number }>();
+  private kicks = new Map<string, number>();
+  // The ball as drawn last frame and its velocity then, to spot it rolling
+  // and bouncing off walls; and ground covered since it last kicked up turf.
+  private lastBall = { x: 0, y: 0, vx: 0, vy: 0, roll: 0 };
 
   constructor(host: HTMLElement) {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -60,7 +73,7 @@ export class GameView {
     // Tone mapping and the painted look both happen in this pass.
     this.watercolor = new Watercolor(this.renderer);
     buildStadium(this.scene);
-    this.scene.add(this.ball, this.gauges.group);
+    this.scene.add(this.ball, this.gauges.group, this.splashes.mesh);
     this.referee.group.scale.setScalar(0.975);
     this.referee.group.visible = false;
     this.scene.add(this.referee.group);
@@ -147,9 +160,11 @@ export class GameView {
     for (const e of events) {
       if (e.type === 'kick') {
         this.footballers.get(e.player)?.f.kick(e.power);
+        this.kicks.set(e.player, e.power);
       } else if (e.type === 'goal') {
         this.banner.textContent = 'GOAL!';
         this.banner.className = `banner show ${e.team}`;
+        this.goalSplash();
       } else if (e.type === 'kickoff') {
         this.banner.className = 'banner';
       } else if (e.type === 'coin') {
@@ -197,6 +212,7 @@ export class GameView {
         if (out >= 1) heading = Math.atan2(p.fx, p.fy);
       }
       this.last.set(p.id, { x, y });
+      this.kickUp(p.id, p.team, p.action, x, y, speed, heading, dt, state);
       f.group.position.set(x, 0, y);
       f.update(dt, {
         speed,
@@ -208,6 +224,8 @@ export class GameView {
       });
     }
     this.drawReferee(dt, out);
+    this.ballSplashes(state, dt);
+    this.splashes.update(dt);
     for (const [id, { f }] of this.footballers) {
       if (seen.has(id)) continue;
       this.scene.remove(f.group);
@@ -230,6 +248,160 @@ export class GameView {
     this.scoreEl.red.textContent = String(state.score.red);
     this.drawLabels(state, names);
     this.watercolor.render(this.scene, this.camera, now / 1000);
+  }
+
+  // Droplets thrown up by one player this frame: a few at each footstep
+  // (more when sprinting), a spray while sliding, a burst when they kick.
+  private kickUp(id: string, team: Team, action: string, x: number, y: number, speed: number, heading: number, dt: number, state: ViewState) {
+    let st = this.strides.get(id);
+    if (!st) {
+      st = { dist: 0, foot: 1, spray: 0 };
+      this.strides.set(id, st);
+    }
+    const fx = Math.sin(heading);
+    const fz = Math.cos(heading);
+    st.dist = Math.min(STEP * 2, st.dist + speed * dt);
+    if (speed > 1.2 && st.dist >= STEP) {
+      st.dist -= STEP;
+      st.foot = -st.foot;
+      const sprinting = speed > CONFIG.player.runSpeed + 0.4;
+      this.splashes.burst({
+        // Beside the planted foot, a little behind.
+        x: x + fz * 0.12 * st.foot - fx * 0.1,
+        z: y - fx * 0.12 * st.foot - fz * 0.1,
+        dx: -fx, dz: -fz,
+        count: sprinting ? 7 : 4, speed: sprinting ? 2.4 : 1.5, size: sprinting ? 0.13 : 0.09,
+        colors: GRASS_DROPS, spread: 2.2, life: 0.55,
+      });
+    }
+    if (action === 'slide') {
+      st.spray += dt;
+      while (st.spray > 0.04) {
+        st.spray -= 0.04;
+        this.splashes.burst({
+          x: x + fx * 0.5, z: y + fz * 0.5, dx: fx, dz: fz,
+          count: 4, speed: 3.4, size: 0.12, colors: [...GRASS_DROPS, KIT_LIGHT[team]], spread: 2.6, life: 0.7,
+        });
+      }
+    } else {
+      st.spray = 0;
+    }
+    const power = this.kicks.get(id);
+    if (power !== undefined) {
+      this.kicks.delete(id);
+      this.splashes.burst({
+        x: state.ballX, z: state.ballY, dx: fx, dz: fz,
+        count: Math.round(10 + power * 16), speed: 2.5 + power * 4.5, size: 0.1 + power * 0.08,
+        colors: [KIT[team], KIT_LIGHT[team], 0xffffff], spread: 1.4, life: 0.7,
+      });
+    }
+  }
+
+  // A goal throws every bright paint at once out of the goal mouth: big
+  // overlapping blots in the net and across the box, a spray of smaller
+  // ones over the pitch, and droplets in the air. It lingers a while.
+  private goalSplash() {
+    const side = Math.sign(this.lastBall.x) || 1;
+    const x = side * (CONFIG.pitch.width / 2 - 0.3);
+    const z = Math.max(-2, Math.min(2, this.lastBall.y));
+    const pick = () => BRIGHT[Math.floor(Math.random() * BRIGHT.length)]!;
+    const stain = (sx: number, sz: number, size: number, life: number) =>
+      this.splashes.burst({ x: sx, z: sz, dx: -side, dz: 0, count: 1, speed: 0, size, colors: [pick()], spread: 0, life, alpha: 0.6, stain: true });
+    for (let i = 0; i < 14; i++) {
+      // Fanned out from the mouth towards the pitch.
+      const a = (Math.random() - 0.5) * 2.6;
+      const d = Math.sqrt(Math.random()) * 5;
+      stain(x - side * Math.cos(a) * d, z + Math.sin(a) * d * 1.3, 1 + Math.random() * 1.3, 7);
+    }
+    // And the inside of the goal, back to the net.
+    const { goalWidth, goalDepth } = CONFIG.pitch;
+    for (let i = 0; i < 7; i++) {
+      const depth = 0.2 + Math.random() * (goalDepth - 0.4);
+      const across = (Math.random() - 0.5) * (goalWidth - 0.6);
+      stain(side * (CONFIG.pitch.width / 2 + depth), across, 0.7 + Math.random() * 0.6, 7);
+    }
+    this.splashes.burst({
+      x, z, dx: side, dz: 0, count: 12, speed: 9, size: 0.2,
+      colors: BRIGHT, spread: 2.2, life: 6, alpha: 0.55, stain: true,
+    });
+    for (const colours of [BRIGHT, BRIGHT, [0xffffff, ...BRIGHT]]) {
+      this.splashes.burst({
+        x, z, dx: -side, dz: 0, count: 22, speed: 20, size: 0.26,
+        colors: colours, spread: 3.2, life: 6, alpha: 0.55, stain: true,
+      });
+    }
+    this.splashes.burst({
+      x, z, dx: -side, dz: 0, count: 60, speed: 14, size: 0.16,
+      colors: [...BRIGHT, 0xffffff], spread: 3.6, life: 1.8, alpha: 0.9,
+    });
+  }
+
+  // A ball going quickly cuts green spray off the turf either side; one
+  // bouncing off a wall or post throws a random paint, which stains the
+  // grass for a few seconds.
+  private ballSplashes(state: ViewState, dt: number) {
+    const b = this.lastBall;
+    if (dt <= 0) return;
+    const vx = (state.ballX - b.x) / dt;
+    const vy = (state.ballY - b.y) / dt;
+    const speed = Math.hypot(vx, vy);
+    // A jump that size is a kickoff reset, not movement.
+    if (speed > 60) {
+      Object.assign(b, { x: state.ballX, y: state.ballY, vx: 0, vy: 0, roll: 0 });
+      return;
+    }
+    if (speed > 7) {
+      b.roll += speed * dt;
+      if (b.roll > 0.6) {
+        b.roll = 0;
+        for (const side of [-1, 1]) {
+          this.splashes.burst({
+            x: state.ballX, z: state.ballY, dx: (-vy / speed) * side - (vx / speed) * 0.4, dz: (vx / speed) * side - (vy / speed) * 0.4,
+            count: 2, speed: 1.6, size: 0.09, colors: TURF_DROPS, spread: 0.9, life: 0.6,
+          });
+        }
+      }
+    }
+    // Off a wall: the ball's run along one axis flips, near the pitch edge.
+    const { width, height } = CONFIG.pitch;
+    const flippedX = b.vx * vx < 0 && Math.abs(b.vx) > 3 && Math.abs(state.ballX) > width / 2 - 1;
+    const flippedY = b.vy * vy < 0 && Math.abs(b.vy) > 3 && Math.abs(state.ballY) > height / 2 - 1;
+    if (flippedX || flippedY) {
+      const paint = PAINTS[Math.floor(Math.random() * PAINTS.length)]!;
+      const hit = Math.hypot(b.vx, b.vy);
+      // Out from the wall it hit (both, in a corner).
+      let nx = flippedX ? Math.sign(state.ballX) : 0;
+      let nz = flippedY ? Math.sign(state.ballY) : 0;
+      const nl = Math.hypot(nx, nz);
+      nx /= nl;
+      nz /= nl;
+      // Centred just over the line, so the splash spreads out past it and a
+      // little way back in.
+      const reach = CONFIG.ball.radius + 0.2;
+      const cx = state.ballX + nx * reach;
+      const cz = state.ballY + nz * reach;
+      const big = Math.min(0.6, hit * 0.03);
+      const stain = (x: number, z: number, size: number, life: number) =>
+        this.splashes.burst({ x, z, dx: nx, dz: nz, count: 1, speed: 0, size, colors: [paint], spread: 0, life, alpha: 0.55, stain: true });
+      // The main splash: two overlapping blots, the larger pushed outwards.
+      stain(cx, cz, 0.9 + big, 5);
+      stain(cx + nx * 0.45, cz + nz * 0.45, 0.6 + big * 0.6, 5);
+      // Secondary splashes, most thrown outwards, a few back onto the pitch.
+      this.splashes.burst({
+        x: cx, z: cz, dx: nx, dz: nz, count: 10, speed: 7, size: 0.17,
+        colors: [paint], spread: 2.8, life: 4.5, alpha: 0.5, stain: true,
+      });
+      this.splashes.burst({
+        x: cx, z: cz, dx: -nx, dz: -nz, count: 4, speed: 4, size: 0.13,
+        colors: [paint], spread: 2.2, life: 4, alpha: 0.45, stain: true,
+      });
+      // Droplets in the air, settling as they go.
+      this.splashes.burst({
+        x: cx, z: cz, dx: nx, dz: nz, count: 16, speed: 5, size: 0.12,
+        colors: [paint, 0xffffff], spread: 3, life: 1.4, alpha: 0.85,
+      });
+    }
+    Object.assign(b, { x: state.ballX, y: state.ballY, vx, vy });
   }
 
   // Facing the camera behind the ball for the toss, arm up as the coin
@@ -306,5 +478,7 @@ export class GameView {
     clearTimeout(this.coinTimer);
     document.getElementById('coin-toss')!.hidden = true;
     this.toss = null;
+    this.splashes.clear();
+    this.kicks.clear();
   }
 }

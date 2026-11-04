@@ -9,7 +9,7 @@ import * as THREE from 'three';
 //   - paper grain, granulation and a slight wobble so no line is ruled.
 
 // How many times a second the ink lines are redrawn; 0 holds them still.
-const BOIL_FPS = 4;
+const BOIL_FPS = 2;
 
 const vertexShader = /* glsl */ `
   varying vec2 vUv;
@@ -110,7 +110,7 @@ const fragmentShader = /* glsl */ `
     // Ink: edges in depth and in surface direction, sampled a jittered
     // distance away so the line weight varies along its length.
     vec2 q = p * 0.04 + boil * 13.7;
-    float w = 0.8 + 1.3 * noise(q);
+    float w = 0.9 + 0.8 * noise(q);
     vec2 dx = vec2(step1.x * w, 0.0);
     vec2 dy = vec2(0.0, step1.y * w);
     vec2 iuv = vUv + wobble * 0.3;
@@ -125,7 +125,7 @@ const fragmentShader = /* glsl */ `
     float normalEdge = smoothstep(1.0, 1.8, nd);
     float ink = max(depthEdge, normalEdge);
     // Lift the pen now and then.
-    ink *= 0.55 + 0.45 * smoothstep(0.2, 0.45, noise(p * 0.09 + boil * 5.3));
+    ink *= 0.7 + 0.3 * smoothstep(0.2, 0.45, noise(p * 0.09 + boil * 5.3));
     col = mix(col, INK, ink * 0.85);
 
     gl_FragColor = vec4(col, 1.0);
