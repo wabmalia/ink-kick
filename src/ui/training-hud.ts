@@ -35,7 +35,7 @@ export function showTimes(stats: TrainingStats) {
   rows.push([
     'Keeper · Power',
     k.shots ? `Scored ${k.goals} of ${k.shots}` : 'Shoot past it',
-    `Saved ${k.shots - k.goals}`,
+    `Saved ${k.saves}`,
   ]);
   // Only touch the page when something changed.
   const key = rows.flat().join('|');

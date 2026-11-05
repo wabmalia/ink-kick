@@ -92,8 +92,9 @@ export interface TrainingStats {
   // how many took it off you; how long you've kept it, and the best.
   duel: { challenges: number; lost: number; held: number | null; best: number | null };
   tackle: { pokes: number; pokesWon: number; slides: number; slidesWon: number };
-  // Your shots the keeper had to deal with, and how many went in.
-  keeper: { shots: number; goals: number };
+  // Your shots the keeper had to deal with, how many went in, and how many
+  // it kept out (counted once each is over).
+  keeper: { shots: number; goals: number; saves: number };
 }
 
 export class Training {
@@ -114,7 +115,7 @@ export class Training {
   // The tackle in progress at the dummy, if any.
   private tackling: 'poke' | 'slide' | null = null;
   private botHeld = 0;
-  private keeperStats: TrainingStats['keeper'] = { shots: 0, goals: 0 };
+  private keeperStats: TrainingStats['keeper'] = { shots: 0, goals: 0, saves: 0 };
   // Your last shot, until someone else touches it: whether it's counted yet.
   private shot: { counted: boolean } | null = null;
   private inNet = 0;
@@ -263,10 +264,21 @@ export class Training {
   // ball of yours that ends up in its net.
   private countShots(events: SimEvent[]) {
     const { match, me, keeper, keeperStats } = this;
-    for (const e of events) if (e.type === 'kick' && e.player === me.id) this.shot = { counted: false };
-    if (!this.shot) return;
-    if (match.owner && match.owner !== keeper.id) {
+    // Over without going in: kept out, if it was on target.
+    const over = () => {
+      if (this.shot?.counted) keeperStats.saves++;
       this.shot = null;
+    };
+    for (const e of events) {
+      if (e.type === 'kick' && e.player === me.id) {
+        over();
+        this.shot = { counted: false };
+      }
+    }
+    if (!this.shot) return;
+    // Picked up by anyone, the keeper included: over.
+    if (match.owner) {
+      over();
       return;
     }
     if (!this.shot.counted && keeper.keeperState?.shotSeen) {

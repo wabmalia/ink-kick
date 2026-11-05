@@ -26,21 +26,37 @@ function scorerLine(goal: Pick<GoalRecord, 'scorer' | 'own'>, nameOf: NameOf) {
   return goal.own ? `Own goal · ${name}` : name;
 }
 
+// Each letter's paint: the scoring team's first, then the rest of the box.
+const LETTER_PAINTS: Record<Team, string[]> = {
+  gold: ['gold', 'blue', 'red', 'green', 'purple'],
+  red: ['red', 'green', 'gold', 'purple', 'blue'],
+};
+
 function showGoal(goal: GoalRecord, nameOf: NameOf) {
-  // Each letter its own splash of the scoring team's paint, tipped a little
-  // this way or that, popping in one after another.
-  word.replaceChildren(...[...'GOAL!'].map((ch, i) => {
-    const letter = document.createElement('span');
-    letter.className = 'goal-letter';
-    letter.dataset.wash = goal.team;
-    letter.textContent = ch;
-    letter.style.setProperty('--i', String(i));
-    letter.style.setProperty('--tilt', `${[-7, 4, -3, 6, -5][i]}deg`);
-    return letter;
-  }));
+  // Each letter its own splash of paint, a different colour each, tipped a
+  // little this way or that, popping in one after another. The splashes
+  // overlap, so they're a row of their own under the letters: drawn with
+  // the letters, the next letter's splash would cover the last one's edge.
+  const row = (blots: boolean) => {
+    const r = document.createElement('div');
+    r.className = blots ? 'goal-row goal-blots' : 'goal-row';
+    if (blots) r.setAttribute('aria-hidden', 'true');
+    r.append(...[...'GOAL!'].map((ch, i) => {
+      const letter = document.createElement('span');
+      letter.className = 'goal-letter';
+      if (blots) letter.dataset.wash = LETTER_PAINTS[goal.team][i]!;
+      letter.textContent = ch;
+      letter.style.setProperty('--i', String(i));
+      letter.style.setProperty('--tilt', `${[-7, 4, -3, 6, -5][i]}deg`);
+      return letter;
+    }));
+    return r;
+  };
+  const blots = row(true);
+  word.replaceChildren(blots, row(false));
   by.textContent = scorerLine(goal, nameOf);
   banner.className = `banner ${goal.team}`;
-  for (const letter of word.children) paintNow(letter as HTMLElement);
+  for (const letter of blots.children) paintNow(letter as HTMLElement);
   // Restart the animation even if a banner was already up.
   void banner.offsetWidth;
   banner.classList.add('show');

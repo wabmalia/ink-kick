@@ -22,6 +22,12 @@ const DUMMY_KIT = 0xa7adc4;
 const KEEPER_KIT: Record<string, number> = { [KEEPER_IDS.gold]: 0x2ec4b6, [KEEPER_IDS.red]: 0x8a5cff };
 // Paler versions, for the splatter a kick throws up.
 const KIT_LIGHT: Record<Team, number> = { gold: 0xffe3a0, red: 0xffb4a6 };
+// Each team's ink: its kit, lighter and deeper, flicked about by its kicks
+// and tackles.
+const INK: Record<Team, number[]> = { gold: [0xf2b134, 0xffe3a0, 0xd99a1a, 0xffc94d], red: [0xe2553f, 0xffb4a6, 0xb83a26, 0xff7a5c] };
+// Kicks harder than this leave an ink trail, a spot every TRAIL_GAP metres.
+const TRAIL_FROM = 0.3;
+const TRAIL_GAP = 0.4;
 // Ground covered per footstep splash, in metres.
 const STEP = 0.85;
 
@@ -69,6 +75,11 @@ export class GameView {
   // and time since the last spray of a slide.
   private strides = new Map<string, { dist: number; foot: number; spray: number }>();
   private kicks = new Map<string, number>();
+  // Tackles won this frame, by who won them.
+  private steals = new Set<string>();
+  // A hard kick's ink trail behind the ball: whose, for how much longer, and
+  // the distance since the last spot.
+  private trail: { team: Team; left: number; dist: number; power: number } | null = null;
   // The ball as drawn last frame and its velocity then, to spot it rolling
   // and bouncing off walls; and ground covered since it last kicked up turf.
   private lastBall = { x: 0, y: 0, vx: 0, vy: 0, roll: 0 };
@@ -176,6 +187,10 @@ export class GameView {
       if (e.type === 'kick') {
         this.footballers.get(e.player)?.f.kick(e.power);
         this.kicks.set(e.player, e.power);
+        const team = this.footballers.get(e.player)?.team;
+        this.trail = team && e.power > TRAIL_FROM ? { team, left: 0.5 + e.power * 0.7, dist: 0, power: e.power } : null;
+      } else if (e.type === 'steal') {
+        this.steals.add(e.player);
       } else if (e.type === 'goal') {
         // The banner itself is ui/match-ui.ts's.
         this.goalSplash();
@@ -351,10 +366,43 @@ export class GameView {
     const power = this.kicks.get(id);
     if (power !== undefined) {
       this.kicks.delete(id);
+      const ink = INK[team];
+      // A fan of ink thrown ahead with the ball, more and further the
+      // harder the kick...
       this.splashes.burst({
         x: state.ballX, z: state.ballY, dx: fx, dz: fz,
-        count: Math.round(10 + power * 16), speed: 2.5 + power * 4.5, size: 0.1 + power * 0.08,
-        colors: [KIT[team], KIT_LIGHT[team], 0xffffff], spread: 1.4, life: 0.7,
+        count: Math.round(14 + power * 30), speed: 3 + power * 7, size: 0.11 + power * 0.1,
+        colors: [...ink, 0xffffff], spread: 1.1 + power * 0.5, life: 0.8, alpha: 0.9,
+      });
+      // ...a few drops flicked back off the boot...
+      this.splashes.burst({
+        x: state.ballX, z: state.ballY, dx: -fx, dz: -fz,
+        count: Math.round(4 + power * 6), speed: 2 + power * 2, size: 0.09, colors: ink, spread: 2.2, life: 0.6,
+      });
+      // ...and where the boot met the ball, a blot that soaks into the grass.
+      const blot = 0.35 + power * 0.55;
+      const stain = (x: number, z: number, size: number) =>
+        this.splashes.burst({ x, z, dx: fx, dz: fz, count: 1, speed: 0, size, colors: ink, spread: 0, life: 2.5 + power * 2, alpha: 0.6, stain: true });
+      stain(state.ballX, state.ballY, blot);
+      if (power > 0.3) {
+        stain(state.ballX + fx * blot * 0.9, state.ballY + fz * blot * 0.9, blot * 0.6);
+        this.splashes.burst({
+          x: state.ballX, z: state.ballY, dx: fx, dz: fz, count: Math.round(power * 8), speed: 4 + power * 4, size: 0.14,
+          colors: ink, spread: 1.4, life: 2.5 + power * 2, alpha: 0.5, stain: true,
+        });
+      }
+    }
+    // A tackle won: a flick of the winner's ink off the ball, a splash of
+    // it after a slide.
+    if (this.steals.delete(id)) {
+      const slide = action === 'slide';
+      this.splashes.burst({
+        x: state.ballX, z: state.ballY, dx: fx, dz: fz, count: slide ? 22 : 10, speed: slide ? 5 : 3, size: slide ? 0.14 : 0.1,
+        colors: [...INK[team], 0xffffff], spread: 2.6, life: 0.8, alpha: 0.9,
+      });
+      this.splashes.burst({
+        x: state.ballX, z: state.ballY, dx: fx, dz: fz, count: 1, speed: 0, size: slide ? 0.7 : 0.4,
+        colors: INK[team], spread: 0, life: 3, alpha: 0.55, stain: true,
       });
     }
   }
@@ -424,6 +472,28 @@ export class GameView {
         }
       }
     }
+    // A hard kick's ink trail: spots left behind the ball for a moment,
+    // bending with any curl, smaller as it goes.
+    const tr = this.trail;
+    if (tr) {
+      tr.left -= dt;
+      tr.dist += speed * dt;
+      if (tr.left <= 0 || speed < 5) {
+        this.trail = null;
+      } else if (tr.dist >= TRAIL_GAP) {
+        tr.dist = 0;
+        const size = (0.16 + tr.power * 0.22) * Math.min(1, tr.left * 1.6);
+        this.splashes.burst({
+          x: state.ballX, z: state.ballY, dx: -vx, dz: -vy, count: 1, speed: 0, size,
+          colors: INK[tr.team], spread: 0, life: 1.6 + tr.power, alpha: 0.6, stain: true,
+        });
+        // A droplet or two either side.
+        this.splashes.burst({
+          x: state.ballX, z: state.ballY, dx: -vx, dz: -vy, count: 2, speed: 1.5, size: size * 0.4,
+          colors: INK[tr.team], spread: 3, life: 1.2 + tr.power, alpha: 0.5, stain: true,
+        });
+      }
+    }
     // Off a wall: the ball's run along one axis flips, near the pitch edge.
     const { width, height } = CONFIG.pitch;
     const flippedX = b.vx * vx < 0 && Math.abs(b.vx) > 3 && Math.abs(state.ballX) > width / 2 - 1;
@@ -442,7 +512,8 @@ export class GameView {
       const reach = CONFIG.ball.radius + 0.2;
       const cx = state.ballX + nx * reach;
       const cz = state.ballY + nz * reach;
-      const big = Math.min(0.6, hit * 0.03);
+      // Bigger the harder it hits: a tap leaves a dab, a shot a pool.
+      const big = Math.min(1.5, Math.max(0, hit - 3) * 0.07);
       const stain = (x: number, z: number, size: number, life: number) =>
         this.splashes.burst({ x, z, dx: nx, dz: nz, count: 1, speed: 0, size, colors: [paint], spread: 0, life, alpha: 0.55, stain: true });
       // The main splash: two overlapping blots, the larger pushed outwards.
@@ -450,7 +521,7 @@ export class GameView {
       stain(cx + nx * 0.45, cz + nz * 0.45, 0.6 + big * 0.6, 5);
       // Secondary splashes, most thrown outwards, a few back onto the pitch.
       this.splashes.burst({
-        x: cx, z: cz, dx: nx, dz: nz, count: 10, speed: 7, size: 0.17,
+        x: cx, z: cz, dx: nx, dz: nz, count: Math.round(8 + big * 10), speed: 6 + big * 4, size: 0.15 + big * 0.06,
         colors: [paint], spread: 2.8, life: 4.5, alpha: 0.5, stain: true,
       });
       this.splashes.burst({
@@ -459,7 +530,7 @@ export class GameView {
       });
       // Droplets in the air, settling as they go.
       this.splashes.burst({
-        x: cx, z: cz, dx: nx, dz: nz, count: 16, speed: 5, size: 0.12,
+        x: cx, z: cz, dx: nx, dz: nz, count: Math.round(14 + big * 16), speed: 5 + big * 3, size: 0.12,
         colors: [paint, 0xffffff], spread: 3, life: 1.4, alpha: 0.85,
       });
     }
@@ -541,5 +612,7 @@ export class GameView {
     this.toss = null;
     this.splashes.clear();
     this.kicks.clear();
+    this.steals.clear();
+    this.trail = null;
   }
 }

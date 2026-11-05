@@ -21,6 +21,7 @@ const WASHES: Record<string, Wash> = {
   red: { base: '#ff7660', lights: ['#ffc2b3', '#ff9c8a'], darks: ['#f0553c'], rim: 'rgba(222, 70, 46, 0.85)' },
   blue: { base: '#66a6ff', lights: ['#c7e2ff', '#94c1ff'], darks: ['#4a8af5'], rim: 'rgba(52, 116, 230, 0.85)' },
   green: { base: '#52d27c', lights: ['#d2f7d4', '#8ee5a8'], darks: ['#36b863'], rim: 'rgba(36, 160, 80, 0.85)' },
+  purple: { base: '#b08cff', lights: ['#e6dbff', '#cbb4ff'], darks: ['#9068f5'], rim: 'rgba(112, 66, 222, 0.85)' },
 };
 
 // Room round the element for the edge to wander out into, in CSS pixels.
@@ -34,6 +35,7 @@ const SPLATS: Record<string, string[]> = {
   red: ['#ff7660', '#f0553c', '#ffc2b3'],
   blue: ['#66a6ff', '#4a8af5', '#c7e2ff'],
   green: ['#52d27c', '#36b863', '#d2f7d4'],
+  purple: ['#b08cff', '#9068f5', '#e6dbff'],
 };
 const TITLE_PAD = 70;
 
@@ -268,8 +270,9 @@ function paintSplat(ctx: CanvasRenderingContext2D, w: number, h: number, colours
   }
 }
 
-// A GOAL! letter's splash: a round, uneven blot of the team's paint with a
-// paler heart and a darker dried rim, and a few drops beside it.
+// A GOAL! letter's splash: a round, uneven blot of paint with a paler heart
+// and a darker dried rim, a few drops beside it, and drips running down
+// from its lower edge.
 function paintBlot(ctx: CanvasRenderingContext2D, w: number, h: number, pad: number, wash: Wash, rand: () => number) {
   const cx = pad + w / 2;
   const cy = pad + h / 2;
@@ -295,6 +298,33 @@ function paintBlot(ctx: CanvasRenderingContext2D, w: number, h: number, pad: num
     ctx.restore();
   };
   const r = Math.min(w, h) * 0.56;
+  // Drips first, so the blot's rim runs over their tops.
+  const drips = 2 + Math.floor(rand() * 3);
+  for (let i = 0; i < drips; i++) {
+    const across = ((i + 0.5) / drips - 0.5) * 1.3 + (rand() - 0.5) * 0.25;
+    const x = cx + across * r;
+    // From inside the blot's lower edge.
+    const top = cy + Math.sqrt(Math.max(0, 1 - across * across)) * r * 0.9;
+    const len = r * (0.25 + rand() * rand() * 0.75);
+    const wide = r * (0.07 + rand() * 0.06);
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = wash.rim;
+    ctx.lineWidth = wide + Math.max(2, r * 0.07);
+    ctx.beginPath();
+    ctx.moveTo(x, top - wide);
+    ctx.lineTo(x, top + len);
+    ctx.stroke();
+    ctx.strokeStyle = wash.base;
+    ctx.lineWidth = wide;
+    ctx.stroke();
+    // The bead gathered at the end.
+    ctx.fillStyle = wash.base;
+    ctx.beginPath();
+    ctx.arc(x, top + len + wide * 0.2, wide * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
   blob(cx, cy, r, wash.base, 1, wash.rim);
   blob(cx - r * 0.2, cy - r * 0.25, r * 0.5, wash.lights[0]!, 0.45);
   blob(cx + r * 0.3, cy + r * 0.3, r * 0.35, wash.darks[0]!, 0.35);
@@ -319,7 +349,7 @@ function paint(el: HTMLElement) {
   const clips = el.tagName === 'DIALOG';
   const letter = el.classList.contains('goal-letter');
   // A GOAL! letter's blot and drops reach well past its box.
-  const pad = title ? TITLE_PAD : clips ? 0 : letter ? 40 : PAD;
+  const pad = title ? TITLE_PAD : clips ? 0 : letter ? 60 : PAD;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const canvas = document.createElement('canvas');
   canvas.width = Math.ceil((w + pad * 2) * dpr);

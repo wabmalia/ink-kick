@@ -125,6 +125,8 @@ describe('training ground', () => {
     expect(k.shots).toBeGreaterThan(8);
     expect(k.goals).toBeGreaterThan(0);
     expect(k.goals).toBeLessThan(k.shots);
+    expect(k.saves).toBeGreaterThan(0);
+    expect(k.goals + k.saves).toBeLessThanOrEqual(k.shots);
     expect(rolledBack).toBe(true);
   });
 

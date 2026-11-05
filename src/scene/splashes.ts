@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 
 // Watercolour on the grass: droplets kicked up by footsteps, slides, kicks
-// and the rolling ball, and stains where the ball hits a wall. Purely for
-// show, worked out by each screen from what it already draws, so nothing
-// extra goes over the network. A fixed pool, all drawn in one batch; when
+// and the rolling ball; team ink from kicks, shot trails and tackles; and
+// stains where the ball hits a wall. Purely for show, worked out by each
+// screen from what it already draws, so nothing extra goes over the network. A fixed pool, all drawn in one batch; when
 // it's full the oldest goes first.
 
-const MAX = 900;
+const MAX = 1400;
 // Pale greens and near-white, with some deeper pigment: water and paint
 // flicked off the grass, showing on light stripes and dark ones.
 export const GRASS_DROPS = [0xcfe8b0, 0xa8d68a, 0xe9f3d8, 0xf4f7ea, 0x3f8a3c, 0x2a6433, 0x7fbf5a];
