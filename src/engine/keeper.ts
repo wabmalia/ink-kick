@@ -11,6 +11,8 @@ import type { Input, Match, Player } from './sim';
 //   on its feet in time, it dives for.
 // - A loose ball in its box it goes and gets; one at an attacker's feet up
 //   close it now and then pokes at.
+// - While an attacker in range winds up a shot, it walks out towards them
+//   to narrow the angle.
 // - With the ball (which nobody can take off it) it holds on for a moment,
 //   then passes to a teammate with a clear way to them, or clears it into
 //   the emptiest space upfield, away from the other team.
@@ -22,6 +24,9 @@ export interface KeeperState {
   guess: number | null;
   shotSeen: boolean;
   dived: boolean;
+  // The attacker it last decided about coming out to, and whether it is.
+  rushAt: string | null;
+  rushing: boolean;
   holding: number;
   // Where it's kicking the ball out to, and seconds of charge still to put
   // on it, while kicking.
@@ -38,16 +43,17 @@ export interface KeeperMove {
 const IDLE: Input = { x: 0, y: 0, kick: false, sprint: false };
 
 export const newKeeperState = (): KeeperState => ({
-  reactIn: 0, guess: null, shotSeen: false, dived: false, holding: 0, target: null, charging: 0,
+  reactIn: 0, guess: null, shotSeen: false, dived: false, rushAt: null, rushing: false, holding: 0, target: null, charging: 0,
 });
 
-/** The keeper's own goal line, which way is upfield from it, and its box. */
+/** The keeper's own goal line, which way is upfield from it, its small box
+ *  and the big box it may come out into. */
 export function keeperBox(p: Player) {
   const { width } = CONFIG.pitch;
-  const { boxDepth, boxHalf } = CONFIG.keeper;
+  const { boxDepth, boxHalf, areaDepth, areaHalf } = CONFIG.keeper;
   const side = p.team === 'gold' ? -1 : 1;
   const line = (side * width) / 2;
-  return { side, line, depth: boxDepth, half: boxHalf };
+  return { side, line, depth: boxDepth, half: boxHalf, areaDepth, areaHalf };
 }
 
 const toward = (p: Player, x: number, y: number, sprint = false, near = 0.12): Input => {
@@ -173,17 +179,63 @@ export function keeperInput(match: Match, p: Player, random: () => number): Keep
     return { input: toward(p, keeperX, to, true, 0.05) };
   }
 
-  // A loose, slowish ball in or at the edge of its box: go and get it.
-  const inBox = (x: number, y: number, slack: number) =>
-    (line - x) * side >= -slack && (line - x) * side <= depth + slack && Math.abs(y) <= half + slack;
-  if (match.owner === null && speed < cfg.collectSpeed && inBox(ball.x, ball.y, 0.6)) {
-    return { input: toward(p, ball.x, ball.y, true, 0) };
+  const { areaDepth, areaHalf } = keeperBox(p);
+  const inside = (x: number, y: number, d: number, h: number, slack: number) =>
+    (line - x) * side >= -slack && (line - x) * side <= d + slack && Math.abs(y) <= h + slack;
+  const eta = (q: Player) => Math.hypot(ball.x - q.x, ball.y - q.y) / q.stats.sprintSpeed;
+  const others = match.players.filter(q => q !== p && !q.keeper);
+  const mateNearer = others.some(q => q.team === p.team && eta(q) < eta(p));
+
+  // A loose, slowish ball in its small box: go and get it. One further out
+  // in the big box only if it'll get there well before any opponent.
+  if (match.owner === null && speed < cfg.collectSpeed) {
+    if (inside(ball.x, ball.y, depth, half, 0.6)) return { input: toward(p, ball.x, ball.y, true, 0) };
+    const theirs = Math.min(Infinity, ...others.filter(q => q.team !== p.team).map(eta));
+    if (inside(ball.x, ball.y, areaDepth, areaHalf, 0.3) && !mateNearer && eta(p) < theirs * cfg.claimMargin) {
+      return { input: toward(p, ball.x, ball.y, true, 0) };
+    }
+  }
+
+  // An attacker on the ball coming into the big box with nobody closer to
+  // stop them: now and then it comes out to close them down, standing in
+  // their way to goal and poking at the ball once it's close.
+  const owner = match.players.find(q => q.id === match.owner);
+  const attacker = owner && owner.team !== p.team ? owner : null;
+  if (attacker && attacker.id !== k.rushAt) {
+    k.rushAt = attacker.id;
+    k.rushing = random() < cfg.rushChance;
+  }
+  if (!attacker) k.rushAt = null;
+  const near = attacker && Math.hypot(attacker.x - p.x, attacker.y - p.y) < cfg.rushFrom;
+  if (attacker && k.rushing && near && !mateNearer && inside(ball.x, ball.y, areaDepth, areaHalf, 1.5)) {
+    const gap = Math.hypot(ball.x - p.x, ball.y - p.y);
+    if (gap < cfg.pokeAt && random() < cfg.rushPoke) return { input: { ...toward(p, ball.x, ball.y), kick: true } };
+    const gx = ball.x - line;
+    const l = Math.hypot(gx, ball.y) || 1;
+    return { input: toward(p, ball.x - (gx / l) * 0.9, ball.y - (ball.y / l) * 0.9, true) };
   }
 
   // An attacker on the ball right up close: now and then, a poke at it.
-  const owner = match.players.find(q => q.id === match.owner);
-  if (owner && owner.team !== p.team && Math.hypot(ball.x - p.x, ball.y - p.y) < cfg.pokeAt && p.action === 'none') {
+  if (attacker && Math.hypot(ball.x - p.x, ball.y - p.y) < cfg.pokeAt && p.action === 'none') {
     if (random() < cfg.pokeChance) return { input: { ...toward(p, ball.x, ball.y), kick: true } };
+  }
+
+  // An attacker winding up a shot in range: it walks out along the line
+  // from the middle of its goal to the ball, further the longer the
+  // wind-up, to narrow the angle; never right up to the ball, and never out
+  // of its big box. Once the shot's struck, the shot code above takes over.
+  if (attacker && attacker.action === 'charge') {
+    const gx = ball.x - line;
+    const l = Math.hypot(gx, ball.y) || 1;
+    if (l < cfg.narrowFrom) {
+      const base = cfg.lineOff + (depth - cfg.lineOff - 0.3) * Math.max(0, Math.min(1, (16 - l) / 12));
+      const out = Math.min(base + cfg.narrowBy * Math.min(1, attacker.charge * 1.5), l - cfg.narrowGap, areaDepth);
+      if (out > base) {
+        const tx = line + (gx / l) * out;
+        const ty = Math.max(-areaHalf, Math.min(areaHalf, (ball.y / l) * out));
+        return { input: toward(p, tx, ty) };
+      }
+    }
   }
 
   // Otherwise: between the ball and the middle of the goal, further off its

@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { CONE_RADIUS, CONE_SPOTS, CONES, DUEL, SPRINT, TACKLE, type Box, type Lane } from '../game/training';
 
-// The training ground's markings, painted in gold over the pitch: the two
-// lanes with their gates and names, the cones, the duel and tackle boxes.
+// The training ground's markings, painted in gold over the pitch: the duel
+// and tackle boxes on the left half, the two lanes running up the right half
+// with their gates and names, and the cones.
 
 const GOLD = 0xffc23a;
 const LIFT = 0.016;
@@ -57,14 +58,13 @@ function word(text: string, x: number, z: number, color = '#ffc23a', size = 1, o
 
 function lane(group: THREE.Group, l: Lane) {
   const [a, b] = l.gates;
-  for (const gx of l.gates) group.add(flat(0.16, l.half * 2, gx, l.y));
+  for (const gy of l.gates) group.add(flat(l.half * 2, 0.16, l.x, gy));
   // Dashed edges between the gates.
   for (const side of [-1, 1]) {
-    for (let x = a + 0.3; x < b - 0.3; x += 1.2) group.add(flat(0.6, 0.06, x + 0.3, l.y + side * l.half));
+    for (let y = a + 0.3; y < b - 0.3; y += 1.2) group.add(flat(0.06, 0.6, l.x + side * l.half, y + 0.3));
   }
-  // The name outside the lane, by the left gate: above the far one, below
-  // the near one.
-  group.add(word(l.name, a + 1.6, l.y + Math.sign(l.y) * (l.half + 0.5)));
+  // The name just past the near gate, where it reads best.
+  group.add(word(l.name, l.x, b + 0.75));
 }
 
 // Four solid edges, the name inside the near-left corner.

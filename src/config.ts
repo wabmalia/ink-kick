@@ -46,6 +46,8 @@ export const CONFIG = {
     bounce: 0.6,
     // Off a player's body: low, so a shot into someone drops near them.
     playerBounce: 0.08,
+    // Off the lines and the net while someone has it.
+    heldBounce: 0.1,
   },
 
   post: {
@@ -74,6 +76,9 @@ export const CONFIG = {
     // Slower than this with the ball, you turn on the spot and move along
     // the way you're pressing, rather than curving.
     pivotSpeed: 1,
+    // Only a ball within this of where you face (cos of 60 degrees) is
+    // picked up; one further round hits you and drops, and you turn to it.
+    trapCos: 0.5,
     // No trapping for this long after losing the ball.
     lostCooldown: 0.25,
   },
@@ -93,7 +98,7 @@ export const CONFIG = {
     // one), reached after curlBuild seconds of holding. The spin fades by
     // spinFade a second.
     aftertouch: 0.5,
-    curl: 0.036,
+    curl: 0.045,
     curlBuild: 0.25,
     spinFade: 0.8,
   },
@@ -147,10 +152,20 @@ export const CONFIG = {
 
   // The goalkeepers, when a match has them (engine/keeper.ts).
   keeper: {
-    // The small box it's kept to: this deep from the goal line, this far
-    // either side of the middle.
+    // The small box it keeps to, and the big box it may come out into to
+    // claim a ball or close an attacker down: this deep from the goal line,
+    // this far either side of the middle.
     boxDepth: 1.8,
     boxHalf: 3.6,
+    areaDepth: 5,
+    areaHalf: 5,
+    // Coming out: for a loose ball it'll reach this much sooner than any
+    // opponent; at an attacker on the ball this close, rushChance of the
+    // time (decided once an attack), poking at it at rushPoke a tick.
+    claimMargin: 0.85,
+    rushFrom: 6,
+    rushChance: 0.6,
+    rushPoke: 0.12,
     // How far off its line it stands at the least.
     lineOff: 0.55,
     // A ball heading for goal faster than this is a shot. The keeper moves
@@ -173,9 +188,24 @@ export const CONFIG = {
     diveWithin: 0.45,
     diveSpeed: 6,
     diveReach: 0.4,
+    // Faster than this, a shot comes off the keeper (bouncing back this
+    // much) rather than being caught; slower than gatherSpeed it picks the
+    // ball up from a little way off, like anyone.
+    catchSpeed: 13,
+    parryBounce: 0.45,
+    parryCooldown: 0.4,
+    gatherSpeed: 5,
+    // After its kick out, the other team can't touch the ball for this long.
+    kickGuard: 0.4,
     // Kicking out: a teammate needs this much room either side of the
     // ball's path from any opponent to be passed to.
     clearPass: 1.4,
+    // Coming out to narrow the angle while a shot's wound up: the ball within
+    // narrowFrom of the goal, up to narrowBy further out than usual, keeping
+    // narrowGap from the ball.
+    narrowFrom: 16,
+    narrowBy: 2.2,
+    narrowGap: 2.5,
   },
 
   // Pause after a goal before the kickoff.

@@ -446,4 +446,60 @@ describe('sim', () => {
     expect(right).toBeGreaterThan(0.5);
     expect(right).toBeCloseTo(sideways, 1);
   });
+
+  it("a ball at your back isn't picked up; it drops at your heels and you turn to take it", () => {
+    const m = createMatch([createPlayer('me', 'gold')], { practice: true });
+    const me = m.players[0]!;
+    Object.assign(me, { x: 0, y: 0, vx: 0, vy: 0, fx: 1, fy: 0 });
+    // Rolling into your heels.
+    Object.assign(m.ball, { x: -1.2, y: 0.1, vx: 3, vy: 0 });
+    let fastest = 0;
+    for (let i = 0; i < ticks(0.7); i++) {
+      step(m, { me: idle });
+      if (i > ticks(0.25)) fastest = Math.max(fastest, Math.hypot(m.ball.vx, m.ball.vy));
+    }
+    expect(m.owner).toBeNull();
+    expect(fastest).toBeLessThan(1);
+    expect(Math.hypot(m.ball.x - me.x, m.ball.y - me.y)).toBeLessThan(1.1);
+    // Turn to it: now it's yours, and stays at your feet.
+    for (let i = 0; i < ticks(0.8); i++) {
+      const dx = m.ball.x - me.x;
+      const dy = m.ball.y - me.y;
+      const l = Math.hypot(dx, dy) || 1;
+      step(m, { me: m.owner ? idle : { ...idle, x: dx / l, y: dy / l } });
+    }
+    expect(m.owner).toBe('me');
+    expect(Math.hypot(m.ball.x - me.x, m.ball.y - me.y)).toBeLessThan(1);
+  });
+
+  it('a ball taken at the edge of your reach, 55 degrees round, is kept', () => {
+    const a = (55 * Math.PI) / 180;
+    const m = createMatch([createPlayer('me', 'gold')], { practice: true });
+    const me = m.players[0]!;
+    Object.assign(me, { x: 0, y: 0, vx: 0, vy: 0, fx: 1, fy: 0 });
+    const d = me.r + m.ball.r + CONFIG.dribble.reach - 0.01;
+    Object.assign(m.ball, { x: Math.cos(a) * d, y: Math.sin(a) * d, vx: 0, vy: 0 });
+    for (let i = 0; i < ticks(0.5); i++) step(m, { me: idle });
+    expect(m.owner).toBe('me');
+  });
+
+  it('running off the pitch with the ball leaves it at the line, not flying back in', () => {
+    const H = CONFIG.pitch.height / 2;
+    for (const ix of [0, 0.7]) {
+      const m = createMatch([createPlayer('me', 'gold')], { practice: true });
+      const me = m.players[0]!;
+      const l = Math.hypot(ix, 1);
+      Object.assign(me, { x: 0, y: H - 3, vx: 0, vy: 0, fx: ix / l, fy: 1 / l });
+      Object.assign(m.ball, { x: me.x + me.fx * 0.6, y: me.y + me.fy * 0.6, vx: 0, vy: 0 });
+      m.owner = 'me';
+      let fastest = 0;
+      for (let i = 0; i < ticks(2); i++) {
+        step(m, { me: { ...idle, x: ix, y: 1, sprint: true } });
+        if (!m.owner) fastest = Math.max(fastest, Math.hypot(m.ball.vx, m.ball.vy));
+      }
+      expect(m.owner).toBeNull();
+      // No faster than you were running.
+      expect(fastest).toBeLessThan(CONFIG.player.sprintSpeed);
+    }
+  });
 });

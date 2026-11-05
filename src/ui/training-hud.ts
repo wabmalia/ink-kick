@@ -1,8 +1,8 @@
 import type { TrainingStats } from '../game/training';
 
 // The training ground's times card: each lane's clock, last run and bests
-// with and without the ball; the duel box's challenges shrugged off; and the
-// tackles won off the dummy.
+// with and without the ball; the duel box's challenges shrugged off; the
+// tackles won off the dummy; and the shots that beat the keeper.
 
 const list = document.getElementById('train-times')!;
 let shown = '';
@@ -30,6 +30,12 @@ export function showTimes(stats: TrainingStats) {
     'Tackle · Tackling',
     tries ? `Won ${t.pokesWon + t.slidesWon} of ${tries}` : 'Tackle the dummy',
     `Pokes ${t.pokesWon}/${t.pokes} · slides ${t.slidesWon}/${t.slides}`,
+  ]);
+  const k = stats.keeper;
+  rows.push([
+    'Keeper · Power',
+    k.shots ? `Scored ${k.goals} of ${k.shots}` : 'Shoot past it',
+    `Saved ${k.shots - k.goals}`,
   ]);
   // Only touch the page when something changed.
   const key = rows.flat().join('|');

@@ -1,29 +1,32 @@
 import { CONFIG } from '../config';
 import { Bot } from '../engine/ai';
-import { createMatch, createPlayer, step, type Input, type Match, type Player, type SimEvent } from '../engine/sim';
+import { createMatch, createPlayer, KEEPER_IDS, step, type Input, type Match, type Player, type SimEvent } from '../engine/sim';
 import { statsFor } from '../engine/stats';
 import type { Attributes } from './attributes';
 
-// The training ground: you on the pitch with four drills to feel your
+// The training ground: you on the pitch with five drills to feel your
 // attributes by.
-// - The sprint lane along the far side: cross one gate and the clock runs
-//   until you cross the other. (Pace, Stamina.)
-// - The cone lane along the near side: the same, weaving through cones.
-//   (Dribbling.)
-// - The duel box on the left: carry a ball in and a bot keeps challenging
+// - The duel box, far left: carry a ball in and a bot keeps challenging
 //   you for it; count the challenges you shrug off. (Strength.)
-// - The tackle dummy on the right: it stands on a ball, turning to face you;
+// - The tackle dummy, near left: it stands on a ball, turning to face you;
 //   count the tackles you win. (Tackling.)
+// - The sprint lane, running up the right half: cross one gate and the
+//   clock runs until you cross the other. (Pace, Stamina.)
+// - The cone lane beside it: the same, weaving through cones. (Dribbling.)
+// - The keeper in the right goal: shoot past it. It rolls the ball back to
+//   you after a save or a goal. (Power.)
 //
 // The sim has one ball, so the others are props. Run into one with your feet
 // free and it swaps places with the real one. The dummy's ball is a prop too
 // until you step into its box without a ball, when it becomes the real one.
 
+// A lane runs up and down the pitch, along y.
 export interface Lane {
   name: string;
-  y: number;
+  x: number;
   // Half the lane's width; leave it and the run is called off.
   half: number;
+  // Far gate, then near gate.
   gates: [number, number];
 }
 
@@ -34,33 +37,40 @@ export interface Box {
   hh: number;
 }
 
-const GATE = 10;
-export const SPRINT: Lane = { name: 'Sprint', y: -6.3, half: 1.3, gates: [-GATE, GATE] };
-export const CONES: Lane = { name: 'Cones', y: 6.3, half: 1.6, gates: [-GATE, GATE] };
-export const CONE_SPOTS = [-7.5, -4.5, -1.5, 1.5, 4.5, 7.5].map(x => ({ x, y: CONES.y }));
+const GATE = 7.5;
+export const SPRINT: Lane = { name: 'Sprint', x: 1.8, half: 1.3, gates: [-GATE, GATE] };
+export const CONES: Lane = { name: 'Cones', x: 5.5, half: 1.6, gates: [-GATE, GATE] };
+export const CONE_SPOTS = [-6, -3, 0, 3, 6].map(y => ({ x: CONES.x, y }));
 export const CONE_RADIUS = 0.16;
-// Side by side between the lanes.
-export const DUEL: Box = { x: -5.5, y: 0, hw: 4.3, hh: 4 };
-export const TACKLE: Box = { x: 5.5, y: 0, hw: 4.3, hh: 4 };
-export const DUMMY_SPOT = { x: 6.5, y: 0 };
+// One above the other on the left half, clear of the attributes panel.
+export const DUEL: Box = { x: -6, y: -4.3, hw: 4.6, hh: 3.7 };
+export const TACKLE: Box = { x: -6, y: 4.3, hw: 4.6, hh: 3.7 };
+export const DUMMY_SPOT = { x: -5.5, y: 4.3 };
 
-// Beyond the gates, either side, and one in the duel box.
+// One in the duel box, one past the far gate of each lane (the names are
+// by the near ones), and a row to shoot
+// at the keeper with.
 const PROP_SPOTS = [
-  { x: -11, y: -2.6 },
-  { x: -11, y: 2.6 },
-  { x: -3.5, y: 2 },
-  { x: 11.5, y: -2.5 },
-  { x: 11.5, y: 2.5 },
+  { x: -3.5, y: -2.5 },
+  { x: SPRINT.x, y: -GATE - 1 },
+  { x: CONES.x, y: -GATE - 1 },
+  { x: 9, y: -2.5 },
+  { x: 9, y: 0 },
+  { x: 9, y: 2.5 },
 ];
-// Clear of the attributes panel on the left.
-const ME_START = { x: -10.6, y: -1.2 };
-const BALL_START = { x: -11, y: 0.4 };
+// In the gap between the boxes and the lanes.
+const ME_START = { x: -0.6, y: 0 };
+const BALL_START = { x: 0.2, y: 0.9 };
 // The bot gives a ball it won back after this long; the dummy gets its ball
 // back this long after you win it, wherever it went.
 const GIVE_BACK = 0.6;
 const RESET = 1;
 // How fast the dummy turns to face you, radians per second.
 const DUMMY_TURN = 2.2;
+// How long a ball sits in the net before the keeper has it, and how long
+// the keeper holds one before rolling it back.
+const NET_WAIT = 0.8;
+const KEEPER_HOLD = 0.8;
 
 const inBox = (b: Box, p: { x: number; y: number }) => Math.abs(p.x - b.x) < b.hw && Math.abs(p.y - b.y) < b.hh;
 
@@ -82,6 +92,8 @@ export interface TrainingStats {
   // how many took it off you; how long you've kept it, and the best.
   duel: { challenges: number; lost: number; held: number | null; best: number | null };
   tackle: { pokes: number; pokesWon: number; slides: number; slidesWon: number };
+  // Your shots the keeper had to deal with, and how many went in.
+  keeper: { shots: number; goals: number };
 }
 
 export class Training {
@@ -90,6 +102,7 @@ export class Training {
   private me: Player;
   private bot: Player;
   private dummy: Player;
+  private keeper: Player;
   private brain = new Bot('bot');
   // Whether the dummy has a ball: the real one (it owns it) or its prop.
   private dummyArmed = true;
@@ -101,13 +114,19 @@ export class Training {
   // The tackle in progress at the dummy, if any.
   private tackling: 'poke' | 'slide' | null = null;
   private botHeld = 0;
+  private keeperStats: TrainingStats['keeper'] = { shots: 0, goals: 0 };
+  // Your last shot, until someone else touches it: whether it's counted yet.
+  private shot: { counted: boolean } | null = null;
+  private inNet = 0;
+  private keeperHeld = 0;
   private last = { ...ME_START };
 
   constructor(readonly id: string, attrs: Attributes) {
     this.me = createPlayer(id, 'gold', attrs);
     this.bot = createPlayer('bot', 'red');
     this.dummy = createPlayer('dummy', 'red');
-    this.match = createMatch([this.me, this.bot, this.dummy], { practice: true });
+    this.keeper = createPlayer(KEEPER_IDS.red, 'red', undefined, true);
+    this.match = createMatch([this.me, this.bot, this.dummy, this.keeper], { practice: true });
     Object.assign(this.me, { ...ME_START, vx: 0, vy: 0, fx: 1, fy: 0 });
     Object.assign(this.bot, { x: DUEL.x, y: DUEL.y, vx: 0, vy: 0, fx: -1, fy: 0 });
     Object.assign(this.dummy, { ...DUMMY_SPOT, vx: 0, vy: 0, fx: -1, fy: 0 });
@@ -128,7 +147,12 @@ export class Training {
   step(input: Input): SimEvent[] {
     this.tendDummy();
     const ownerBefore = this.match.owner;
-    const events = step(this.match, { [this.id]: input, bot: this.botInput(), dummy: this.dummyInput() });
+    const inputs: Record<string, Input> = { [this.id]: input, bot: this.botInput(), dummy: this.dummyInput() };
+    // Left to think for itself, except with the ball.
+    const keeper = this.keeperInput();
+    if (keeper) inputs[this.keeper.id] = keeper;
+    const events = step(this.match, inputs);
+    this.countShots(events);
     this.countTackles(events, ownerBefore);
     this.countChallenges(events);
     this.swapProps();
@@ -192,6 +216,68 @@ export class Training {
       duel.best = Math.max(duel.best ?? 0, duel.held);
     } else {
       duel.held = null;
+    }
+  }
+
+  // --- The keeper ------------------------------------------------------------
+
+  // With the ball, it holds it a moment and rolls it back to you rather than
+  // clearing it upfield (to the bot or the dummy, its teammates). A ball in
+  // the net it picks out, a moment later.
+  private keeperInput(): Input | null {
+    const { match, keeper, me } = this;
+    const { ball } = match;
+    if (ball.x > CONFIG.pitch.width / 2 + ball.r && match.owner === null) {
+      this.inNet += CONFIG.tick;
+      if (this.inNet >= NET_WAIT) {
+        this.inNet = 0;
+        const d = CONFIG.dribble.distance;
+        Object.assign(keeper, { fx: -1, fy: 0, action: 'none', vx: 0, vy: 0 });
+        Object.assign(ball, { x: keeper.x - d, y: keeper.y, vx: 0, vy: 0 });
+        match.owner = keeper.id;
+        match.spin = 0;
+        match.aftertouch = null;
+      }
+      return null;
+    }
+    this.inNet = 0;
+    if (match.owner !== keeper.id) {
+      this.keeperHeld = 0;
+      return null;
+    }
+    this.keeperHeld += CONFIG.tick;
+    if (this.keeperHeld >= KEEPER_HOLD) {
+      match.owner = null;
+      keeper.cooldown = 1;
+      const dx = me.x - ball.x;
+      const dy = me.y - ball.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const speed = Math.min(9, 2 + len * 0.8);
+      ball.vx = (dx / len) * speed;
+      ball.vy = (dy / len) * speed;
+    }
+    return { x: 0, y: 0, kick: false, sprint: false };
+  }
+
+  // A shot is one of your kicks the keeper reads as on target; a goal, any
+  // ball of yours that ends up in its net.
+  private countShots(events: SimEvent[]) {
+    const { match, me, keeper, keeperStats } = this;
+    for (const e of events) if (e.type === 'kick' && e.player === me.id) this.shot = { counted: false };
+    if (!this.shot) return;
+    if (match.owner && match.owner !== keeper.id) {
+      this.shot = null;
+      return;
+    }
+    if (!this.shot.counted && keeper.keeperState?.shotSeen) {
+      this.shot.counted = true;
+      keeperStats.shots++;
+    }
+    if (match.ball.x > CONFIG.pitch.width / 2 + match.ball.r) {
+      // One that curled in without being read still counts as a shot.
+      if (!this.shot.counted) keeperStats.shots++;
+      keeperStats.goals++;
+      this.shot = null;
     }
   }
 
@@ -307,7 +393,7 @@ export class Training {
     for (const lane of [SPRINT, CONES]) {
       const result = this.results.get(lane)!;
       const run = this.runs.get(lane);
-      const inLane = Math.abs(me.y - lane.y) <= lane.half;
+      const inLane = Math.abs(me.x - lane.x) <= lane.half;
       if (run) {
         run.t += CONFIG.tick;
         run.withBall &&= hasBall;
@@ -318,8 +404,8 @@ export class Training {
           continue;
         }
       }
-      for (const [i, gx] of lane.gates.entries()) {
-        const crossed = (last.x - gx) * (me.x - gx) < 0 || (last.x !== me.x && me.x === gx);
+      for (const [i, gy] of lane.gates.entries()) {
+        const crossed = (last.y - gy) * (me.y - gy) < 0 || (last.y !== me.y && me.y === gy);
         if (!crossed || !inLane) continue;
         if (run && run.from !== i) {
           const done = { time: run.t, withBall: run.withBall };
@@ -331,7 +417,7 @@ export class Training {
         } else {
           // Through a gate heading into the lane: the clock starts. Crossing
           // the same gate again starts it over.
-          const inward = i === 0 ? me.x > gx : me.x < gx;
+          const inward = i === 0 ? me.y > gy : me.y < gy;
           if (inward) {
             this.runs.set(lane, { from: i, t: 0, withBall: hasBall });
             result.running = 0;
@@ -345,6 +431,6 @@ export class Training {
   }
 
   stats(): TrainingStats {
-    return { lanes: [...this.results.values()], duel: this.duel, tackle: this.tackles };
+    return { lanes: [...this.results.values()], duel: this.duel, tackle: this.tackles, keeper: this.keeperStats };
   }
 }

@@ -46,7 +46,7 @@ describe('goalkeepers', () => {
     expect(match.owner).toBe('b');
   });
 
-  it('stays in its small box whatever happens', () => {
+  it('stays in its big box whatever happens', () => {
     const r = rng(3);
     const match = createMatch([createPlayer('me', 'gold'), createPlayer('them', 'red')], { keepers: true, kickoff: 'gold' });
     match.holdFor = 0;
@@ -56,8 +56,8 @@ describe('goalkeepers', () => {
         const side = gk.team === 'gold' ? -1 : 1;
         const fromLine = (side * W - gk.x) * side;
         expect(fromLine).toBeGreaterThanOrEqual(-0.21);
-        expect(fromLine).toBeLessThanOrEqual(CONFIG.keeper.boxDepth + 0.01);
-        expect(Math.abs(gk.y)).toBeLessThanOrEqual(CONFIG.keeper.boxHalf + 0.01);
+        expect(fromLine).toBeLessThanOrEqual(CONFIG.keeper.areaDepth + 0.01);
+        expect(Math.abs(gk.y)).toBeLessThanOrEqual(CONFIG.keeper.areaHalf + 0.01);
       }
     }
   });
@@ -158,5 +158,61 @@ describe('goalkeepers', () => {
       }
     }
     expect(dived).toBeGreaterThan(5);
+  });
+
+  it('parries a hard shot straight at it rather than catching it', () => {
+    const match = keeperMatch(4);
+    lineUp(match, 9, 0, 0);
+    for (let k = 0; k < 20; k++) step(match, { me: idle });
+    for (let k = 0; k < ticks(0.7); k++) step(match, { me: { ...idle, kick: true } });
+    let parried = false;
+    for (let k = 0; k < ticks(1) && !parried; k++) {
+      const vx = match.ball.vx;
+      step(match, { me: idle });
+      if (vx > 5 && match.ball.vx < 0) parried = match.owner !== KEEPER_IDS.red;
+    }
+    expect(parried).toBe(true);
+  });
+
+  it("the other team can't touch its kick out for a moment", () => {
+    const match = createMatch([createPlayer('me', 'gold'), createPlayer('them', 'red')], { keepers: true, seed: 2 });
+    match.kickoffHeld = false;
+    const gk = match.players.find(p => p.id === KEEPER_IDS.red)!;
+    const me = match.players.find(p => p.id === 'me')!;
+    Object.assign(match.players.find(p => p.id === 'them')!, { x: -10, y: 8 });
+    Object.assign(match.ball, { x: gk.x - 0.6, y: 0, vx: 0, vy: 0 });
+    Object.assign(gk, { y: 0, fx: -1, fy: 0 });
+    match.owner = gk.id;
+    for (let i = 0; i < ticks(3) && match.owner === gk.id; i++) step(match, { me: idle, them: idle });
+    // Right in the ball's path, just after it's struck.
+    Object.assign(me, { x: match.ball.x + match.ball.vx * 0.1, y: match.ball.y + match.ball.vy * 0.1, vx: 0, vy: 0 });
+    for (let i = 0; i < ticks(0.3); i++) step(match, { me: { ...idle, kick: true }, them: idle });
+    expect(match.owner).not.toBe('me');
+  });
+
+  it('comes out of its small box to claim a loose ball nobody else will reach', () => {
+    const match = createMatch([createPlayer('me', 'gold')], { keepers: true, seed: 5 });
+    match.kickoffHeld = false;
+    match.owner = null;
+    const gk = match.players.find(p => p.id === KEEPER_IDS.red)!;
+    Object.assign(match.players.find(p => p.id === 'me')!, { x: -12, y: 0 });
+    Object.assign(match.ball, { x: W - 4, y: 1, vx: 0, vy: 0 });
+    for (let i = 0; i < ticks(1.5) && match.owner !== gk.id; i++) step(match, { me: idle });
+    expect(match.owner).toBe(gk.id);
+    expect(W - gk.x).toBeGreaterThan(CONFIG.keeper.boxDepth);
+  });
+
+  it('walks out to narrow the angle while a shot is wound up, inside its big box', () => {
+    const match = keeperMatch(3);
+    lineUp(match, 11, 2, 0);
+    const gk = match.players.find(p => p.id === KEEPER_IDS.red)!;
+    for (let k = 0; k < 30; k++) step(match, { me: idle });
+    const before = W - gk.x;
+    for (let k = 0; k < ticks(0.7); k++) step(match, { me: { ...idle, kick: true } });
+    const after = W - gk.x;
+    expect(after - before).toBeGreaterThan(1.2);
+    expect(after).toBeLessThanOrEqual(CONFIG.keeper.areaDepth + 0.01);
+    // Still between the ball and the goal.
+    expect(gk.y).toBeGreaterThan(0);
   });
 });

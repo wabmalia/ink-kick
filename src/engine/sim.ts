@@ -122,6 +122,9 @@ export interface Match {
   // positive), and the kick it can still be added to by aftertouch.
   spin: number;
   aftertouch: { player: string; dx: number; dy: number; left: number } | null;
+  // Just after a keeper kicks it out: the other team can't touch the ball
+  // for this many seconds more.
+  guard: { team: Team; left: number } | null;
 }
 
 export type SimEvent =
@@ -190,6 +193,7 @@ export function createMatch(players: Player[], opts: { kickoff?: Team; coin?: bo
     over: null,
     spin: 0,
     aftertouch: null,
+    guard: null,
   };
   kickoff(match);
   if (match.practice) {
@@ -326,9 +330,23 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
     for (const post of match.posts) collide(players[i]!, post);
     // The dribbler's own body doesn't get in the ball's way; anyone else's
     // deadens it.
-    // A keeper's ball is in its hands: nobody else touches it.
-    if (players[i] !== owner && !owner?.keeper) collide(players[i]!, ball, CONFIG.ball.playerBounce);
+    // A keeper's ball is in its hands: nobody else touches it; nor, for a
+    // moment after its kick out, does the other team. A hard shot comes
+    // off a keeper rather than dying at its feet.
+    const q = players[i]!;
+    const guarded = match.guard && q.team !== match.guard.team;
+    const parry = q.keeper && Math.hypot(ball.vx, ball.vy) > CONFIG.keeper.catchSpeed;
+    if (q !== owner && !owner?.keeper && !guarded) {
+      const before = ball.vx;
+      collide(q, ball, parry ? CONFIG.keeper.parryBounce : CONFIG.ball.playerBounce);
+      // Parried: loose, not caught on the rebound.
+      if (parry && ball.vx !== before) q.cooldown = Math.max(q.cooldown, CONFIG.keeper.parryCooldown);
+    }
   }
+  // At someone's feet, a post or a line takes nearly all the pace off it:
+  // the pull onto the foot points through them, and bounced back off them,
+  // then lost, it would fly back into play like a shot.
+  if (match.owner) ball.bounce = CONFIG.ball.heldBounce;
   for (const post of match.posts) collide(ball, post);
 
   for (const p of players) tackle(match, p, events);
@@ -339,6 +357,7 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
     else for (const p of players) keepKickoffShape(p, p.team !== match.kickoffTeam);
   }
   keepBallIn(ball);
+  ball.bounce = CONFIG.ball.bounce;
   // Anything it hits (a body, a post, a wall) takes the spin off it.
   if (Math.hypot(ball.vx - flight.vx, ball.vy - flight.vy) > 1) {
     match.spin = 0;
@@ -346,6 +365,7 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
   }
 
   match.pullingIn = Math.max(0, match.pullingIn - dt);
+  if (match.guard && (match.guard.left -= dt) <= 0) match.guard = null;
   const holder = byId(match.owner);
   if (holder && match.pullingIn === 0) {
     const gap = Math.hypot(
@@ -353,7 +373,7 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
       ball.y - (holder.y + holder.fy * CONFIG.dribble.distance),
     );
     if (gap > holder.stats.loseDistance && !holder.keeper) loseBall(match, holder, CONFIG.dribble.lostCooldown);
-  } else if (match.restartIn <= 0) {
+  } else if (!holder && match.restartIn <= 0) {
     trap(match, events);
   }
   if (match.owner) match.lastTouch = match.owner;
@@ -467,6 +487,7 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
         match.owner = null;
         match.spin = 0;
         match.aftertouch = { player: p.id, dx: p.fx, dy: p.fy, left: kick.aftertouch };
+        if (p.keeper) match.guard = { team: p.team, left: CONFIG.keeper.kickGuard };
         p.cooldown = kick.cooldown;
         events.push({ type: 'kick', player: p.id, power: p.charge });
         p.charge = 0;
@@ -668,6 +689,8 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
   if (p.action !== 'poke' && p.action !== 'slide') return;
   if (p.struck || match.owner === p.id) return;
 
+  // The ball's out of bounds to them just after a keeper's kick.
+  if (match.guard && p.team !== match.guard.team) return;
   const poking = p.action === 'poke';
   const footX = p.x + p.fx * (p.r + (poking ? 0.3 : 0.2));
   const footY = p.y + p.fy * (p.r + (poking ? 0.3 : 0.2));
@@ -716,8 +739,10 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
     } else if (
       (p.fx * (ball.x - p.x) + p.fy * (ball.y - p.y)) / (Math.hypot(ball.x - p.x, ball.y - p.y) || 1)
         > p.stats.slideControlCos
+      && !(p.keeper && Math.hypot(ball.vx, ball.vy) > CONFIG.keeper.catchSpeed)
     ) {
-      // Slid straight into it: a controlled slide, the ball kept.
+      // Slid straight into it: a controlled slide, the ball kept (a keeper
+      // only holds on to one that isn't too hot to handle).
       match.owner = p.id;
       match.pullingIn = t.pullInTime;
       events.push({ type: 'trap', player: p.id });
@@ -755,9 +780,20 @@ function trap(match: Match, events: SimEvent[]) {
   const { ball } = match;
   let best: Player | null = null;
   let bestGap: number = CONFIG.dribble.reach;
+  const speed = Math.hypot(ball.vx, ball.vy);
+  const k = CONFIG.keeper;
   for (const p of match.players) {
     if (p.cooldown > 0 || p.action === 'stumble') continue;
+    if (match.guard && p.team !== match.guard.team) continue;
     const gap = Math.hypot(ball.x - p.x, ball.y - p.y) - p.r - ball.r;
+    // A keeper catches only what reaches its body, and nothing too hot to
+    // hold; a slow ball it gathers from a little way off like anyone.
+    if (p.keeper && (speed > k.catchSpeed || (speed > k.gatherSpeed && gap > 0.05))) continue;
+    // Anyone else only takes one in front of them: one at their side or
+    // back hits them and drops (their hands make a keeper the exception).
+    // Taken from further round, the pull onto the foot would fling it.
+    const dist = gap + p.r + ball.r || 1;
+    if (!p.keeper && (p.fx * (ball.x - p.x) + p.fy * (ball.y - p.y)) / dist < CONFIG.dribble.trapCos) continue;
     if (gap <= bestGap) {
       best = p;
       bestGap = gap;
@@ -765,6 +801,8 @@ function trap(match: Match, events: SimEvent[]) {
   }
   if (!best) return;
   match.owner = best.id;
+  // A moment to draw it onto your foot before it can count as lost.
+  match.pullingIn = CONFIG.tackle.pullInTime;
   events.push({ type: 'trap', player: best.id });
 }
 
@@ -813,12 +851,13 @@ function keepPlayerIn(p: Player) {
   wall(p, 'x', -width / 2 - margin + p.r, width / 2 + margin - p.r);
   wall(p, 'y', -height / 2 - margin + p.r, height / 2 + margin - p.r);
   if (p.keeper) {
-    // Its small box, from just behind the line to the box's edge.
-    const { side, line, depth, half } = keeperBox(p);
+    // The big box, from just behind the line to its edge: it keeps to the
+    // small one unless it's coming out (engine/keeper.ts).
+    const { side, line, areaDepth, areaHalf } = keeperBox(p);
     const a = line + side * 0.2;
-    const b = line - side * depth;
+    const b = line - side * areaDepth;
     wall(p, 'x', Math.min(a, b), Math.max(a, b));
-    wall(p, 'y', -half, half);
+    wall(p, 'y', -areaHalf, areaHalf);
   }
 }
 

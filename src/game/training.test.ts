@@ -26,12 +26,12 @@ function runLane(t: Training, lane: typeof SPRINT, input: Input) {
 describe('training ground', () => {
   it('times the sprint lane from gate to gate', () => {
     const t = new Training('me', evenAttributes());
-    at(t, SPRINT.gates[0] - 1, SPRINT.y);
-    const result = runLane(t, SPRINT, go(1, 0, { sprint: true }));
+    at(t, SPRINT.x, SPRINT.gates[0] - 1);
+    const result = runLane(t, SPRINT, go(0, 1, { sprint: true }));
     expect(result).not.toBeNull();
-    // 20 m: roughly three seconds at a sprint, the stamina running low.
-    expect(result!.time).toBeGreaterThan(2.4);
-    expect(result!.time).toBeLessThan(4.5);
+    // 15 m: two seconds and a bit at a sprint.
+    expect(result!.time).toBeGreaterThan(1.7);
+    expect(result!.time).toBeLessThan(3.5);
     expect(result!.withBall).toBe(false);
     expect(t.stats().lanes[0]!.best.without).toBe(result!.time);
   });
@@ -39,27 +39,27 @@ describe('training ground', () => {
   it('is quicker with Pace 10', () => {
     const time = (pace: number) => {
       const t = new Training('me', { ...evenAttributes(), pace });
-      at(t, SPRINT.gates[0] - 1, SPRINT.y);
-      return runLane(t, SPRINT, go(1, 0))!.time;
+      at(t, SPRINT.x, SPRINT.gates[0] - 1);
+      return runLane(t, SPRINT, go(0, 1))!.time;
     };
     expect(time(10)).toBeLessThan(time(1) * 0.8);
   });
 
   it('calls a run off when you leave the lane', () => {
     const t = new Training('me', evenAttributes());
-    at(t, SPRINT.gates[0] - 0.5, SPRINT.y);
-    for (let i = 0; i < ticks(0.5); i++) t.step(go(1, 0));
+    at(t, SPRINT.x, SPRINT.gates[0] - 0.5);
+    for (let i = 0; i < ticks(0.5); i++) t.step(go(0, 1));
     expect(t.stats().lanes[0]!.running).not.toBeNull();
-    for (let i = 0; i < ticks(1); i++) t.step(go(0, 1));
+    for (let i = 0; i < ticks(1); i++) t.step(go(1, 0));
     expect(t.stats().lanes[0]!.running).toBeNull();
   });
 
   it('puts cones in the cone lane that block the way', () => {
     const t = new Training('me', evenAttributes());
-    const me = at(t, CONES.gates[0] - 1, CONES.y);
-    for (let i = 0; i < ticks(3); i++) t.step(go(1, 0));
+    const me = at(t, CONES.x, CONES.gates[0] - 1);
+    for (let i = 0; i < ticks(3); i++) t.step(go(0, 1));
     // Straight down the middle, the first cone stops you.
-    expect(me.x).toBeLessThan(-7);
+    expect(me.y).toBeLessThan(-5.5);
   });
 
   it('a prop ball touched with your feet free becomes the real one', () => {
@@ -101,11 +101,38 @@ describe('training ground', () => {
     expect(tackle.pokesWon).toBe(1);
   });
 
+  it('counts shots at the keeper and goals past it, and the keeper rolls the ball back', () => {
+    const t = new Training('me', { ...evenAttributes(), power: 10 });
+    const keeper = t.match.players.find(p => p.keeper)!;
+    const W = CONFIG.pitch.width / 2;
+    let rolledBack = false;
+    for (let n = 0; n < 12; n++) {
+      // On the ball 8 m out, a hard shot into a corner or straight at it.
+      const y = [2.2, 0, -2.2, 0][n % 4]!;
+      const me = at(t, W - 8, 0);
+      const l = Math.hypot(8, y);
+      Object.assign(me, { fx: 8 / l, fy: y / l });
+      Object.assign(t.match.ball, { x: me.x + (8 / l) * 0.6, y: (y / l) * 0.6, vx: 0, vy: 0 });
+      t.match.owner = 'me';
+      for (let i = 0; i < ticks(0.7); i++) t.step(go(0, 0, { kick: true }));
+      for (let i = 0; i < ticks(4); i++) {
+        t.step(go(0, 0));
+        if (t.match.owner === 'me') break;
+        if (t.match.owner === null && t.match.ball.vx < -1 && Math.abs(t.match.ball.x - keeper.x) < 2) rolledBack = true;
+      }
+    }
+    const k = t.stats().keeper;
+    expect(k.shots).toBeGreaterThan(8);
+    expect(k.goals).toBeGreaterThan(0);
+    expect(k.goals).toBeLessThan(k.shots);
+    expect(rolledBack).toBe(true);
+  });
+
   it('the dummy has its ball back a moment after each win, so you can go again', () => {
     const t = new Training('me', { ...evenAttributes(), tackling: 9, pace: 1 });
     const me = t.match.players[0]!;
     const dummy = t.match.players.find(p => p.id === 'dummy')!;
-    Object.assign(me, { x: DUMMY_SPOT.x - 3, y: 0, vx: 0, vy: 0 });
+    Object.assign(me, { x: DUMMY_SPOT.x - 3, y: DUMMY_SPOT.y, vx: 0, vy: 0 });
     for (let rep = 0; rep < 5; rep++) {
       // Walk at it until the ball is close, poke, then stand there.
       for (let i = 0; i < ticks(5); i++) {
