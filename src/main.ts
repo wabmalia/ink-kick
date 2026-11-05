@@ -1,3 +1,5 @@
+// First, so the old saved settings are in place before anything reads them.
+import './rename';
 import { CONFIG } from './config';
 import { Bot } from './engine/ai';
 import { createMatch, createPlayer, KEEPER_IDS, step } from './engine/sim';

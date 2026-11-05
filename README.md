@@ -1,4 +1,4 @@
-# Score
+# Ink Kick
 
 Floodlit arcade football, drawn in ink and watercolour. Three.js + TypeScript + Vite.
 

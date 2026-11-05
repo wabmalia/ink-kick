@@ -7,7 +7,7 @@ import type { Attributes } from '../game/attributes';
 // packet never holds up the ones behind it.
 
 // Room codes are registered with the PeerJS broker under this prefix.
-export const PEER_PREFIX = 'score-';
+export const PEER_PREFIX = 'inkkick-';
 export const NAME_MAX = 16;
 
 export interface MemberView {

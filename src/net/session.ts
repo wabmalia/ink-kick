@@ -42,10 +42,10 @@ const store = {
 
 /** Per-tab identity, so a refresh reclaims the same player but two tabs are two players. */
 function tabId(): string {
-  let id = store.get(sessionStorage, 'score.id');
+  let id = store.get(sessionStorage, 'inkkick.id');
   if (!id) {
     id = crypto.randomUUID();
-    store.set(sessionStorage, 'score.id', id);
+    store.set(sessionStorage, 'inkkick.id', id);
   }
   return id;
 }
@@ -60,7 +60,7 @@ async function peerOptions(): Promise<PeerOptions> {
 }
 
 // The room a tab was hosting, so a refresh reopens it under the same code.
-const HOST_KEY = 'score.host';
+const HOST_KEY = 'inkkick.host';
 
 class Session {
   status: Status = 'home';
@@ -71,7 +71,7 @@ class Session {
   room: RoomView | null = null;
   /** False while a guest is reconnecting to the host. */
   linked = true;
-  name = store.get(localStorage, 'score.name') ?? '';
+  name = store.get(localStorage, 'inkkick.name') ?? '';
   host: HostRoom | null = null;
 
   private listeners = new Set<SessionListener>();
@@ -98,7 +98,7 @@ class Session {
 
   setName(name: string) {
     this.name = cleanName(name);
-    store.set(localStorage, 'score.name', this.name);
+    store.set(localStorage, 'inkkick.name', this.name);
   }
 
   get isHost() {
@@ -255,7 +255,7 @@ class Session {
     this.role = 'client';
     this.code = code;
     this.set({ status: 'connecting', message: `Looking for room ${code}…` });
-    store.set(sessionStorage, 'score.joined', code);
+    store.set(sessionStorage, 'inkkick.joined', code);
     void this.openGuestPeer(code);
   }
 
@@ -336,7 +336,7 @@ class Session {
         break;
       case 'rejected':
         this.fail(msg.reason);
-        store.set(sessionStorage, 'score.joined', null);
+        store.set(sessionStorage, 'inkkick.joined', null);
         break;
     }
   }
@@ -355,7 +355,7 @@ class Session {
   /** Back to the menu. A host leaving closes the room for everyone. */
   leave() {
     store.set(sessionStorage, HOST_KEY, null);
-    store.set(sessionStorage, 'score.joined', null);
+    store.set(sessionStorage, 'inkkick.joined', null);
     this.teardown();
     this.set({ status: 'home' });
     location.hash = '#/';
@@ -388,7 +388,7 @@ class Session {
     if (kind === 'solo') this.playSolo();
     else if (kind === 'train') this.train();
     else if (kind === 'host' && code && store.get(sessionStorage, HOST_KEY) === code) this.hostRoom(code);
-    else if (kind === 'join' && code && store.get(sessionStorage, 'score.joined') === code) this.joinRoom(code);
+    else if (kind === 'join' && code && store.get(sessionStorage, 'inkkick.joined') === code) this.joinRoom(code);
   }
 
   /** A join link opened fresh: the code to offer on the home screen. */

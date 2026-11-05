@@ -52,7 +52,7 @@ export function cleanAttributes(raw: unknown): Attributes {
   return Object.fromEntries(ATTRIBUTES.map((a, i) => [a, values[i]])) as Attributes;
 }
 
-const KEY = 'score.attributes';
+const KEY = 'inkkick.attributes';
 
 export function loadAttributes(): Attributes {
   try {

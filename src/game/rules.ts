@@ -48,7 +48,7 @@ export function rulesLine(rules: Rules, clock: number): string {
   return '';
 }
 
-const KEEPERS_KEY = 'score.keepers';
+const KEEPERS_KEY = 'inkkick.keepers';
 
 export function loadKeepers(): boolean {
   try {
@@ -66,7 +66,7 @@ export function saveKeepers(on: boolean) {
   }
 }
 
-const KEY = 'score.rules';
+const KEY = 'inkkick.rules';
 
 export function loadRules(): Rules {
   try {
