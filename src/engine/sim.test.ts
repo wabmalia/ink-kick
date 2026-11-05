@@ -502,4 +502,20 @@ describe('sim', () => {
       expect(fastest).toBeLessThan(CONFIG.player.sprintSpeed);
     }
   });
+
+  it('a curled kick bends so far and no further, never looping round', () => {
+    const m = createMatch([createPlayer('me', 'gold', { ...evenAttributes(), power: 10 })], { practice: true });
+    const me = m.players[0]!;
+    Object.assign(me, { x: -12, y: 8, vx: 0, vy: 0, fx: 1, fy: 0 });
+    Object.assign(m.ball, { x: -11.4, y: 8, vx: 0, vy: 0 });
+    m.owner = 'me';
+    for (let i = 0; i < ticks(1.5); i++) step(m, { me: { ...idle, kick: true } });
+    let most = 0;
+    for (let i = 0; i < ticks(3); i++) {
+      step(m, { me: { ...idle, y: -1 } });
+      most = Math.max(most, Math.abs(m.curled));
+    }
+    expect(most).toBeGreaterThan(CONFIG.kick.maxTurn * 0.9);
+    expect(most).toBeLessThanOrEqual(CONFIG.kick.maxTurn + 1e-6);
+  });
 });

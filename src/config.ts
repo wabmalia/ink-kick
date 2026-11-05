@@ -98,8 +98,12 @@ export const CONFIG = {
     // one), reached after curlBuild seconds of holding. The spin fades by
     // spinFade a second.
     aftertouch: 0.5,
-    curl: 0.045,
+    curl: 0.117,
     curlBuild: 0.25,
+    // The most a kick's path can turn, radians (75 degrees), easing off over
+    // the last turnEase of it.
+    maxTurn: 1.31,
+    turnEase: 0.3,
     spinFade: 0.8,
   },
 

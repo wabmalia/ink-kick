@@ -121,6 +121,8 @@ export interface Match {
   // The ball's curl, radians its path turns a metre (anticlockwise
   // positive), and the kick it can still be added to by aftertouch.
   spin: number;
+  // How far the curl has turned the ball's path since the kick, radians.
+  curled: number;
   aftertouch: { player: string; dx: number; dy: number; left: number } | null;
   // Just after a keeper kicks it out: the other team can't touch the ball
   // for this many seconds more.
@@ -192,6 +194,7 @@ export function createMatch(players: Player[], opts: { kickoff?: Team; coin?: bo
     lastTouch: null,
     over: null,
     spin: 0,
+    curled: 0,
     aftertouch: null,
     guard: null,
   };
@@ -309,8 +312,13 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
   if (owner) {
     match.spin = 0;
   } else if (match.spin) {
-    // Curl: the ball's path turns, the spin fading as it goes.
-    const a = match.spin * Math.hypot(ball.vx, ball.vy) * dt;
+    // Curl: the ball's path turns, the spin fading as it goes. However
+    // hard it's curled, it bends so far and no further: full until most of
+    // the way to maxTurn, then easing off, so it never loops round.
+    const { maxTurn, turnEase } = CONFIG.kick;
+    const left = Math.max(0, Math.min(1, (maxTurn - Math.abs(match.curled)) / (maxTurn * turnEase)));
+    const a = match.spin * Math.hypot(ball.vx, ball.vy) * dt * left;
+    match.curled += a;
     const { vx, vy } = ball;
     ball.vx = vx * Math.cos(a) - vy * Math.sin(a);
     ball.vy = vx * Math.sin(a) + vy * Math.cos(a);
@@ -486,6 +494,7 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
         match.ball.vy = p.fy * speed;
         match.owner = null;
         match.spin = 0;
+        match.curled = 0;
         match.aftertouch = { player: p.id, dx: p.fx, dy: p.fy, left: kick.aftertouch };
         if (p.keeper) match.guard = { team: p.team, left: CONFIG.keeper.kickGuard };
         p.cooldown = kick.cooldown;

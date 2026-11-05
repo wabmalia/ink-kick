@@ -48,9 +48,9 @@ screen and to tune one at a time.
 | Dribbling | Turn rate with the ball | 2.69 rad/s | 3.20 rad/s | 3.84 rad/s |
 | Dribbling | Speed kept on a sharp turn | 58% | 65% | 71% |
 | Dribbling | Speed with the ball, vs without | 90% | 92% | 93% |
-| Power | Full-power shot | 27.7 m/s | 33.0 m/s | 39.6 m/s |
+| Power | Full-power shot (2% a point below 5, 4% above) | 30.4 m/s | 33.0 m/s | 39.6 m/s |
 | Power | Time to full power | 0.83 s | 0.70 s | 0.58 s |
-| Power | Most curl on a full-power shot, sideways over 15 m | 1.9 m | 2.6 m | 3.4 m |
+| Power | Most curl, how fast the path turns (any kick bends 75° at most) | 4.6° a metre | 6.7° a metre | 9.4° a metre |
 | Tackling | Poke range, edge to edge (8% a point) | 0.41 m | 0.60 m | 0.84 m |
 | Tackling | Slide reach | 0.63 m | 0.75 m | 0.90 m |
 | Tackling | Controlled-slide angle | 29° | 35° | 42° |

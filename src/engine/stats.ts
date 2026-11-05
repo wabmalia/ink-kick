@@ -39,6 +39,9 @@ export const multiplier = (value: number, step = STEP) => 1 + step * (value - 5)
 export const POKE_STEP = 0.08;
 // And curl, so Power's effect on it is plain to see.
 export const CURL_STEP = 0.08;
+// Shot speed loses only half as much per point below 5: a weak shooter
+// still hits the ball hard enough to score.
+export const SHOT_STEP_BELOW = 0.02;
 
 export function statsFor(attrs: Attributes = evenAttributes()): Stats {
   const m = (k: keyof Attributes) => multiplier(attrs[k]);
@@ -54,7 +57,7 @@ export function statsFor(attrs: Attributes = evenAttributes()): Stats {
     turnRateWithBall: player.turnRateWithBall * m('dribbling'),
     turnSlowdown: keep(dribble.turnSlowdown, m('dribbling')),
     dribbleSpeed: keep(dribble.speedFactor, m('dribbling')),
-    shotSpeed: kick.shotSpeed * m('power'),
+    shotSpeed: kick.shotSpeed * (attrs.power < 5 ? multiplier(attrs.power, SHOT_STEP_BELOW) : m('power')),
     chargeTime: kick.chargeTime / m('power'),
     curl: kick.curl * multiplier(attrs.power, CURL_STEP),
     pokeRange: tackle.pokeRange * multiplier(attrs.tackling, POKE_STEP),
