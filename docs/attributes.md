@@ -29,7 +29,7 @@ own values when a match starts. The global `CONFIG` values are what a 5 gives.
 | Pace | Top speed without the ball | `player.runSpeed`, `player.sprintSpeed` |
 | Stamina | Sprint longer, recover sooner | `stamina.drain`, `stamina.regen`, `stamina.tiredTime` |
 | Dribbling | Tighter, faster turns with the ball | `player.turnRateWithBall`, `dribble.turnSlowdown`, `dribble.speedFactor` |
-| Power | Harder shots, charged sooner | `kick.shotSpeed`, `kick.chargeTime` |
+| Power | Harder shots, charged sooner, more curl | `kick.shotSpeed`, `kick.chargeTime`, `kick.curl` (8% a point) |
 | Tackling | Pokes and slides that reach and keep the ball | `tackle.pokeRange`, `tackle.slideReach`, `tackle.slideControlCos` |
 | Strength | Ride tackles, hold off bumps, get up sooner, shove harder | the hold chance, `dribble.loseDistance`, `tackle.stumbleTime`, `tackle.slideShove` |
 
@@ -50,6 +50,7 @@ screen and to tune one at a time.
 | Dribbling | Speed with the ball, vs without | 90% | 92% | 93% |
 | Power | Full-power shot | 27.7 m/s | 33.0 m/s | 39.6 m/s |
 | Power | Time to full power | 0.83 s | 0.70 s | 0.58 s |
+| Power | Most curl on a full-power shot, sideways over 15 m | 1.9 m | 2.6 m | 3.4 m |
 | Tackling | Poke range, edge to edge (8% a point) | 0.41 m | 0.60 m | 0.84 m |
 | Tackling | Slide reach | 0.63 m | 0.75 m | 0.90 m |
 | Tackling | Controlled-slide angle | 29° | 35° | 42° |

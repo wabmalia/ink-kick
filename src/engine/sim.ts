@@ -114,6 +114,10 @@ export interface Match {
   lastTouch: string | null;
   // Set once the match is won; everything stops.
   over: { winner: Team | null } | null;
+  // The ball's curl, radians its path turns a metre (anticlockwise
+  // positive), and the kick it can still be added to by aftertouch.
+  spin: number;
+  aftertouch: { player: string; dx: number; dy: number; left: number } | null;
 }
 
 export type SimEvent =
@@ -175,6 +179,8 @@ export function createMatch(players: Player[], opts: { kickoff?: Team; coin?: bo
     goals: [],
     lastTouch: null,
     over: null,
+    spin: 0,
+    aftertouch: null,
   };
   kickoff(match);
   if (match.practice) {
@@ -272,12 +278,23 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
     ball.vx = owner.vx + (tx - ball.x) * CONFIG.dribble.spring;
     ball.vy = owner.vy + (ty - ball.y) * CONFIG.dribble.spring;
   }
+  if (owner) {
+    match.spin = 0;
+  } else if (match.spin) {
+    // Curl: the ball's path turns, the spin fading as it goes.
+    const a = match.spin * Math.hypot(ball.vx, ball.vy) * dt;
+    const { vx, vy } = ball;
+    ball.vx = vx * Math.cos(a) - vy * Math.sin(a);
+    ball.vy = vx * Math.sin(a) + vy * Math.cos(a);
+    match.spin *= Math.exp(-CONFIG.kick.spinFade * dt);
+  }
   ball.x += ball.vx * dt;
   ball.y += ball.vy * dt;
   if (!owner) {
     ball.vx *= ball.damping;
     ball.vy *= ball.damping;
   }
+  const flight = { vx: ball.vx, vy: ball.vy };
 
   const players = match.players;
   for (let i = 0; i < players.length; i++) {
@@ -297,6 +314,11 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
     else for (const p of players) keepKickoffShape(p, p.team !== match.kickoffTeam);
   }
   keepBallIn(ball);
+  // Anything it hits (a body, a post, a wall) takes the spin off it.
+  if (Math.hypot(ball.vx - flight.vx, ball.vy - flight.vy) > 1) {
+    match.spin = 0;
+    match.aftertouch = null;
+  }
 
   match.pullingIn = Math.max(0, match.pullingIn - dt);
   const holder = byId(match.owner);
@@ -407,6 +429,8 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
         match.ball.vx = p.fx * speed;
         match.ball.vy = p.fy * speed;
         match.owner = null;
+        match.spin = 0;
+        match.aftertouch = { player: p.id, dx: p.fx, dy: p.fy, left: kick.aftertouch };
         p.cooldown = kick.cooldown;
         events.push({ type: 'kick', player: p.id, power: p.charge });
         p.charge = 0;
@@ -445,6 +469,16 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
   const dx = moving ? input.x / len : 0;
   const dy = moving ? input.y / len : 0;
 
+  // Aftertouch: just after your kick, holding a direction across its path
+  // curls it that way.
+  const at = match.aftertouch;
+  if (at?.player === p.id && at.left > 0) {
+    at.left -= dt;
+    const across = input.x * -at.dy + input.y * at.dx;
+    const build = (p.stats.curl / kick.curlBuild) * dt;
+    match.spin = Math.max(-p.stats.curl, Math.min(p.stats.curl, match.spin + across * build));
+  }
+
   // Stamina: sprinting drains it; running dry means a spell of being tired.
   const st = p.stats;
   if (p.tired > 0) {
@@ -472,7 +506,12 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
   const dribbling = match.owner === p.id;
   let mx = dx;
   let my = dy;
-  if (moving) {
+  if (moving && p.action === 'charge') {
+    // Powering up a kick, you can't turn: you go on the way you face, and
+    // the keys are free to set up the curl.
+    mx = p.fx;
+    my = p.fy;
+  } else if (moving) {
     let rate = pl.turnRate;
     if (dribbling) {
       // Quicker to turn the slower you're going: a pivot when stopped, so

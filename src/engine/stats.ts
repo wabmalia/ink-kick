@@ -17,6 +17,8 @@ export interface Stats {
   dribbleSpeed: number;
   shotSpeed: number;
   chargeTime: number;
+  // Most curl aftertouch can put on a kick, radians a metre.
+  curl: number;
   pokeRange: number;
   slideReach: number;
   slideControlCos: number;
@@ -35,6 +37,8 @@ export const STEP = 0.04;
 export const multiplier = (value: number, step = STEP) => 1 + step * (value - 5);
 // Poke range moves twice as far per point, so the ring you see changes.
 export const POKE_STEP = 0.08;
+// And curl, so Power's effect on it is plain to see.
+export const CURL_STEP = 0.08;
 
 export function statsFor(attrs: Attributes = evenAttributes()): Stats {
   const m = (k: keyof Attributes) => multiplier(attrs[k]);
@@ -52,6 +56,7 @@ export function statsFor(attrs: Attributes = evenAttributes()): Stats {
     dribbleSpeed: keep(dribble.speedFactor, m('dribbling')),
     shotSpeed: kick.shotSpeed * m('power'),
     chargeTime: kick.chargeTime / m('power'),
+    curl: kick.curl * multiplier(attrs.power, CURL_STEP),
     pokeRange: tackle.pokeRange * multiplier(attrs.tackling, POKE_STEP),
     slideReach: tackle.slideReach * m('tackling'),
     slideControlCos: Math.cos(Math.acos(tackle.slideControlCos) * m('tackling')),

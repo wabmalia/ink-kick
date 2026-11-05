@@ -389,4 +389,38 @@ describe('sim', () => {
     b.match.score.gold = 1;
     expect(run(b.match, ticks(2.1))).toContainEqual(expect.objectContaining({ type: 'end', winner: 'gold' }));
   });
+
+  it("can't turn while powering up a kick", () => {
+    const { match, me, them } = setup();
+    moveTo(them, 10, 8);
+    moveTo(me, -6, 0);
+    match.kickoffHeld = false;
+    giveBall(match, me);
+    run(match, 2, { me: { kick: true } });
+    expect(me.action).toBe('charge');
+    run(match, ticks(0.5), { me: { kick: true, y: -1 } });
+    expect(me.fx).toBeCloseTo(1, 5);
+    expect(Math.abs(me.y)).toBeLessThan(0.01);
+  });
+
+  it('curls a kick the way you hold just after it, more with more Power', () => {
+    // Where the ball is, across its path, 1.2 s after a half-power kick to
+    // the right, holding up (-y), down or nothing.
+    const across = (hold: number, power = 5) => {
+      const match = createMatch([createPlayer('me', 'gold', { ...SURE, power }), createPlayer('them', 'red', SURE)]);
+      match.owner = null;
+      match.kickoffHeld = false;
+      const [me, them] = match.players;
+      moveTo(them!, 10, 8);
+      moveTo(me!, -10, 0);
+      giveBall(match, me!);
+      run(match, ticks(0.35), { me: { kick: true } });
+      run(match, ticks(1.2), { me: { y: hold } });
+      return match.ball.y;
+    };
+    expect(Math.abs(across(0))).toBeLessThan(0.3);
+    expect(across(-1)).toBeLessThan(-1);
+    expect(across(1)).toBeGreaterThan(1);
+    expect(Math.abs(across(-1, 10))).toBeGreaterThan(Math.abs(across(-1, 1)) * 1.3);
+  });
 });

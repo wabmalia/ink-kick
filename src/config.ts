@@ -87,6 +87,15 @@ export const CONFIG = {
     moveFactor: 0.3,
     // The kicker can't trap their own kick for this long.
     cooldown: 0.3,
+    // Aftertouch: for this long after a kick, holding a direction across
+    // its path curls it that way, up to curl (radians its path turns a
+    // metre, so a hard shot bends as much over the same ground as a soft
+    // one), reached after curlBuild seconds of holding. The spin fades by
+    // spinFade a second.
+    aftertouch: 0.5,
+    curl: 0.036,
+    curlBuild: 0.25,
+    spinFade: 0.8,
   },
 
   tackle: {
