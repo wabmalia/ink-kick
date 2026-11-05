@@ -1,6 +1,6 @@
 # Ink Kick
 
-Floodlit arcade football, drawn in ink and watercolour. Three.js + TypeScript + Vite.
+Watercolour arcade football, solo or with friends. Three.js + TypeScript + Vite.
 
 ## Play
 

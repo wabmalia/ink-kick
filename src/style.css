@@ -252,7 +252,9 @@ html, body {
 .logo-k {
   position: relative;
   font-size: 1.22em;
-  line-height: 0.8;
+  /* No taller a line than the rest of the title (0.9em), so the bigger K
+     doesn't push the menu down. */
+  line-height: 0.74;
   margin: 0 -0.02em;
   padding: 0 0.04em;
   color: transparent;
