@@ -1,6 +1,7 @@
 import { CONFIG } from '../config';
 import type { Attributes } from '../game/attributes';
 import { statsFor, type Stats } from './stats';
+import { keeperBox, keeperInput, type KeeperState } from './keeper';
 
 // The match as plain 2D data: discs on a rectangle. Nothing here knows about
 // Three.js; the scene maps sim (x, y) to world (x, 0, y). Gold attacks +x,
@@ -55,6 +56,9 @@ export interface Player extends Disc {
   // Speeds, reaches and times from the player's attributes. Only the host's
   // sim reads them; they aren't sent in snapshots.
   stats: Stats;
+  // A goalkeeper: a bot kept to its small box, untouchable holding the ball.
+  keeper?: boolean;
+  keeperState?: KeeperState;
 }
 
 export interface Input {
@@ -139,7 +143,7 @@ export type SimEvent =
 const still = () => ({ vx: 0, vy: 0 });
 const NO_INPUT: Input = { x: 0, y: 0, kick: false, sprint: false };
 
-export function createPlayer(id: string, team: Team, attrs?: Attributes): Player {
+export function createPlayer(id: string, team: Team, attrs?: Attributes, keeper = false): Player {
   const p = CONFIG.player;
   return {
     id, team, x: 0, y: 0, ...still(),
@@ -149,12 +153,17 @@ export function createPlayer(id: string, team: Team, attrs?: Attributes): Player
     stamina: 1, tired: 0, sprinting: false,
     cooldown: 0, struck: false, kickDown: false, sprintDown: false,
     stats: statsFor(attrs),
+    ...(keeper ? { keeper: true } : {}),
   };
 }
 
 // kickoff: the team starting on the ball. coin: open with a coin toss
 // (a 'coin' event, then everyone held still while it plays).
-export function createMatch(players: Player[], opts: { kickoff?: Team; coin?: boolean; practice?: boolean; seed?: number; rules?: Rules } = {}): Match {
+/** The goalkeepers' ids, one a team. */
+export const KEEPER_IDS: Record<Team, string> = { gold: 'keeper-gold', red: 'keeper-red' };
+
+export function createMatch(players: Player[], opts: { kickoff?: Team; coin?: boolean; practice?: boolean; seed?: number; rules?: Rules; keepers?: boolean } = {}): Match {
+  if (opts.keepers) players = [...players, createPlayer(KEEPER_IDS.gold, 'gold', undefined, true), createPlayer(KEEPER_IDS.red, 'red', undefined, true)];
   const b = CONFIG.ball;
   const { width, goalWidth } = CONFIG.pitch;
   const post = (x: number, y: number): Disc => ({
@@ -197,17 +206,23 @@ export function kickoff(match: Match) {
   match.pullingIn = 0;
   match.kickoffHeld = true;
   for (const team of ['gold', 'red'] as const) {
-    match.players.filter(p => p.team === team).forEach((p, i, mine) => {
+    match.players.filter(p => p.team === team && !p.keeper).forEach((p, i, mine) => {
       Object.assign(p, {
         ...formation(team, i, mine.length), ...still(),
         action: 'none', actionT: 0, charge: 0, cooldown: 0,
       });
     });
   }
+  for (const p of match.players) {
+    if (!p.keeper) continue;
+    const { side, line } = keeperBox(p);
+    Object.assign(p, { x: line - side * CONFIG.keeper.lineOff, y: 0, fx: -side, fy: 0, ...still(), action: 'none', actionT: 0, charge: 0, cooldown: 0 });
+    p.keeperState = undefined;
+  }
   // Whoever of the kicking team stands nearest the spot steps up to it,
   // already on the ball.
   const kicker = match.players
-    .filter(p => p.team === match.kickoffTeam)
+    .filter(p => p.team === match.kickoffTeam && !p.keeper)
     .sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y))[0];
   if (kicker) {
     const side = kicker.team === 'gold' ? -1 : 1;
@@ -263,7 +278,16 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
   }
 
   if (match.restartIn <= 0 && !match.practice) match.clock += dt;
-  for (const p of match.players) control(match, p, inputs[p.id] ?? NO_INPUT, events);
+  for (const p of match.players) {
+    // Keepers think for themselves, unless someone's steering them.
+    let input = inputs[p.id];
+    if (!input && p.keeper) {
+      const move = keeperInput(match, p, () => random(match));
+      if (move.dive && p.action === 'none') dive(p, move.dive, events);
+      input = move.input;
+    }
+    control(match, p, input ?? NO_INPUT, events);
+  }
 
   for (const p of match.players) {
     p.x += p.vx * dt;
@@ -302,7 +326,8 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
     for (const post of match.posts) collide(players[i]!, post);
     // The dribbler's own body doesn't get in the ball's way; anyone else's
     // deadens it.
-    if (players[i] !== owner) collide(players[i]!, ball, CONFIG.ball.playerBounce);
+    // A keeper's ball is in its hands: nobody else touches it.
+    if (players[i] !== owner && !owner?.keeper) collide(players[i]!, ball, CONFIG.ball.playerBounce);
   }
   for (const post of match.posts) collide(ball, post);
 
@@ -327,7 +352,7 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
       ball.x - (holder.x + holder.fx * CONFIG.dribble.distance),
       ball.y - (holder.y + holder.fy * CONFIG.dribble.distance),
     );
-    if (gap > holder.stats.loseDistance) loseBall(match, holder, CONFIG.dribble.lostCooldown);
+    if (gap > holder.stats.loseDistance && !holder.keeper) loseBall(match, holder, CONFIG.dribble.lostCooldown);
   } else if (match.restartIn <= 0) {
     trap(match, events);
   }
@@ -357,6 +382,17 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
   }
 
   return events;
+}
+
+// A keeper throwing itself at a shot: a slide that way, turned to face it,
+// so it catches the ball if it meets it square and parries it otherwise.
+function dive(p: Player, to: { x: number; y: number }, events: SimEvent[]) {
+  setAction(p, 'slide');
+  p.fx = to.x;
+  p.fy = to.y;
+  p.vx = to.x * CONFIG.keeper.diveSpeed;
+  p.vy = to.y * CONFIG.keeper.diveSpeed;
+  events.push({ type: 'slide', player: p.id });
 }
 
 // First to the target, or ahead when the clock runs out; level at full
@@ -474,7 +510,12 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
   const at = match.aftertouch;
   if (at?.player === p.id && at.left > 0) {
     at.left -= dt;
-    const across = input.x * -at.dy + input.y * at.dx;
+    // Which side of the kick's path you hold: anything 35 degrees or more
+    // off it is a full curl that way (holding right on a kick up and right
+    // curls it right), less only close to straight on or straight back.
+    const held = Math.hypot(input.x, input.y);
+    const sin = held ? (input.x * -at.dy + input.y * at.dx) / held : 0;
+    const across = Math.sign(sin) * Math.min(1, Math.abs(sin) / 0.57);
     const build = (p.stats.curl / kick.curlBuild) * dt;
     match.spin = Math.max(-p.stats.curl, Math.min(p.stats.curl, match.spin + across * build));
   }
@@ -631,7 +672,10 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
   const footX = p.x + p.fx * (p.r + (poking ? 0.3 : 0.2));
   const footY = p.y + p.fy * (p.r + (poking ? 0.3 : 0.2));
   const victim = match.players.find(q => q.id === match.owner);
-  const reach = ball.r + (poking ? t.pokeReach * p.stats.tackleFactor : p.stats.slideReach);
+  // A keeper holding the ball can't be tackled.
+  if (victim?.keeper && victim !== p) return;
+  // A keeper's dive reaches less far than a slide tackle.
+  const reach = ball.r + (poking ? t.pokeReach * p.stats.tackleFactor : p.keeper ? CONFIG.keeper.diveReach : p.stats.slideReach);
   let ballHit = Math.hypot(ball.x - footX, ball.y - footY) < reach;
   // A poke also gets round the dribbler's body to a ball out of reach, as
   // long as the poker is facing them. Neither works from behind: a dribbler
@@ -688,6 +732,7 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
   if (poking) return;
   for (const q of match.players) {
     if (q === p || q.action === 'stumble') continue;
+    if (q.keeper && match.owner === q.id) continue;
     if (Math.hypot(q.x - p.x, q.y - p.y) > p.r + q.r + 0.1) continue;
     if (match.owner === q.id && isBehind(q, p)) {
       rearSlide(match, p, q, events);
@@ -767,6 +812,14 @@ function keepPlayerIn(p: Player) {
   const { width, height, margin } = CONFIG.pitch;
   wall(p, 'x', -width / 2 - margin + p.r, width / 2 + margin - p.r);
   wall(p, 'y', -height / 2 - margin + p.r, height / 2 + margin - p.r);
+  if (p.keeper) {
+    // Its small box, from just behind the line to the box's edge.
+    const { side, line, depth, half } = keeperBox(p);
+    const a = line + side * 0.2;
+    const b = line - side * depth;
+    wall(p, 'x', Math.min(a, b), Math.max(a, b));
+    wall(p, 'y', -half, half);
+  }
 }
 
 // Before the kickoff is taken: own half only, and the defending team outside

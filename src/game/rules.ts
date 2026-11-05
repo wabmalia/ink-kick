@@ -48,6 +48,24 @@ export function rulesLine(rules: Rules, clock: number): string {
   return '';
 }
 
+const KEEPERS_KEY = 'score.keepers';
+
+export function loadKeepers(): boolean {
+  try {
+    return localStorage.getItem(KEEPERS_KEY) === 'on';
+  } catch {
+    return false;
+  }
+}
+
+export function saveKeepers(on: boolean) {
+  try {
+    localStorage.setItem(KEEPERS_KEY, on ? 'on' : 'off');
+  } catch {
+    /* not remembered, that's all */
+  }
+}
+
 const KEY = 'score.rules';
 
 export function loadRules(): Rules {

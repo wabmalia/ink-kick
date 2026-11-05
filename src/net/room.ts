@@ -34,6 +34,7 @@ export class HostRoom {
   private members: Member[] = [];
   phase: RoomView['phase'] = 'lobby';
   rules: Rules = cleanRules(null);
+  keepers = false;
   match: Match | null = null;
   tick = 0;
 
@@ -48,6 +49,7 @@ export class HostRoom {
       phase: this.phase,
       members: this.members.map(({ id, name, team, connected }) => ({ id, name, team, connected })),
       rules: this.rules,
+      keepers: this.keepers,
     };
   }
 
@@ -94,6 +96,12 @@ export class HostRoom {
     this.changed();
   }
 
+  setKeepers(on: boolean) {
+    if (this.phase !== 'lobby') return;
+    this.keepers = on;
+    this.changed();
+  }
+
   input(id: string, input: WireInput) {
     const m = this.members.find(x => x.id === id);
     if (m && (!m.input || input.seq > m.input.seq)) m.input = input;
@@ -106,7 +114,7 @@ export class HostRoom {
     this.phase = 'match';
     this.tick = 0;
     const kickoff = Math.random() < 0.5 ? 'gold' : 'red';
-    this.match = createMatch(this.members.map(m => createPlayer(m.id, m.team, m.attrs)), { kickoff, coin: true, rules: this.rules });
+    this.match = createMatch(this.members.map(m => createPlayer(m.id, m.team, m.attrs)), { kickoff, coin: true, rules: this.rules, keepers: this.keepers });
     this.changed();
   }
 

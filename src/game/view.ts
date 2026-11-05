@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
-import type { SimEvent, Team } from '../engine/sim';
+import { KEEPER_IDS, type SimEvent, type Team } from '../engine/sim';
 import { createBall, rollBall } from '../scene/ball';
 import { Footballer } from '../scene/footballer';
 import { StickmanBatch } from '../scene/stickmen';
@@ -18,6 +18,8 @@ import type { ViewState } from './state';
 
 const KIT: Record<Team, number> = { gold: 0xf2b134, red: 0xe2553f };
 const DUMMY_KIT = 0xa7adc4;
+// Keepers wear their own colours, as they do.
+const KEEPER_KIT: Record<string, number> = { [KEEPER_IDS.gold]: 0x2ec4b6, [KEEPER_IDS.red]: 0x8a5cff };
 // Paler versions, for the splatter a kick throws up.
 const KIT_LIGHT: Record<Team, number> = { gold: 0xffe3a0, red: 0xffb4a6 };
 // Ground covered per footstep splash, in metres.
@@ -159,8 +161,8 @@ export class GameView {
       entry = undefined;
     }
     if (!entry) {
-      // The training ground's tackle dummy is grey, not a team's colour.
-      const f = new Footballer({ color: id === 'dummy' ? DUMMY_KIT : KIT[team] });
+      // The training ground's tackle dummy is grey, and keepers wear their own.
+      const f = new Footballer({ color: id === 'dummy' ? DUMMY_KIT : KEEPER_KIT[id] ?? KIT[team] });
       f.group.scale.setScalar(0.975);
       this.stickmen.add(f);
       entry = { team, f };

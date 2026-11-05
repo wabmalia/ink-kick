@@ -1,6 +1,6 @@
 import { Peer, type DataConnection, type PeerOptions } from 'peerjs';
 import type { Input, Rules, SimEvent, Team } from '../engine/sim';
-import { loadRules, saveRules } from '../game/rules';
+import { loadKeepers, loadRules, saveKeepers, saveRules } from '../game/rules';
 import { iceServers } from './relay';
 import {
   cleanInput, cleanName, newRoomCode, PEER_PREFIX, validTeam,
@@ -108,6 +108,7 @@ class Session {
   // How the solo match is won, and which one this is: Play again starts a
   // fresh one with the same rules.
   soloRules: Rules = loadRules();
+  soloKeepers = loadKeepers();
   soloRound = 0;
 
   playSolo(rules: Rules = this.soloRules) {
@@ -135,6 +136,7 @@ class Session {
     this.code = code;
     this.host = new HostRoom(code, this.me, this.name || 'Host', { change: room => this.set({ room }) }, loadAttributes());
     this.host.setRules(loadRules());
+    this.host.setKeepers(loadKeepers());
     store.set(sessionStorage, HOST_KEY, code);
     this.set({ status: 'connecting', message: resumeCode ? 'Reopening your room…' : 'Creating room…', room: this.host.view() });
     void this.openHostPeer(code, !resumeCode, 0);
@@ -220,6 +222,19 @@ class Session {
 
   start() {
     this.host?.start();
+  }
+
+  /** Goalkeepers in solo, remembered for next time. */
+  setSoloKeepers(on: boolean) {
+    this.soloKeepers = on;
+    saveKeepers(on);
+  }
+
+  /** The host picks whether the next match has goalkeepers. */
+  setKeepers(on: boolean) {
+    if (!this.host) return;
+    saveKeepers(on);
+    this.host.setKeepers(on);
   }
 
   /** The host picks how the next match is won. */

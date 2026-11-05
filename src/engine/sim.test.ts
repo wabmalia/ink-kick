@@ -423,4 +423,27 @@ describe('sim', () => {
     expect(across(1)).toBeGreaterThan(1);
     expect(Math.abs(across(-1, 10))).toBeGreaterThan(Math.abs(across(-1, 1)) * 1.3);
   });
+
+  it('curls fully holding right on a kick up and to the right', () => {
+    const bend = (hold: { x: number; y: number }) => {
+      const match = createMatch([createPlayer('me', 'gold', SURE), createPlayer('them', 'red', SURE)]);
+      match.owner = null;
+      match.kickoffHeld = false;
+      const [me, them] = match.players;
+      moveTo(them!, 10, 8);
+      const d = Math.SQRT1_2;
+      moveTo(me!, -8, 4, d, -d);
+      giveBall(match, me!);
+      run(match, ticks(0.35), { me: { kick: true } });
+      const x0 = match.ball.x;
+      const y0 = match.ball.y;
+      run(match, ticks(1), { me: hold });
+      // How far right of the straight line (up and right) it ended up.
+      return ((match.ball.x - x0) * d + (match.ball.y - y0) * d);
+    };
+    const sideways = bend({ x: 1, y: 1 });
+    const right = bend({ x: 1, y: 0 });
+    expect(right).toBeGreaterThan(0.5);
+    expect(right).toBeCloseTo(sideways, 1);
+  });
 });

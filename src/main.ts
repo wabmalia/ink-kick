@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 import { Bot } from './engine/ai';
-import { createMatch, createPlayer, step } from './engine/sim';
+import { createMatch, createPlayer, KEEPER_IDS, step } from './engine/sim';
 import { loadAttributes } from './game/attributes';
 import { enableKeys, keyboardInput } from './game/input';
 import { LocalMatch, RemoteMatch, type ViewState } from './game/state';
@@ -46,7 +46,7 @@ function attract(): Mode {
 function solo(): Mode {
   const kickoff = Math.random() < 0.5 ? 'gold' : 'red';
   const match = createMatch([createPlayer(session.me, 'gold', loadAttributes()), createPlayer('bot', 'red')], {
-    kickoff, coin: true, rules: session.soloRules,
+    kickoff, coin: true, rules: session.soloRules, keepers: session.soloKeepers,
   });
   const bot = new Bot('bot');
   return {
@@ -111,6 +111,8 @@ session.listen({
 
 // Who scored, by name: the bot, you, or whoever's in the room.
 const nameOf: NameOf = id => {
+  if (id === KEEPER_IDS.gold) return 'Gold keeper';
+  if (id === KEEPER_IDS.red) return 'Red keeper';
   if (mode.kind === 'solo') return id === 'bot' ? 'The bot' : session.name || 'You';
   return session.room?.members.find(m => m.id === id)?.name ?? null;
 };

@@ -22,8 +22,10 @@ export interface RoomView {
   hostId: string;
   phase: 'lobby' | 'match';
   members: MemberView[];
-  // How the next (or current) match is won; the host picks.
+  // How the next (or current) match is won, and whether it has goalkeepers;
+  // the host picks.
   rules: Rules;
+  keepers: boolean;
 }
 
 export const ACTIONS: Action[] = ['none', 'charge', 'poke', 'slide', 'recover', 'stumble'];

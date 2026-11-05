@@ -145,6 +145,39 @@ export const CONFIG = {
     rearSlideCooldown: 0.9,
   },
 
+  // The goalkeepers, when a match has them (engine/keeper.ts).
+  keeper: {
+    // The small box it's kept to: this deep from the goal line, this far
+    // either side of the middle.
+    boxDepth: 1.8,
+    boxHalf: 3.6,
+    // How far off its line it stands at the least.
+    lineOff: 0.55,
+    // A ball heading for goal faster than this is a shot. The keeper moves
+    // for it this long after it's struck, to where it guessed it would
+    // cross, off by up to error metres (more for harder shots).
+    shotSpeed: 6,
+    reaction: 0.22,
+    error: 1.8,
+    // A loose ball in its box slower than this, it goes and gets.
+    collectSpeed: 7,
+    // Holding the ball this long before kicking it out.
+    holdTime: 0.9,
+    // An attacker on the ball this close, it pokes at now and then (the
+    // chance a tick).
+    pokeAt: 1.3,
+    pokeChance: 0.04,
+    // Diving: for a shot crossing further than diveFrom from it that it
+    // can't reach on foot, arriving within diveWithin seconds.
+    diveFrom: 0.7,
+    diveWithin: 0.45,
+    diveSpeed: 6,
+    diveReach: 0.4,
+    // Kicking out: a teammate needs this much room either side of the
+    // ball's path from any opponent to be passed to.
+    clearPass: 1.4,
+  },
+
   // Pause after a goal before the kickoff.
   restartDelay: 1.8,
   // At a kickoff, the ball counts as played once it's this far off the spot.

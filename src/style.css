@@ -602,6 +602,17 @@ html, body {
 .rule[aria-checked='true'] { background: #ffc23a; border-color: #ffc23a; color: var(--ink); }
 .rule:disabled { cursor: default; }
 .rule:disabled:not([aria-checked='true']) { opacity: 0.45; }
+/* Goalkeepers: a switch, a small track and knob before the word. */
+.rule.switch { margin-top: 10px; align-self: flex-start; display: inline-flex; align-items: center; gap: 10px; }
+.rule.switch::before {
+  content: '';
+  width: 34px;
+  height: 18px;
+  border-radius: 10px;
+  background: rgba(238, 240, 250, 0.25) radial-gradient(circle at 9px 50%, var(--text) 6px, transparent 7px);
+  transition: background 0.15s;
+}
+.rule.switch[aria-checked='true']::before { background: var(--ink) radial-gradient(circle at 25px 50%, #ffc23a 6px, transparent 7px); }
 .solo-setup .card { width: min(600px, 100%); }
 .solo-setup .lobby-foot { width: min(600px, 100%); }
 

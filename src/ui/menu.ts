@@ -47,6 +47,20 @@ const showSoloRules = rulesPicker($('solo-rules'), rules => {
   showSoloRules(rules);
 });
 const showLobbyRules = rulesPicker($('lobby-rules'), rules => session.setRules(rules));
+
+// Goalkeepers on or off: a switch under the match lengths.
+function keepersSwitch(button: HTMLElement, flip: () => void) {
+  button.addEventListener('click', flip);
+  return (on: boolean, disabled = false) => {
+    button.setAttribute('aria-checked', String(on));
+    (button as HTMLButtonElement).disabled = disabled;
+  };
+}
+const showSoloKeepers = keepersSwitch($('solo-keepers'), () => {
+  session.setSoloKeepers(!session.soloKeepers);
+  showSoloKeepers(session.soloKeepers);
+});
+const showLobbyKeepers = keepersSwitch($('lobby-keepers'), () => session.setKeepers(!session.room?.keepers));
 const nameInput = $<HTMLInputElement>('name');
 const codeInput = $<HTMLInputElement>('code');
 const toastEl = $('toast');
@@ -83,6 +97,7 @@ function renderLobby() {
   $('kickoff').hidden = !session.isHost;
   $('waiting').hidden = session.isHost;
   showLobbyRules(room.rules, !session.isHost);
+  showLobbyKeepers(room.keepers, !session.isHost);
   $('rules-note').textContent = session.isHost ? 'How the match is won.' : 'How the match is won. The host picks.';
 }
 
@@ -127,6 +142,7 @@ export function render() {
       nameInput.value = session.name;
       if (soloSetup) {
         showSoloRules(session.soloRules);
+        showSoloKeepers(session.soloKeepers);
         return show('soloSetup');
       }
       return show('home');
