@@ -18,6 +18,9 @@ import { paintMenu } from './ui/wash';
 import { currentAttributes, mountLocker, onAttributes } from './ui/locker';
 import { Training } from './game/training';
 import { showTimes } from './ui/training-hud';
+import { matchEvents, resetMatchUi, type NameOf, type Role } from './ui/match-ui';
+import { rulesLine, rulesName } from './game/rules';
+import type { SimEvent } from './engine/sim';
 import './style.css';
 
 // Picks what's on the pitch from the session: bots playing behind the menu,
@@ -27,7 +30,7 @@ const view = new GameView(document.getElementById('game')!);
 
 type Mode =
   | { kind: 'attract'; local: LocalMatch }
-  | { kind: 'solo'; local: LocalMatch }
+  | { kind: 'solo'; local: LocalMatch; round: number }
   | { kind: 'training'; local: LocalMatch; training: Training }
   | { kind: 'host'; local: LocalMatch }
   | { kind: 'guest'; remote: RemoteMatch };
@@ -42,9 +45,14 @@ function attract(): Mode {
 
 function solo(): Mode {
   const kickoff = Math.random() < 0.5 ? 'gold' : 'red';
-  const match = createMatch([createPlayer(session.me, 'gold', loadAttributes()), createPlayer('bot', 'red')], { kickoff, coin: true });
+  const match = createMatch([createPlayer(session.me, 'gold', loadAttributes()), createPlayer('bot', 'red')], {
+    kickoff, coin: true, rules: session.soloRules,
+  });
   const bot = new Bot('bot');
-  return { kind: 'solo', local: new LocalMatch(match, () => step(match, { [session.me]: keyboardInput(), bot: bot.think(match) })) };
+  return {
+    kind: 'solo', round: session.soloRound,
+    local: new LocalMatch(match, () => step(match, { [session.me]: keyboardInput(), bot: bot.think(match) })),
+  };
 }
 
 function training(): Mode {
@@ -61,7 +69,7 @@ function pickMode() {
   const before = mode;
   const host = session.host;
   if (session.status === 'solo') {
-    if (mode.kind !== 'solo') mode = solo();
+    if (mode.kind !== 'solo' || mode.round !== session.soloRound) mode = solo();
   } else if (session.status === 'training') {
     if (mode.kind !== 'training') mode = training();
   } else if (inMatch() && host?.match) {
@@ -74,7 +82,10 @@ function pickMode() {
   } else if (mode.kind !== 'attract') {
     mode = attract();
   }
-  if (mode !== before) view.clearBanner();
+  if (mode !== before) {
+    view.clearBanner();
+    resetMatchUi();
+  }
   const trainingOn = mode.kind === 'training';
   view.setTraining(trainingOn);
   document.getElementById('train-panel')!.hidden = !trainingOn;
@@ -98,15 +109,30 @@ session.listen({
   },
 });
 
+// Who scored, by name: the bot, you, or whoever's in the room.
+const nameOf: NameOf = id => {
+  if (mode.kind === 'solo') return id === 'bot' ? 'The bot' : session.name || 'You';
+  return session.room?.members.find(m => m.id === id)?.name ?? null;
+};
+
 const EMPTY: ViewState = { players: [], ballX: 0, ballY: 0, score: { gold: 0, red: 0 } };
 let last = performance.now();
 let inputClock = 0;
+// Frames drawn less often when nobody needs 60 a second: the menu, with the
+// bots playing on behind it, at 30; and anything at 5 while the window isn't
+// focused (in another app, say). The game itself still runs every frame, so
+// a host keeps the match going. A hidden tab draws nothing at all: the
+// browser stops animation frames.
+const MENU_FRAME = 1 / 30;
+const UNFOCUSED_FRAME = 1 / 5;
+let undrawn = 0;
 
 function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   let state: ViewState;
   let me: string | null = null;
+  let played: SimEvent[] = [];
   let names: Map<string, string> | undefined;
 
   if (mode.kind === 'guest') {
@@ -116,11 +142,11 @@ function frame(now: number) {
       session.sendInput(keyboardInput());
       inputClock -= CONFIG.tick;
     }
-    view.play(mode.remote.advance(dt));
+    played = mode.remote.advance(dt);
     state = mode.remote.state() ?? EMPTY;
   } else {
     // A solo game waits while the help is open; anything with others can't.
-    if (!((mode.kind === 'solo' || mode.kind === 'training') && dialogOpen())) view.play(mode.local.advance(dt));
+    if (!((mode.kind === 'solo' || mode.kind === 'training') && dialogOpen())) played = mode.local.advance(dt);
     state = mode.local.state();
     if (mode.kind === 'training') {
       state.props = mode.training.drawnProps();
@@ -128,14 +154,35 @@ function frame(now: number) {
       showTimes(mode.training.stats());
     }
   }
+  view.play(played);
+  if (mode.kind === 'solo' || mode.kind === 'host' || mode.kind === 'guest') {
+    matchEvents(played, nameOf, mode.kind);
+    const rules = mode.kind === 'guest' ? session.room?.rules : mode.local.match.rules;
+    if (rules && rules.kind !== 'endless') state.info = [rulesName(rules), rulesLine(rules, state.clock ?? 0)];
+  }
   if (mode.kind !== 'attract') me = session.me;
   if (session.room && mode.kind !== 'solo' && mode.kind !== 'attract') {
     names = new Map(session.room.members.map(m => [m.id, m.name]));
   }
 
-  view.render(state, dt, now, me, names);
+  undrawn += dt;
+  const every = !document.hasFocus() ? UNFOCUSED_FRAME : mode.kind === 'attract' ? MENU_FRAME : 0;
+  // A little slack, so 30 a second on a 60 Hz screen is every other frame.
+  if (undrawn >= every - 0.004) {
+    view.render(state, Math.min(0.25, undrawn), now, me, names);
+    undrawn = 0;
+  }
   requestAnimationFrame(frame);
 }
+
+// Let go of the GPU when the page goes: leaving, closing, or reloading after
+// a change while developing.
+window.addEventListener('pagehide', () => view.dispose());
+// Back from the browser's back-forward cache, the GPU's already gone: start
+// afresh.
+window.addEventListener('pageshow', e => {
+  if (e.persisted) location.reload();
+});
 
 // Get relay credentials ready in the background (only on the live site).
 void iceServers();

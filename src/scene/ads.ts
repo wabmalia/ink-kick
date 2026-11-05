@@ -24,12 +24,12 @@ const ADS: Ad[] = [
 
 // Twice the board's size on screen at the broadcast camera, and the same
 // shape as a board, so the lettering isn't stretched.
-const BOARD = { len: 4.4, h: 1.05, gap: 0.12 };
-const PANEL_W = 1024;
-const PANEL_H = Math.round((PANEL_W * BOARD.h) / BOARD.len);
+export const BOARD = { len: 4.4, h: 1.05, gap: 0.12 };
+export const PANEL_W = 1024;
+export const PANEL_H = Math.round((PANEL_W * BOARD.h) / BOARD.len);
 // The lettering's dark or light outline, opposite its fill, so it survives
 // the paint pass's wobble and bleed.
-const outline = (ink: string) => (parseInt(ink.slice(1, 3), 16) > 128 ? '#0d1026' : '#fff4e0');
+export const outline = (ink: string) => (parseInt(ink.slice(1, 3), 16) > 128 ? '#0d1026' : '#fff4e0');
 
 function paintAds(canvas: HTMLCanvasElement) {
   const ctx = canvas.getContext('2d')!;
@@ -113,6 +113,26 @@ function row(group: THREE.Group, face: THREE.Material, frame: THREE.Material, fr
     box.castShadow = true;
     group.add(box);
   }
+}
+
+const FAR = () => {
+  const { width: W, height: H } = CONFIG.pitch;
+  const xEnd = W / 2 + 4.9;
+  return { from: new THREE.Vector2(-xEnd + 0.3, -(H / 2 + 4.9)), to: new THREE.Vector2(xEnd - 0.3, -(H / 2 + 4.9)) };
+};
+
+/** Where the faces of the two middle boards on the far side are, under the
+ *  billboard: the match information covers them during a match. */
+export function farMiddleBoards(): THREE.Vector3[] {
+  const { from, to } = FAR();
+  const length = to.x - from.x;
+  const count = Math.floor(length / (BOARD.len + BOARD.gap));
+  const used = count * (BOARD.len + BOARD.gap) - BOARD.gap;
+  const mid = Math.floor(count / 2);
+  return [mid - 1, mid].map(i => {
+    const d = (length - used) / 2 + i * (BOARD.len + BOARD.gap) + BOARD.len / 2;
+    return new THREE.Vector3(from.x + d, BOARD.h / 2 + 0.08, from.y + 0.09);
+  });
 }
 
 // The boards, added to the group of things that never move (they get baked).

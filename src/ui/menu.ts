@@ -1,10 +1,12 @@
-import type { Team } from '../engine/sim';
+import type { Rules, Team } from '../engine/sim';
+import { RULE_OPTIONS, ruleId } from '../game/rules';
 import { normalizeCode, type MemberView } from '../net/protocol';
 import { session } from '../net/session';
 import { helpOpen } from './help';
 
-// The screens over the stadium: home, connecting, error and the lobby, and
-// the buttons shown during a match. Everything is drawn from the session.
+// The screens over the stadium: home, solo setup, connecting, error and the
+// lobby, and the buttons shown during a match. Everything is drawn from the
+// session, except whether solo setup is open.
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -13,7 +15,38 @@ const screens = {
   connecting: $('connecting'),
   error: $('error'),
   lobby: $('lobby'),
+  soloSetup: $('solo-setup'),
 };
+// On the home screen: whether Play solo has been pressed, showing the match
+// lengths and Kick off.
+let soloSetup = false;
+
+// A row of match lengths to pick from. disabled: a guest, who sees the host's
+// choice but can't change it.
+function rulesPicker(host: HTMLElement, pick: (rules: Rules) => void) {
+  const buttons = RULE_OPTIONS.map(o => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'rule';
+    b.textContent = o.label;
+    b.setAttribute('role', 'radio');
+    b.addEventListener('click', () => pick(o.rules));
+    host.append(b);
+    return { b, id: o.id };
+  });
+  return (rules: Rules, disabled = false) => {
+    const chosen = ruleId(rules);
+    for (const { b, id } of buttons) {
+      b.setAttribute('aria-checked', String(id === chosen));
+      b.disabled = disabled;
+    }
+  };
+}
+const showSoloRules = rulesPicker($('solo-rules'), rules => {
+  session.soloRules = rules;
+  showSoloRules(rules);
+});
+const showLobbyRules = rulesPicker($('lobby-rules'), rules => session.setRules(rules));
 const nameInput = $<HTMLInputElement>('name');
 const codeInput = $<HTMLInputElement>('code');
 const toastEl = $('toast');
@@ -49,6 +82,8 @@ function renderLobby() {
   }
   $('kickoff').hidden = !session.isHost;
   $('waiting').hidden = session.isHost;
+  showLobbyRules(room.rules, !session.isHost);
+  $('rules-note').textContent = session.isHost ? 'How the match is won.' : 'How the match is won. The host picks.';
 }
 
 function memberItem(m: MemberView) {
@@ -90,6 +125,10 @@ export function render() {
       return show('lobby');
     default:
       nameInput.value = session.name;
+      if (soloSetup) {
+        showSoloRules(session.soloRules);
+        return show('soloSetup');
+      }
       return show('home');
   }
 }
@@ -114,7 +153,19 @@ function leaveInvite() {
 nameInput.addEventListener('change', () => session.setName(nameInput.value));
 codeInput.addEventListener('input', () => (codeInput.value = normalizeCode(codeInput.value)));
 
-$('play-solo').addEventListener('click', () => session.playSolo());
+$('play-solo').addEventListener('click', () => {
+  session.setName(nameInput.value);
+  soloSetup = true;
+  render();
+});
+$('solo-back').addEventListener('click', () => {
+  soloSetup = false;
+  render();
+});
+$('solo-kickoff').addEventListener('click', () => {
+  soloSetup = false;
+  session.playSolo(session.soloRules);
+});
 $('train').addEventListener('click', () => {
   session.setName(nameInput.value);
   session.train();
@@ -139,6 +190,10 @@ for (const id of ['cancel', 'error-back', 'lobby-leave', 'leave-match']) {
   });
 }
 $('end-match').addEventListener('click', () => session.end());
+// The scoreboard at the end of a match.
+$('play-again').addEventListener('click', () => session.playSolo());
+$('scoreboard-menu').addEventListener('click', () => session.leave());
+$('scoreboard-lobby').addEventListener('click', () => session.end());
 $('kickoff').addEventListener('click', () => session.start());
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-team]')) {
   button.addEventListener('click', () => session.setTeam(button.dataset.team as Team));

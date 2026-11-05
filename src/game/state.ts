@@ -31,6 +31,11 @@ export interface ViewState {
   props?: { x: number; y: number }[];
   // On the training ground: the ring around you showing your poke range.
   reach?: { x: number; y: number; r: number };
+  // Seconds of play, for the clock on the scoreboard.
+  clock?: number;
+  // On the boards under the billboard during a match: how it's won, and how
+  // it stands (the target, or the time left).
+  info?: [string, string];
 }
 
 const round = (v: number) => Math.round(v * 1000) / 1000;
@@ -41,6 +46,7 @@ export function toSnapshot(match: Match, tick: number): Snapshot {
     ball: [round(match.ball.x), round(match.ball.y)],
     owner: match.owner,
     score: [match.score.gold, match.score.red],
+    clock: Math.round(match.clock * 10) / 10,
     players: match.players.map(p => [
       p.id, p.team === 'gold' ? 0 : 1,
       round(p.x), round(p.y), round(p.vx), round(p.vy), round(p.fx), round(p.fy),
@@ -138,6 +144,7 @@ export class RemoteMatch {
       ballX: lerp(a.ball[0], b.ball[0], t),
       ballY: lerp(a.ball[1], b.ball[1], t),
       score: { gold: b.score[0], red: b.score[1] },
+      clock: lerp(a.clock, b.clock, t),
     };
   }
 }
@@ -188,6 +195,7 @@ export class LocalMatch {
       ballX: lerp(this.prevBall.x, match.ball.x, t),
       ballY: lerp(this.prevBall.y, match.ball.y, t),
       score: { ...match.score },
+      clock: match.clock,
     };
   }
 }

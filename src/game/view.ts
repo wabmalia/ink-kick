@@ -7,6 +7,7 @@ import { StickmanBatch } from '../scene/stickmen';
 import { PlayerGauges } from '../scene/gauges';
 import { BRIGHT, GRASS_DROPS, PAINTS, Splashes, TURF_DROPS } from '../scene/splashes';
 import { Billboard } from '../scene/billboard';
+import { InfoBoards } from '../scene/info-boards';
 import { buildStadium } from '../scene/stadium';
 import { buildReachRing, buildTraining } from '../scene/training';
 import { Watercolor } from '../scene/watercolor';
@@ -49,7 +50,7 @@ export class GameView {
   private labels = new Map<string, HTMLElement>();
   private projected = new THREE.Vector3();
   private billboard = new Billboard();
-  private banner: HTMLElement;
+  private infoBoards = new InfoBoards();
   private labelLayer: HTMLElement;
   private coinTimer: ReturnType<typeof setTimeout> | undefined;
   // The broadcast camera, and the close-up on the centre circle for the toss.
@@ -88,8 +89,7 @@ export class GameView {
     this.referee.group.scale.setScalar(0.975);
     this.referee.group.visible = false;
     this.stickmen.add(this.referee);
-    this.scene.add(this.billboard.group);
-    this.banner = document.getElementById('banner')!;
+    this.scene.add(this.billboard.group, this.infoBoards.group);
     this.labelLayer = document.getElementById('labels')!;
     window.addEventListener('resize', () => this.resize());
     this.resize();
@@ -175,15 +175,19 @@ export class GameView {
         this.footballers.get(e.player)?.f.kick(e.power);
         this.kicks.set(e.player, e.power);
       } else if (e.type === 'goal') {
-        this.banner.textContent = 'GOAL!';
-        this.banner.className = `banner show ${e.team}`;
+        // The banner itself is ui/match-ui.ts's.
         this.goalSplash();
-      } else if (e.type === 'kickoff') {
-        this.banner.className = 'banner';
       } else if (e.type === 'coin') {
         this.tossCoin(e.team);
       }
     }
+  }
+
+  /** Lets go of the GPU now, rather than whenever the browser gets round
+   *  to it: on leaving the page, and on every reload while developing. */
+  dispose() {
+    this.renderer.dispose();
+    this.renderer.forceContextLoss();
   }
 
   /** Shows or hides the training ground's markings. */
@@ -301,6 +305,7 @@ export class GameView {
     }
 
     this.billboard.setScore(state.score);
+    this.infoBoards.set(state.info);
     this.drawLabels(state, names);
     this.watercolor.render(this.scene, this.camera, now / 1000);
   }
@@ -529,7 +534,6 @@ export class GameView {
   }
 
   clearBanner() {
-    this.banner.className = 'banner';
     clearTimeout(this.coinTimer);
     document.getElementById('coin-toss')!.hidden = true;
     this.toss = null;

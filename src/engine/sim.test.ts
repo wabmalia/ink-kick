@@ -280,7 +280,7 @@ describe('sim', () => {
     const { match } = setup();
     Object.assign(match.ball, { x: 12, y: 0, vx: 15, vy: 0 });
     const events = run(match, 30);
-    expect(events).toContainEqual({ type: 'goal', team: 'gold' });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'goal', team: 'gold' }));
     expect(match.score).toEqual({ gold: 1, red: 0 });
     // The net holds the ball.
     expect(match.ball.x).toBeLessThanOrEqual(CONFIG.pitch.width / 2 + CONFIG.pitch.goalDepth);
@@ -303,7 +303,7 @@ describe('sim', () => {
   it('scores for red in the gold goal', () => {
     const { match } = setup();
     Object.assign(match.ball, { x: -12, y: 1, vx: -15, vy: 0 });
-    expect(run(match, 30)).toContainEqual({ type: 'goal', team: 'red' });
+    expect(run(match, 30)).toContainEqual(expect.objectContaining({ type: 'goal', team: 'red' }));
   });
 
   it('turning back with the ball stops, pivots and goes back along the same line', () => {
@@ -330,5 +330,63 @@ describe('sim', () => {
       expect(past).toBeLessThan(0.6);
       expect(me.vx).toBeLessThan(-3);
     }
+  });
+
+  it('credits the goal to whoever kicked it last, and spots an own goal', () => {
+    const { match, me, them } = setup();
+    moveTo(me, 10, 0);
+    moveTo(them, 0, 6);
+    giveBall(match, me);
+    run(match, ticks(0.3), { me: { kick: true } });
+    const events = run(match, ticks(1), { me: { kick: false } });
+    const goal = events.find(e => e.type === 'goal');
+    expect(goal).toMatchObject({ team: 'gold', scorer: 'me', own: false });
+
+    // Red's player shoots into red's own net (at +x): gold's goal, an own goal.
+    const b = setup();
+    moveTo(b.them, 10, 0, 1, 0);
+    moveTo(b.me, 0, 6);
+    giveBall(b.match, b.them);
+    run(b.match, ticks(0.3), { them: { kick: true } });
+    const own = run(b.match, ticks(1), { them: { kick: false } }).find(e => e.type === 'goal');
+    expect(own).toMatchObject({ team: 'gold', scorer: 'them', own: true });
+  });
+
+  it('ends a first-to match at the target, with every goal on the scoreboard', () => {
+    const { match } = setup();
+    match.rules = { kind: 'first', goals: 2 };
+    const shoot = () => {
+      Object.assign(match.ball, { x: 12, y: 0, vx: 15, vy: 0 });
+      match.owner = null;
+      return run(match, 30);
+    };
+    expect(shoot().some(e => e.type === 'end')).toBe(false);
+    run(match, ticks(CONFIG.restartDelay) + 1);
+    const events = shoot();
+    expect(events).toContainEqual(expect.objectContaining({ type: 'end', winner: 'gold', score: { gold: 2, red: 0 } }));
+    const end = events.find(e => e.type === 'end') as Extract<typeof events[number], { type: 'end' }>;
+    expect(end.goals).toHaveLength(2);
+    expect(end.goals[1]!.at).toBeGreaterThan(end.goals[0]!.at);
+    // Over: nothing moves any more.
+    const x = match.players[0]!.x;
+    run(match, 30, { me: { x: 1 } });
+    expect(match.players[0]!.x).toBe(x);
+  });
+
+  it('ends a timed match when the clock runs out, or at the next goal if level', () => {
+    const { match } = setup();
+    match.rules = { kind: 'timed', seconds: 2 };
+    // Level at full time: plays on.
+    expect(run(match, ticks(2.5)).some(e => e.type === 'end')).toBe(false);
+    expect(match.over).toBeNull();
+    // Golden goal.
+    Object.assign(match.ball, { x: -12, y: 1, vx: -15, vy: 0 });
+    match.owner = null;
+    expect(run(match, 30)).toContainEqual(expect.objectContaining({ type: 'end', winner: 'red' }));
+
+    const b = setup();
+    b.match.rules = { kind: 'timed', seconds: 2 };
+    b.match.score.gold = 1;
+    expect(run(b.match, ticks(2.1))).toContainEqual(expect.objectContaining({ type: 'end', winner: 'gold' }));
   });
 });

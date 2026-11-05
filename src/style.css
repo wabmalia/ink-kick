@@ -24,23 +24,75 @@ html, body {
 
 .banner {
   position: fixed;
-  top: 38%;
+  top: 30%;
   left: 0;
   right: 0;
   margin: 0;
-  text-align: center;
-  font-size: clamp(48px, 12vw, 120px);
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  opacity: 0;
-  transform: scale(0.7);
-  transition: opacity 0.25s, transform 0.35s cubic-bezier(0.2, 1.6, 0.4, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
   pointer-events: none;
-  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.6);
+  visibility: hidden;
 }
-.banner.show { opacity: 1; transform: scale(1); }
-.banner.gold { color: var(--gold); }
-.banner.red { color: var(--red); }
+.banner.show { visibility: visible; }
+/* GOAL!: each letter a splash of the scoring team's paint, popping in one
+   after another, its splatter flung out as it lands. */
+.goal-word { display: flex; gap: 14px; }
+.goal-letter {
+  position: relative;
+  isolation: isolate;
+  display: inline-block;
+  min-width: 1.05em;
+  padding: 2px 10px 8px;
+  text-align: center;
+  font-size: clamp(56px, 10vw, 112px);
+  line-height: 1;
+  color: var(--ink);
+  opacity: 0;
+  transform: scale(0.2) rotate(calc(var(--tilt) * 3));
+}
+.goal-letter::before,
+.goal-letter::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  background-position: center;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+.goal-letter::before { z-index: -1; inset: calc(var(--wash-pad, 0px) * -1); background-image: var(--wash, none); }
+.goal-letter::after { z-index: -2; inset: calc(var(--splat-pad, 0px) * -1); background-image: var(--splat, none); opacity: 0; }
+.banner.show .goal-letter { animation: letter-in 0.32s cubic-bezier(0.2, 1.7, 0.4, 1) calc(var(--i) * 70ms) forwards; }
+.banner.show .goal-letter::after { animation: splat-out 0.5s ease-out calc(var(--i) * 70ms + 80ms) forwards; }
+@keyframes letter-in {
+  to { opacity: 1; transform: scale(1) rotate(var(--tilt)); }
+}
+@keyframes splat-out {
+  0% { opacity: 0; transform: scale(0.6); }
+  40% { opacity: 1; }
+  100% { opacity: 0.85; transform: scale(1.08); }
+}
+.goal-by {
+  margin: 0;
+  min-height: 1.2em;
+  font-family: 'Caveat Brush', cursive;
+  font-size: clamp(26px, 3.4vw, 38px);
+  color: var(--text);
+  text-shadow: 0 2px 0 var(--ink), 0 0 14px rgba(13, 16, 38, 0.9);
+  opacity: 0;
+}
+.banner.show .goal-by { animation: by-in 0.3s ease-out 0.45s forwards; }
+.banner.gold .goal-by { color: #ffd774; }
+.banner.red .goal-by { color: #ff9c8a; }
+@keyframes by-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .banner.show .goal-letter,
+  .banner.show .goal-by { animation-duration: 0.01s; animation-delay: 0s; }
+}
 
 
 [hidden] { display: none !important; }
@@ -236,7 +288,7 @@ html, body {
 .code { color: var(--gold); letter-spacing: 0.12em; }
 
 .teams { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; width: 100%; }
-.team-col { display: flex; flex-direction: column; align-items: center; min-height: 260px; }
+.team-col { display: flex; flex-direction: column; align-items: center; min-height: 200px; }
 .team-col.gold h3 { color: #ffc53d; }
 .team-col.red h3 { color: #ff6e55; }
 .team-col ul { list-style: none; margin: 0 0 16px; padding: 0; width: 100%; flex: 1; font-family: 'Caveat', cursive; font-size: 24px; }
@@ -529,3 +581,81 @@ html, body {
 .train-hud dd { margin: 0; display: flex; flex-direction: column; font-family: 'Caveat', cursive; font-weight: 700; line-height: 1.1; }
 .train-hud .now { font-size: 21px; color: var(--text); font-variant-numeric: tabular-nums; }
 .train-hud .best { font-size: 17px; color: var(--soft); }
+
+/* --- Match length -------------------------------------------------------- */
+
+.rules-card { width: 100%; }
+.rules { display: flex; flex-wrap: wrap; gap: 8px; }
+.rule {
+  font: inherit;
+  font-family: 'Caveat Brush', cursive;
+  font-size: 21px;
+  padding: 4px 14px 6px;
+  color: var(--text);
+  background: #0d1024;
+  border: 2px solid rgba(238, 240, 250, 0.45);
+  border-radius: 14px 12px 15px 11px;
+  cursor: pointer;
+}
+.rule:hover:not(:disabled) { border-color: var(--gold); }
+.rule:focus-visible { outline: 3px dashed var(--text); outline-offset: 3px; }
+.rule[aria-checked='true'] { background: #ffc23a; border-color: #ffc23a; color: var(--ink); }
+.rule:disabled { cursor: default; }
+.rule:disabled:not([aria-checked='true']) { opacity: 0.45; }
+.solo-setup .card { width: min(600px, 100%); }
+.solo-setup .lobby-foot { width: min(600px, 100%); }
+
+/* --- Scoreboard ---------------------------------------------------------- */
+
+.scoreboard {
+  position: fixed;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, calc(100% - 32px));
+  padding: 22px 30px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: board-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+@keyframes board-in {
+  from { opacity: 0; transform: translate(-50%, -46%) scale(0.92); }
+}
+.scoreboard h2 { margin: 0 0 6px; font-size: 44px; }
+.scoreboard.gold h2 { color: #ffc53d; }
+.scoreboard.red h2 { color: #ff7660; }
+/* Gold on the left, Red on the right, all the way down. */
+.scoreboard .final,
+.goal-list li { display: grid; grid-template-columns: 1fr 110px 1fr; align-items: center; width: 100%; }
+.scoreboard .final { margin-bottom: 10px; font-family: 'Caveat Brush', cursive; }
+.final .side { font-size: 26px; }
+.final .side.gold { color: #ffc53d; text-align: right; }
+.final .side.red { color: #ff7660; text-align: left; }
+.final .score { font-size: 46px; line-height: 1; text-align: center; color: var(--text); }
+.goal-list {
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0;
+  width: 100%;
+  font-family: 'Caveat', cursive;
+  font-weight: 700;
+  font-size: 22px;
+  /* A long timed match scrolls the goals, not the card. */
+  max-height: min(46vh, 330px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.goal-list::-webkit-scrollbar { display: none; }
+.goal-list li { padding: 4px 0; border-top: 1px dashed rgba(238, 240, 250, 0.18); }
+.goal-list li:last-child { border-bottom: 1px dashed rgba(238, 240, 250, 0.18); }
+.goal-list .who { display: flex; flex-direction: column; line-height: 1.05; }
+.goal-list li.gold .who { color: #ffd774; text-align: right; align-items: flex-end; }
+.goal-list li.red .who { color: #ff9c8a; text-align: left; align-items: flex-start; }
+.goal-list .own { font-size: 16px; color: var(--soft); }
+.goal-list .mid { display: flex; flex-direction: column; align-items: center; line-height: 1.05; }
+.goal-list .at { font-size: 16px; color: var(--soft); font-variant-numeric: tabular-nums; }
+.goal-list .tally { font-family: 'Caveat Brush', cursive; font-size: 24px; color: var(--text); font-variant-numeric: tabular-nums; }
+.goal-list li.none { display: block; text-align: center; color: var(--soft); border: 0; }
+.scoreboard-actions { display: flex; gap: 14px; align-items: center; justify-content: center; }

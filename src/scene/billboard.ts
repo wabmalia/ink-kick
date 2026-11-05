@@ -9,6 +9,7 @@ import type { Team } from '../engine/sim';
 
 const W = 512;
 const H = 224;
+const SCALE = 2;
 const { height } = CONFIG.pitch;
 const BOARD = { w: 9, h: 3.94 };
 // Standing on the front of the far stand (see stadium.ts: apron, then a gap).
@@ -59,11 +60,12 @@ export class Billboard {
   private hit = new THREE.Vector3();
 
   constructor() {
-    this.canvas.width = W;
-    this.canvas.height = H;
+    // Twice the size it's drawn at, so the numbers stay crisp on the board.
+    this.canvas.width = W * SCALE;
+    this.canvas.height = H * SCALE;
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace;
-    this.texture.anisotropy = 4;
+    this.texture.anisotropy = 16;
     // Lit by itself, so it reads at night whatever the floodlights do.
     this.face = new THREE.Mesh(
       new THREE.PlaneGeometry(BOARD.w, BOARD.h),
@@ -111,6 +113,7 @@ export class Billboard {
     if (key === this.shown) return;
     this.shown = key;
     const ctx = this.canvas.getContext('2d')!;
+    ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
     ctx.clearRect(0, 0, W, H);
     rough(ctx, 7);
     ctx.fillStyle = '#1f2552';
@@ -132,20 +135,22 @@ export class Billboard {
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const label = (text: string, x: number, colour: string) => {
-      ctx.font = "44px 'Caveat Brush', cursive";
+    ctx.lineJoin = 'round';
+    // Dark outlines round the lettering, as on the advert boards, so it
+    // survives the paint pass's wobble and bleed.
+    const text = (t: string, x: number, y: number, size: number, colour: string) => {
+      ctx.font = `${size}px 'Caveat Brush', cursive`;
+      ctx.lineWidth = size * 0.14;
+      ctx.strokeStyle = '#0d1026';
+      ctx.strokeText(t, x, y);
       ctx.fillStyle = colour;
-      ctx.fillText(text, x, 62);
+      ctx.fillText(t, x, y);
     };
-    label('GOLD', 128, '#ffc53d');
-    label('RED', 384, '#ff7660');
-    ctx.font = "120px 'Caveat Brush', cursive";
-    ctx.fillStyle = '#eef0fa';
-    ctx.fillText(String(score.gold), 128, 148);
-    ctx.fillText(String(score.red), 384, 148);
-    ctx.font = "80px 'Caveat Brush', cursive";
-    ctx.fillStyle = '#9aa0bf';
-    ctx.fillText('-', 256, 140);
+    text('GOLD', 128, 56, 50, '#ffc53d');
+    text('RED', 384, 56, 50, '#ff7660');
+    text(String(score.gold), 128, 150, 150, '#f4f5fb');
+    text(String(score.red), 384, 150, 150, '#f4f5fb');
+    text('-', 256, 142, 90, '#9aa0bf');
     this.texture.needsUpdate = true;
   }
 }

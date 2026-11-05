@@ -99,6 +99,10 @@ export class Splashes {
     geo.setAttribute('instanceAlpha', this.alphas);
     this.mesh = new THREE.InstancedMesh(geo, fadingMaterial(), MAX);
     this.mesh.frustumCulled = false;
+    // After the grass and the ground, which are see-through too and sit at
+    // the same spot: left to a tie, which one drew last came down to the
+    // order things were made in, and the grass painted over every splash.
+    this.mesh.renderOrder = 1;
     for (let i = 0; i < MAX; i++) {
       this.drops.push({ x: 0, z: 0, vx: 0, vz: 0, size: 0, spin: 0, age: 1, life: 1, alpha: 0, fadeFrom: 0, stain: false });
       this.mesh.setColorAt(i, this.color.setHex(0xffffff));

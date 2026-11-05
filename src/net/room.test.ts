@@ -100,4 +100,21 @@ describe('host room', () => {
     expect(host.y).toBeGreaterThan(actual);
     expect(host.y).toBeLessThan(actual + 3);
   });
+
+  it('plays the match length the host picked, fixed once it kicks off', () => {
+    const r = room();
+    const a = link();
+    r.join('a', 'Ana', a.l);
+    r.setRules({ kind: 'timed', seconds: 180 });
+    expect(r.view().rules).toEqual({ kind: 'timed', seconds: 180 });
+    expect(a.sent[a.sent.length - 1]).toMatchObject({ t: 'room', room: { rules: { kind: 'timed', seconds: 180 } } });
+    // Anything not on offer falls back to the default.
+    r.setRules({ kind: 'first', goals: 99 });
+    expect(r.view().rules).toEqual({ kind: 'first', goals: 3 });
+    r.setRules({ kind: 'first', goals: 2 });
+    r.start();
+    expect(r.match!.rules).toEqual({ kind: 'first', goals: 2 });
+    r.setRules({ kind: 'timed', seconds: 300 });
+    expect(r.match!.rules).toEqual({ kind: 'first', goals: 2 });
+  });
 });

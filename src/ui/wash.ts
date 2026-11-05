@@ -268,6 +268,47 @@ function paintSplat(ctx: CanvasRenderingContext2D, w: number, h: number, colours
   }
 }
 
+// A GOAL! letter's splash: a round, uneven blot of the team's paint with a
+// paler heart and a darker dried rim, and a few drops beside it.
+function paintBlot(ctx: CanvasRenderingContext2D, w: number, h: number, pad: number, wash: Wash, rand: () => number) {
+  const cx = pad + w / 2;
+  const cy = pad + h / 2;
+  const blob = (x: number, y: number, r: number, colour: string, alpha: number, rim?: string) => {
+    const edge = loopNoise(rand, 14);
+    const pts: [number, number][] = [];
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * Math.PI * 2;
+      const rr = r * (1 + edge(i / 48) * 0.22);
+      pts.push([x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.94]);
+    }
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    trace(ctx, pts);
+    ctx.fillStyle = colour;
+    ctx.fill();
+    if (rim) {
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = Math.max(2, r * 0.07);
+      ctx.strokeStyle = rim;
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
+  const r = Math.min(w, h) * 0.56;
+  blob(cx, cy, r, wash.base, 1, wash.rim);
+  blob(cx - r * 0.2, cy - r * 0.25, r * 0.5, wash.lights[0]!, 0.45);
+  blob(cx + r * 0.3, cy + r * 0.3, r * 0.35, wash.darks[0]!, 0.35);
+  // Drops thrown off as it landed.
+  for (let i = 0; i < 6; i++) {
+    const a = rand() * Math.PI * 2;
+    const d = r * (1.12 + rand() * 0.3);
+    blob(cx + Math.cos(a) * d, cy + Math.sin(a) * d, r * (0.05 + rand() * 0.08), wash.base, 0.9);
+  }
+}
+
+/** Paints one element now, for things made after the menu was painted. */
+export const paintNow = (el: HTMLElement) => paint(el);
+
 function paint(el: HTMLElement) {
   const w = el.offsetWidth;
   const h = el.offsetHeight;
@@ -276,7 +317,9 @@ function paint(el: HTMLElement) {
   // A dialog may scroll on a short window, which clips anything painted
   // past its box.
   const clips = el.tagName === 'DIALOG';
-  const pad = title ? TITLE_PAD : clips ? 0 : PAD;
+  const letter = el.classList.contains('goal-letter');
+  // A GOAL! letter's blot and drops reach well past its box.
+  const pad = title ? TITLE_PAD : clips ? 0 : letter ? 40 : PAD;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const canvas = document.createElement('canvas');
   canvas.width = Math.ceil((w + pad * 2) * dpr);
@@ -285,6 +328,7 @@ function paint(el: HTMLElement) {
   ctx.scale(dpr, dpr);
   const rand = seeded(hash(el.id || el.className + (el.textContent ?? '')));
   if (title) paintSplash(ctx, w, h, rand);
+  else if (letter) paintBlot(ctx, w, h, pad, WASHES[el.dataset.wash ?? 'gold'] ?? WASHES.gold!, rand);
   else paintWash(ctx, w, h, WASHES[el.dataset.wash ?? 'card'] ?? WASHES.card!, rand, pad, clips ? 9 : 0);
   el.style.setProperty('--wash', `url("${canvas.toDataURL()}")`);
   el.style.setProperty('--wash-pad', `${pad}px`);

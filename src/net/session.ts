@@ -1,5 +1,6 @@
 import { Peer, type DataConnection, type PeerOptions } from 'peerjs';
-import type { Input, SimEvent, Team } from '../engine/sim';
+import type { Input, Rules, SimEvent, Team } from '../engine/sim';
+import { loadRules, saveRules } from '../game/rules';
 import { iceServers } from './relay';
 import {
   cleanInput, cleanName, newRoomCode, PEER_PREFIX, validTeam,
@@ -104,8 +105,16 @@ class Session {
     return this.role === 'host';
   }
 
-  playSolo() {
+  // How the solo match is won, and which one this is: Play again starts a
+  // fresh one with the same rules.
+  soloRules: Rules = loadRules();
+  soloRound = 0;
+
+  playSolo(rules: Rules = this.soloRules) {
     this.teardown();
+    this.soloRules = rules;
+    saveRules(rules);
+    this.soloRound++;
     this.set({ status: 'solo' });
     location.hash = '#/solo';
   }
@@ -125,6 +134,7 @@ class Session {
     this.role = 'host';
     this.code = code;
     this.host = new HostRoom(code, this.me, this.name || 'Host', { change: room => this.set({ room }) }, loadAttributes());
+    this.host.setRules(loadRules());
     store.set(sessionStorage, HOST_KEY, code);
     this.set({ status: 'connecting', message: resumeCode ? 'Reopening your room…' : 'Creating room…', room: this.host.view() });
     void this.openHostPeer(code, !resumeCode, 0);
@@ -210,6 +220,13 @@ class Session {
 
   start() {
     this.host?.start();
+  }
+
+  /** The host picks how the next match is won. */
+  setRules(rules: Rules) {
+    if (!this.host) return;
+    saveRules(rules);
+    this.host.setRules(rules);
   }
 
   end() {

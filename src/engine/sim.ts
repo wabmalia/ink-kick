@@ -64,6 +64,24 @@ export interface Input {
   sprint: boolean;
 }
 
+// How a match is won: first to a number of goals ("best of" 2n-1), most
+// goals when the clock runs out (then a golden goal if level), or never (the
+// bots behind the menu).
+export type Rules =
+  | { kind: 'endless' }
+  | { kind: 'first'; goals: number }
+  | { kind: 'timed'; seconds: number };
+
+export interface GoalRecord {
+  team: Team;
+  // Who last kicked, dribbled or tackled the ball, if anyone.
+  scorer: string | null;
+  // Put in their own net: the scorer is on the other team.
+  own: boolean;
+  // Seconds of play when it went in.
+  at: number;
+}
+
 export interface Match {
   players: Player[];
   ball: Disc;
@@ -88,6 +106,14 @@ export interface Match {
   practice: boolean;
   // State of the match's random numbers.
   seed: number;
+  rules: Rules;
+  // Seconds of play: stopped for the coin toss and after each goal.
+  clock: number;
+  goals: GoalRecord[];
+  // Who last kicked, dribbled or tackled the ball.
+  lastTouch: string | null;
+  // Set once the match is won; everything stops.
+  over: { winner: Team | null } | null;
 }
 
 export type SimEvent =
@@ -99,7 +125,9 @@ export type SimEvent =
   | { type: 'feint'; player: string }
   // A dribbler riding a tackle that reached them.
   | { type: 'shrug'; player: string; from: string }
-  | { type: 'goal'; team: Team }
+  | { type: 'goal'; team: Team; scorer: string | null; own: boolean; at: number }
+  // The match is won: who by, and every goal, for the scoreboard.
+  | { type: 'end'; winner: Team | null; score: Record<Team, number>; goals: GoalRecord[] }
   // At the start of a match: who the coin gave the kickoff to.
   | { type: 'coin'; team: Team }
   | { type: 'kickoff' };
@@ -122,7 +150,7 @@ export function createPlayer(id: string, team: Team, attrs?: Attributes): Player
 
 // kickoff: the team starting on the ball. coin: open with a coin toss
 // (a 'coin' event, then everyone held still while it plays).
-export function createMatch(players: Player[], opts: { kickoff?: Team; coin?: boolean; practice?: boolean; seed?: number } = {}): Match {
+export function createMatch(players: Player[], opts: { kickoff?: Team; coin?: boolean; practice?: boolean; seed?: number; rules?: Rules } = {}): Match {
   const b = CONFIG.ball;
   const { width, goalWidth } = CONFIG.pitch;
   const post = (x: number, y: number): Disc => ({
@@ -142,6 +170,11 @@ export function createMatch(players: Player[], opts: { kickoff?: Team; coin?: bo
     kickoffHeld: true,
     practice: !!opts.practice,
     seed: opts.seed ?? Math.floor(Math.random() * 2 ** 32),
+    rules: opts.rules ?? { kind: 'endless' },
+    clock: 0,
+    goals: [],
+    lastTouch: null,
+    over: null,
   };
   kickoff(match);
   if (match.practice) {
@@ -211,6 +244,7 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
     match.coinPending = false;
     events.push({ type: 'coin', team: match.kickoffTeam });
   }
+  if (match.over) return events;
   if (match.holdFor > 0) {
     match.holdFor = Math.max(0, match.holdFor - dt);
     // Buttons held through the toss don't fire the moment it ends.
@@ -222,6 +256,7 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
     return events;
   }
 
+  if (match.restartIn <= 0 && !match.practice) match.clock += dt;
   for (const p of match.players) control(match, p, inputs[p.id] ?? NO_INPUT, events);
 
   for (const p of match.players) {
@@ -274,6 +309,7 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
   } else if (match.restartIn <= 0) {
     trap(match, events);
   }
+  if (match.owner) match.lastTouch = match.owner;
 
   if (match.restartIn > 0) {
     match.restartIn -= dt;
@@ -283,17 +319,36 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
       events.push({ type: 'kickoff' });
     }
   } else if (!match.practice) {
-    const scorer = goalScoredBy(ball);
-    if (scorer) {
-      match.score[scorer]++;
-      match.kickoffTeam = scorer === 'gold' ? 'red' : 'gold';
+    const team = goalScoredBy(ball);
+    if (team) {
+      match.score[team]++;
+      match.kickoffTeam = team === 'gold' ? 'red' : 'gold';
       match.restartIn = CONFIG.restartDelay;
       match.owner = null;
-      events.push({ type: 'goal', team: scorer });
+      const scorer = match.lastTouch;
+      const by = match.players.find(p => p.id === scorer);
+      const goal: GoalRecord = { team, scorer, own: !!by && by.team !== team, at: match.clock };
+      match.goals.push(goal);
+      events.push({ type: 'goal', ...goal });
     }
+    endIfWon(match, events);
   }
 
   return events;
+}
+
+// First to the target, or ahead when the clock runs out; level at full
+// time, the next goal wins.
+function endIfWon(match: Match, events: SimEvent[]) {
+  const { rules, score } = match;
+  const leader: Team | null = score.gold > score.red ? 'gold' : score.red > score.gold ? 'red' : null;
+  const won =
+    (rules.kind === 'first' && leader !== null && score[leader] >= rules.goals) ||
+    (rules.kind === 'timed' && leader !== null && match.clock >= rules.seconds);
+  if (!won) return;
+  match.over = { winner: leader };
+  match.restartIn = 0;
+  events.push({ type: 'end', winner: leader, score: { ...score }, goals: match.goals.map(g => ({ ...g })) });
 }
 
 function setAction(p: Player, action: Action) {
@@ -483,6 +538,7 @@ function rearSlide(match: Match, p: Player, q: Player, events: SimEvent[]) {
   const t = CONFIG.tackle;
   events.push({ type: 'steal', player: p.id, from: q.id });
   loseBall(match, q, t.stealCooldown);
+  match.lastTouch = p.id;
   match.ball.vx = q.fx * t.rearKnock + q.vx * 0.3;
   match.ball.vy = q.fy * t.rearKnock + q.vy * 0.3;
   p.cooldown = Math.max(p.cooldown, t.rearSlideCooldown);
@@ -566,6 +622,7 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
       loseBall(match, victim, t.stealCooldown);
       events.push({ type: 'steal', player: p.id, from: victim.id });
     }
+    match.lastTouch = p.id;
     if (poking) {
       // Knocked loose back towards the poker's feet, for them to collect.
       const dx = footX - ball.x;

@@ -1,4 +1,4 @@
-import type { Action, Input, SimEvent, Team } from '../engine/sim';
+import type { Action, Input, Rules, SimEvent, Team } from '../engine/sim';
 import type { Attributes } from '../game/attributes';
 
 // Messages between the host and guests. Each guest holds two connections to
@@ -22,6 +22,8 @@ export interface RoomView {
   hostId: string;
   phase: 'lobby' | 'match';
   members: MemberView[];
+  // How the next (or current) match is won; the host picks.
+  rules: Rules;
 }
 
 export const ACTIONS: Action[] = ['none', 'charge', 'poke', 'slide', 'recover', 'stumble'];
@@ -38,6 +40,7 @@ export interface Snapshot {
   ball: [number, number];
   owner: string | null;
   score: [number, number];
+  clock: number;
   players: PlayerState[];
 }
 

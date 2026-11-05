@@ -16,7 +16,26 @@
   <div id="game"></div>
   <div class="labels" id="labels"></div>
 
-  <p class="banner" id="banner"></p>
+  <div class="banner" id="banner" aria-live="polite">
+    <div class="goal-word" id="goal-word"></div>
+    <p class="goal-by" id="goal-by"></p>
+  </div>
+
+  <section class="card scoreboard" id="scoreboard" aria-labelledby="scoreboard-title" hidden>
+    <h2 id="scoreboard-title"></h2>
+    <div class="final">
+      <span class="side gold">Gold</span>
+      <span class="score" id="scoreboard-final"></span>
+      <span class="side red">Red</span>
+    </div>
+    <ol class="goal-list" id="goal-list"></ol>
+    <div class="scoreboard-actions">
+      <button class="ink-btn" id="scoreboard-menu" type="button">Menu</button>
+      <button class="brush gold" id="play-again" type="button">Play again</button>
+      <button class="brush gold" id="scoreboard-lobby" type="button">Back to lobby</button>
+      <p class="waiting" id="scoreboard-waiting">Waiting for the host…</p>
+    </div>
+  </section>
   <div class="coin-toss" id="coin-toss" hidden>
     <div class="coin" id="coin">
       <span class="face gold">G</span>
@@ -139,6 +158,18 @@
       </div>
     </section>
 
+    <section class="screen solo-setup" id="solo-setup" hidden>
+      <section class="card">
+        <h2>Solo</h2>
+        <p class="card-note">You against the bot. How long a match?</p>
+        <div class="rules" id="solo-rules" role="radiogroup" aria-label="Match length"></div>
+      </section>
+      <footer class="lobby-foot">
+        <button class="ink-btn" id="solo-back" type="button">Back</button>
+        <button class="brush green big" id="solo-kickoff" type="button">Kick off!</button>
+      </footer>
+    </section>
+
     <section class="screen notice" id="connecting" hidden>
       <p class="card" id="connecting-msg"></p>
       <button class="ink-btn" id="cancel" type="button">Back</button>
@@ -166,6 +197,11 @@
           <button class="brush red" data-team="red" type="button">Play for Red</button>
         </section>
       </div>
+      <section class="card rules-card">
+        <h2>Match</h2>
+        <p class="card-note" id="rules-note">How the match is won.</p>
+        <div class="rules" id="lobby-rules" role="radiogroup" aria-label="Match length"></div>
+      </section>
       <footer class="lobby-foot">
         <button class="ink-btn" id="lobby-leave" type="button">Leave</button>
         <button class="brush green big" id="kickoff" type="button">Kick off!</button>

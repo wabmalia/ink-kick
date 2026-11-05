@@ -1,8 +1,9 @@
 import { CONFIG } from '../config';
 import {
   addPlayer, createMatch, createPlayer, step,
-  type Input, type Match, type SimEvent, type Team,
+  type Input, type Match, type Rules, type SimEvent, type Team,
 } from '../engine/sim';
+import { cleanRules } from '../game/rules';
 import { toSnapshot } from '../game/state';
 import { cleanAttributes, type Attributes } from '../game/attributes';
 import { cleanName, type MemberView, type RoomView, type ToClient, type WireInput } from './protocol';
@@ -32,6 +33,7 @@ const NO_INPUT: Input = { x: 0, y: 0, kick: false, sprint: false };
 export class HostRoom {
   private members: Member[] = [];
   phase: RoomView['phase'] = 'lobby';
+  rules: Rules = cleanRules(null);
   match: Match | null = null;
   tick = 0;
 
@@ -45,6 +47,7 @@ export class HostRoom {
       hostId: this.hostId,
       phase: this.phase,
       members: this.members.map(({ id, name, team, connected }) => ({ id, name, team, connected })),
+      rules: this.rules,
     };
   }
 
@@ -85,6 +88,12 @@ export class HostRoom {
     this.changed();
   }
 
+  setRules(rules: Rules) {
+    if (this.phase !== 'lobby') return;
+    this.rules = cleanRules(rules);
+    this.changed();
+  }
+
   input(id: string, input: WireInput) {
     const m = this.members.find(x => x.id === id);
     if (m && (!m.input || input.seq > m.input.seq)) m.input = input;
@@ -97,7 +106,7 @@ export class HostRoom {
     this.phase = 'match';
     this.tick = 0;
     const kickoff = Math.random() < 0.5 ? 'gold' : 'red';
-    this.match = createMatch(this.members.map(m => createPlayer(m.id, m.team, m.attrs)), { kickoff, coin: true });
+    this.match = createMatch(this.members.map(m => createPlayer(m.id, m.team, m.attrs)), { kickoff, coin: true, rules: this.rules });
     this.changed();
   }
 

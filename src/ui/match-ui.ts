@@ -1,0 +1,119 @@
+import type { GoalRecord, SimEvent, Team } from '../engine/sim';
+import { clockText } from '../game/rules';
+import { paintNow } from './wash';
+
+// What a match shows on top of the pitch: the goal banner, its letters
+// splashing in one after another with the scorer under them, and the
+// scoreboard once the match is won.
+
+export type Role = 'solo' | 'host' | 'guest';
+export type NameOf = (id: string) => string | null;
+
+const $ = (id: string) => document.getElementById(id)!;
+const banner = $('banner');
+const word = $('goal-word');
+const by = $('goal-by');
+const board = $('scoreboard');
+
+const TEAM: Record<Team, string> = { gold: 'Gold', red: 'Red' };
+// How long the last goal's banner stays up before the scoreboard comes in.
+const BOARD_DELAY = 1700;
+let boardTimer: ReturnType<typeof setTimeout> | undefined;
+
+function scorerLine(goal: Pick<GoalRecord, 'scorer' | 'own'>, nameOf: NameOf) {
+  const name = goal.scorer ? nameOf(goal.scorer) : null;
+  if (!name) return '';
+  return goal.own ? `Own goal · ${name}` : name;
+}
+
+function showGoal(goal: GoalRecord, nameOf: NameOf) {
+  // Each letter its own splash of the scoring team's paint, tipped a little
+  // this way or that, popping in one after another.
+  word.replaceChildren(...[...'GOAL!'].map((ch, i) => {
+    const letter = document.createElement('span');
+    letter.className = 'goal-letter';
+    letter.dataset.wash = goal.team;
+    letter.textContent = ch;
+    letter.style.setProperty('--i', String(i));
+    letter.style.setProperty('--tilt', `${[-7, 4, -3, 6, -5][i]}deg`);
+    return letter;
+  }));
+  by.textContent = scorerLine(goal, nameOf);
+  banner.className = `banner ${goal.team}`;
+  for (const letter of word.children) paintNow(letter as HTMLElement);
+  // Restart the animation even if a banner was already up.
+  void banner.offsetWidth;
+  banner.classList.add('show');
+}
+
+export function hideGoal() {
+  banner.className = 'banner';
+}
+
+function showBoard(end: Extract<SimEvent, { type: 'end' }>, nameOf: NameOf, role: Role) {
+  const title = $('scoreboard-title');
+  title.textContent = end.winner ? `${TEAM[end.winner]} wins!` : 'A draw';
+  board.className = `card scoreboard ${end.winner ?? ''}`;
+  $('scoreboard-final').textContent = `${end.score.gold} - ${end.score.red}`;
+  // A row a goal: the scorer on the side of the team it counted for (so an
+  // own goal sits on the other side from their own team), the time and the
+  // score after it in the middle.
+  const running = { gold: 0, red: 0 };
+  const span = (cls: string, text: string) => {
+    const el = document.createElement('span');
+    el.className = cls;
+    el.textContent = text;
+    return el;
+  };
+  $('goal-list').replaceChildren(...end.goals.map(goal => {
+    running[goal.team]++;
+    const li = document.createElement('li');
+    li.className = goal.team;
+    const name = (goal.scorer && nameOf(goal.scorer)) || TEAM[goal.team];
+    const who = span('who', name);
+    if (goal.own) who.append(span('own', 'own goal'));
+    const mid = span('mid', '');
+    mid.append(span('at', clockText(goal.at)), span('tally', `${running.gold} - ${running.red}`));
+    const blank = span('who', '');
+    li.append(...(goal.team === 'gold' ? [who, mid, blank] : [blank, mid, who]));
+    return li;
+  }));
+  if (!end.goals.length) {
+    const li = document.createElement('li');
+    li.className = 'none';
+    li.textContent = 'No goals';
+    $('goal-list').append(li);
+  }
+  $('scoreboard-menu').hidden = role !== 'solo';
+  $('play-again').hidden = role !== 'solo';
+  $('scoreboard-lobby').hidden = role !== 'host';
+  $('scoreboard-waiting').hidden = role !== 'guest';
+  board.hidden = false;
+  paintNow(board);
+}
+
+export function hideBoard() {
+  clearTimeout(boardTimer);
+  board.hidden = true;
+}
+
+/** Shows what this frame's events call for. */
+export function matchEvents(events: SimEvent[], nameOf: NameOf, role: Role) {
+  for (const e of events) {
+    if (e.type === 'goal') showGoal(e, nameOf);
+    else if (e.type === 'kickoff') hideGoal();
+    else if (e.type === 'end') {
+      clearTimeout(boardTimer);
+      boardTimer = setTimeout(() => {
+        hideGoal();
+        showBoard(e, nameOf, role);
+      }, BOARD_DELAY);
+    }
+  }
+}
+
+/** A fresh match, or leaving one: nothing from the last one stays up. */
+export function resetMatchUi() {
+  hideGoal();
+  hideBoard();
+}
