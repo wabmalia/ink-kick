@@ -228,17 +228,25 @@ export async function iconDataUrl(size: number) {
   ctx.textBaseline = 'middle';
   ctx.translate(size * 0.5, size * 0.55);
   ctx.rotate(-0.07);
-  const draw = (text: string, x: number, colour: string) => {
-    ctx.fillStyle = '#0d1026';
-    ctx.fillText(text, x + size * 0.035, size * 0.04);
-    ctx.lineWidth = size * 0.05;
-    ctx.strokeStyle = '#0d1026';
-    ctx.strokeText(text, x, 0);
-    ctx.fillStyle = colour;
-    ctx.fillText(text, x, 0);
-  };
-  draw('S', -size * 0.07, '#ffc53d');
-  draw('!', size * 0.22, '#ff5e45');
+  // The logo's K, shared by Ink and Kick: split corner to corner, red above
+  // and gold below, over its ink shadow and outline.
+  ctx.font = `${size * 0.74}px 'Caveat Brush'`;
+  // Centred on the glyph itself, not where the text is anchored.
+  const k = ctx.measureText('K');
+  const cx = (k.actualBoundingBoxRight - k.actualBoundingBoxLeft) / 2;
+  // A touch high: the brush K's weight sits low, so this halves it by eye.
+  const cy = (k.actualBoundingBoxDescent - k.actualBoundingBoxAscent) / 2 - size * 0.06;
+  const half = size * 0.26;
+  const split = ctx.createLinearGradient(cx - half, cy - half, cx + half, cy + half);
+  split.addColorStop(0.5, '#ff5e45');
+  split.addColorStop(0.5, '#ffc53d');
+  ctx.fillStyle = '#0d1026';
+  ctx.fillText('K', size * 0.035, size * 0.04);
+  ctx.lineWidth = size * 0.05;
+  ctx.strokeStyle = '#0d1026';
+  ctx.strokeText('K', 0, 0);
+  ctx.fillStyle = split;
+  ctx.fillText('K', 0, 0);
   return canvas.toDataURL('image/png');
 }
 
