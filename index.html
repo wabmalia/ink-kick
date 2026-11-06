@@ -45,7 +45,7 @@
   </div>
 
   <nav class="ingame" id="ingame" hidden>
-    <button class="ink-btn" id="leave-match" type="button">Menu</button>
+    <button class="ink-btn" id="leave-match" type="button">Back to menu</button>
     <button class="ink-btn" id="end-match" type="button" hidden>Back to lobby</button>
     <span class="room-tag" id="room-tag"></span>
   </nav>
@@ -103,16 +103,18 @@
     <button class="brush gold" id="attr-info-close" type="button">Got it</button>
   </dialog>
 
-  <aside class="card train-panel" id="train-panel" aria-label="Your attributes" hidden>
-    <h2>Attributes</h2>
-    <button class="ink-btn info-btn" data-attr-info type="button" aria-haspopup="dialog" aria-label="What the attributes do">?</button>
-    <div class="radar-wrap" id="train-radar" role="group" aria-label="Attributes"></div>
-    <p class="spare" id="train-spare" aria-live="polite"></p>
-  </aside>
-  <section class="card train-hud" id="train-hud" aria-label="Times" hidden>
-    <h2>Training</h2>
-    <dl id="train-times"></dl>
-  </section>
+  <div class="train-side">
+    <aside class="card train-panel" id="train-panel" aria-label="Your attributes" hidden>
+      <h2>Attributes</h2>
+      <button class="ink-btn info-btn" data-attr-info type="button" aria-haspopup="dialog" aria-label="What the attributes do">?</button>
+      <div class="radar-wrap" id="train-radar" role="group" aria-label="Attributes"></div>
+      <p class="spare" id="train-spare" aria-live="polite"></p>
+    </aside>
+    <section class="card train-hud" id="train-hud" aria-label="Times" hidden>
+      <h2>Training</h2>
+      <dl id="train-times"></dl>
+    </section>
+  </div>
 
   <main class="menu" id="menu">
     <section class="screen home" id="home" hidden>
@@ -163,11 +165,13 @@
         <h2>Solo</h2>
         <p class="card-note">You against the bot. How long a match?</p>
         <div class="rules" id="solo-rules" role="radiogroup" aria-label="Match length"></div>
-        <button class="rule switch" id="solo-keepers" type="button" role="switch" aria-checked="false">Goalkeepers</button>
+        <div class="match-go">
+          <button class="rule switch" id="solo-keepers" type="button" role="switch" aria-checked="false">Goalkeepers</button>
+          <button class="brush green big" id="solo-kickoff" type="button">Kick off!</button>
+        </div>
       </section>
       <footer class="lobby-foot">
-        <button class="ink-btn" id="solo-back" type="button">Back</button>
-        <button class="brush green big" id="solo-kickoff" type="button">Kick off!</button>
+        <button class="ink-btn back-to-menu" id="solo-back" type="button">Back to menu</button>
       </footer>
     </section>
 
@@ -202,12 +206,14 @@
         <h2>Match</h2>
         <p class="card-note" id="rules-note">How the match is won.</p>
         <div class="rules" id="lobby-rules" role="radiogroup" aria-label="Match length"></div>
-        <button class="rule switch" id="lobby-keepers" type="button" role="switch" aria-checked="false">Goalkeepers</button>
+        <div class="match-go">
+          <button class="rule switch" id="lobby-keepers" type="button" role="switch" aria-checked="false">Goalkeepers</button>
+          <button class="brush green big" id="kickoff" type="button">Kick off!</button>
+          <p class="waiting" id="waiting">Waiting for the host to kick off…</p>
+        </div>
       </section>
       <footer class="lobby-foot">
-        <button class="ink-btn" id="lobby-leave" type="button">Leave</button>
-        <button class="brush green big" id="kickoff" type="button">Kick off!</button>
-        <p class="waiting" id="waiting">Waiting for the host to kick off…</p>
+        <button class="ink-btn back-to-menu" id="lobby-leave" type="button">Back to menu</button>
       </footer>
     </section>
   </main>

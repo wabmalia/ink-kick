@@ -54,6 +54,8 @@ export interface WireInput extends Input {
 export type ToHost =
   | { t: 'hello'; id: string; name: string; attrs: Attributes }
   | { t: 'team'; team: Team }
+  // Attributes changed in the lobby; used from the next kickoff.
+  | { t: 'attrs'; attrs: Attributes }
   | { t: 'input'; input: WireInput };
 
 export type ToClient =

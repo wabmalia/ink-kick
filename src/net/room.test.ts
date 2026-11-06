@@ -101,6 +101,21 @@ describe('host room', () => {
     expect(host.y).toBeLessThan(actual + 3);
   });
 
+  it('uses attributes changed in the lobby, not once a match is on', () => {
+    const r = room();
+    const a = link();
+    r.join('a', 'Ana', a.l, { pace: 5, stamina: 5, dribbling: 5, power: 5, tackling: 5, strength: 5 });
+    r.setAttributes('a', { pace: 10, stamina: 5, dribbling: 5, power: 5, tackling: 4, strength: 1 });
+    r.start();
+    const ana = () => r.match!.players.find(p => p.id === 'a')!;
+    expect(ana().stats.sprintSpeed).toBeCloseTo(CONFIG.player.sprintSpeed * 1.2);
+    r.setAttributes('a', { pace: 1, stamina: 9, dribbling: 5, power: 5, tackling: 5, strength: 5 });
+    // Kept for the rest of this match, and the next kickoff too.
+    r.end();
+    r.start();
+    expect(ana().stats.sprintSpeed).toBeCloseTo(CONFIG.player.sprintSpeed * 1.2);
+  });
+
   it('plays the match length the host picked, fixed once it kicks off', () => {
     const r = room();
     const a = link();

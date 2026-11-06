@@ -90,6 +90,14 @@ export class HostRoom {
     this.changed();
   }
 
+  // Attributes changed in the lobby count from the next kickoff; a match on
+  // keeps the ones it started with.
+  setAttributes(id: string, attrs: unknown) {
+    const m = this.members.find(x => x.id === id);
+    if (!m || this.phase !== 'lobby') return;
+    m.attrs = cleanAttributes(attrs);
+  }
+
   setRules(rules: Rules) {
     if (this.phase !== 'lobby') return;
     this.rules = cleanRules(rules);

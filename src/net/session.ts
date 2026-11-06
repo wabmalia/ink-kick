@@ -7,7 +7,7 @@ import {
   type RoomView, type Snapshot, type ToClient, type ToHost,
 } from './protocol';
 import { HostRoom, type Link } from './room';
-import { loadAttributes } from '../game/attributes';
+import { loadAttributes, type Attributes } from '../game/attributes';
 
 // The connection side, the same shape as sinkhole's: one browser hosts the
 // room over PeerJS, the others join by code. Each guest opens two
@@ -208,6 +208,8 @@ class Session {
         host.join(id, cleanName(msg.name), link, msg.attrs);
       } else if (msg?.t === 'team' && id && validTeam(msg.team)) {
         host.setTeam(id, msg.team);
+      } else if (msg?.t === 'attrs' && id) {
+        host.setAttributes(id, msg.attrs);
       }
     });
     const closed = () => id && host.disconnect(id, link);
@@ -218,6 +220,13 @@ class Session {
   setTeam(team: Team) {
     if (this.host) this.host.setTeam(this.me, team);
     else this.sendControl({ t: 'team', team });
+  }
+
+  /** Attributes changed in the lobby, for the next kickoff. */
+  setAttributes(attrs: Attributes) {
+    if (this.status !== 'room') return;
+    if (this.host) this.host.setAttributes(this.me, attrs);
+    else this.sendControl({ t: 'attrs', attrs });
   }
 
   start() {

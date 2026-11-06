@@ -339,7 +339,7 @@ html, body {
 
 /* --- Lobby --------------------------------------------------------------- */
 
-.lobby-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; flex-wrap: wrap; }
+.lobby-head { display: flex; align-items: center; gap: 16px; width: 100%; flex-wrap: wrap; }
 .lobby-head h2 { margin: 0; font-size: 36px; font-weight: 400; }
 .code { color: var(--gold); letter-spacing: 0.12em; }
 
@@ -620,29 +620,38 @@ html, body {
 /* --- Training ground ----------------------------------------------------- */
 
 
-/* The attributes on the left, over the stands and the empty left goal; the
-   drills' card along the bottom, under the pitch, so the keeper's goal on
-   the right stays in view. */
-.train-panel,
-.train-hud {
+/* Down the left, over the stands and the empty left goal: the attributes,
+   then the drills' card under them, so the keeper's goal on the right and
+   the near touchline stay in view. */
+.train-side {
   position: fixed;
   z-index: 1;
-  padding: 12px 16px 14px;
+  left: 12px;
+  top: 62px;
+  width: 270px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-.train-panel { left: 12px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; }
+.train-panel,
+.train-hud { position: relative; padding: 12px 16px 14px; }
+.train-panel { display: flex; flex-direction: column; align-items: center; }
 .train-panel h2,
 .train-hud h2 { align-self: flex-start; font-size: 24px; margin: 0 0 2px; }
-.train-panel .radar-wrap { zoom: 0.8; margin: 4px 0 0; }
+/* The same size on the home screen as beside a match being set up. */
+.radar-wrap { zoom: 0.74; }
+.train-panel .radar-wrap { margin: 2px 0 0; }
 .train-panel .info-btn { top: 8px; right: 10px; }
 .train-panel .spare { margin-top: 2px; font-size: 19px; }
 
-.train-hud { left: 12px; right: 12px; bottom: 8px; padding: 6px 18px 10px; }
+.train-hud { padding: 10px 16px 12px; }
 .train-hud h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.train-hud dl { margin: 0; display: grid; grid-template-rows: auto auto; grid-auto-flow: column; grid-auto-columns: 1fr; column-gap: 20px; }
-.train-hud dt { margin-top: 2px; font-family: 'Caveat Brush', cursive; font-size: 20px; color: var(--gold); }
-.train-hud dd { margin: 0; display: flex; flex-direction: column; font-family: 'Caveat', cursive; font-weight: 700; line-height: 1.1; }
-.train-hud .now { font-size: 21px; color: var(--text); font-variant-numeric: tabular-nums; }
-.train-hud .best { font-size: 17px; color: var(--soft); }
+.train-hud dl { margin: 0; display: flex; flex-direction: column; }
+.train-hud dt { font-family: 'Caveat Brush', cursive; font-size: 19px; line-height: 1.1; color: var(--gold); }
+.train-hud dd { margin: 0 0 7px; display: flex; flex-direction: column; font-family: 'Caveat', cursive; font-weight: 700; line-height: 1.05; }
+.train-hud dd:last-child { margin-bottom: 0; }
+.train-hud .now { font-size: 19px; color: var(--text); font-variant-numeric: tabular-nums; }
+.train-hud .best { font-size: 16px; color: var(--soft); }
 
 /* --- Match length -------------------------------------------------------- */
 
@@ -677,6 +686,18 @@ html, body {
 .rule.switch[aria-checked='true']::before { background: var(--ink) radial-gradient(circle at 25px 50%, #ffc23a 6px, transparent 7px); }
 .solo-setup .card { width: min(600px, 100%); }
 .solo-setup .lobby-foot { width: min(600px, 100%); }
+/* Back to the menu from setting up a match: top left, where it is in a
+   match and the training ground, over the attributes. */
+.lobby-foot .back-to-menu { position: fixed; z-index: 2; top: max(12px, env(safe-area-inset-top)); left: 16px; }
+/* Kick off at the foot of the match card, beside the goalkeepers switch. */
+.match-go { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; margin-top: 14px; }
+.match-go .rule.switch { margin-top: 0; }
+/* Kick off (or the guests' wait for it) up in the card's top right corner. */
+.match-go .brush.big,
+.match-go .waiting { position: absolute; top: 16px; right: 20px; }
+.match-go .brush.big { font-size: 26px; padding: 8px 28px 10px; }
+.match-go .waiting { font-size: 20px; }
+.menu.with-side { padding-inline: 300px; }
 
 /* --- Scoreboard ---------------------------------------------------------- */
 
