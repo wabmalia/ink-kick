@@ -165,8 +165,16 @@ export class LocalMatch {
   }
 
   private remember() {
-    this.prev = new Map(this.match.players.map(p => [p.id, { x: p.x, y: p.y }]));
-    this.prevBall = { x: this.match.ball.x, y: this.match.ball.y };
+    // Kept, not made afresh each tick: players who've gone are dropped.
+    const ids = new Set<string>();
+    for (const p of this.match.players) {
+      ids.add(p.id);
+      const at = this.prev.get(p.id);
+      if (at) Object.assign(at, { x: p.x, y: p.y });
+      else this.prev.set(p.id, { x: p.x, y: p.y });
+    }
+    if (this.prev.size !== ids.size) for (const id of this.prev.keys()) if (!ids.has(id)) this.prev.delete(id);
+    Object.assign(this.prevBall, { x: this.match.ball.x, y: this.match.ball.y });
   }
 
   advance(dt: number): SimEvent[] {

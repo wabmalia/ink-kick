@@ -24,6 +24,8 @@ const DUMMY_KIT = 0xa7adc4;
 const KEEPER_KIT: Record<string, number> = { [KEEPER_IDS.gold]: 0x2ec4b6, [KEEPER_IDS.red]: 0x8a5cff };
 // Paler versions, for the splatter a kick throws up.
 const KIT_LIGHT: Record<Team, number> = { gold: 0xffe3a0, red: 0xffb4a6 };
+// What a slide or a skid throws up: grass, and a little of the team's kit.
+const SCUFF: Record<Team, number[]> = { gold: [...GRASS_DROPS, KIT_LIGHT.gold], red: [...GRASS_DROPS, KIT_LIGHT.red] };
 // Each team's ink: its kit, lighter and deeper, flicked about by its kicks
 // and tackles.
 const INK: Record<Team, number[]> = { gold: [0xf2b134, 0xffe3a0, 0xd99a1a, 0xffc94d], red: [0xe2553f, 0xffb4a6, 0xb83a26, 0xff7a5c] };
@@ -282,7 +284,9 @@ export class GameView {
         heading = speed > 0.3 ? Math.atan2(dx, dy) : Math.atan2(REF_SPOT.x - x, REF_SPOT.y - y);
         if (out >= 1) heading = Math.atan2(p.fx, p.fy);
       }
-      this.last.set(p.id, { x, y });
+      const drawnAt = this.last.get(p.id);
+      if (drawnAt) Object.assign(drawnAt, { x, y });
+      else this.last.set(p.id, { x, y });
       this.kickUp(p, x, y, speed, heading, dt, state, f.skid);
       f.group.position.set(x, 0, y);
       f.update(dt, {
@@ -356,7 +360,7 @@ export class GameView {
         st.spray -= 0.04;
         this.splashes.burst({
           x: x + fx * 0.5, z: y + fz * 0.5, dx: fx, dz: fz,
-          count: 4, speed: 3.4, size: 0.12, colors: [...GRASS_DROPS, KIT_LIGHT[p.team]], spread: 2.6, life: 0.7,
+          count: 4, speed: 3.4, size: 0.12, colors: SCUFF[p.team], spread: 2.6, life: 0.7,
         });
       }
     } else if (skid > 0.3 && speed > 1) {
@@ -366,7 +370,7 @@ export class GameView {
         st.spray -= 0.035;
         this.splashes.burst({
           x, z: y, dx: p.vx, dz: p.vy,
-          count: 3, speed: 1 + speed * 0.35, size: 0.1, colors: [...GRASS_DROPS, KIT_LIGHT[p.team]], spread: 1.8, life: 0.6,
+          count: 3, speed: 1 + speed * 0.35, size: 0.1, colors: SCUFF[p.team], spread: 1.8, life: 0.6,
         });
       }
     } else {
@@ -584,11 +588,18 @@ export class GameView {
           this.labelLayer.append(el);
           this.labels.set(p.id, el);
         }
-        el.textContent = name;
-        el.dataset.team = p.team;
+        // Only what's changed touches the page.
+        if (el.textContent !== name) el.textContent = name;
+        if (el.dataset.team !== p.team) el.dataset.team = p.team;
         const at = this.last.get(p.id) ?? p;
         this.projected.set(at.x, 2.1, at.y).project(this.camera);
-        el.style.transform = `translate(${(this.projected.x + 1) * 50}vw, ${(1 - this.projected.y) * 50}vh) translate(-50%, -100%)`;
+        const x = Math.round((this.projected.x + 1) * 5000) / 100;
+        const y = Math.round((1 - this.projected.y) * 5000) / 100;
+        const key = `${x},${y}`;
+        if (el.dataset.at !== key) {
+          el.dataset.at = key;
+          el.style.transform = `translate(${x}vw, ${y}vh) translate(-50%, -100%)`;
+        }
       }
     }
     for (const [id, el] of this.labels) {

@@ -7,6 +7,7 @@ import { enableKeys, keyboardInput } from './game/input';
 import { LocalMatch, RemoteMatch, type ViewState } from './game/state';
 import { GameView } from './game/view';
 import { session } from './net/session';
+import type { RoomView } from './net/protocol';
 import { iceServers } from './net/relay';
 import { onHelp } from './ui/help';
 import { dialogOpen } from './ui/dom';
@@ -130,6 +131,14 @@ const MENU_FRAME = 1 / 30;
 const UNFOCUSED_FRAME = 1 / 5;
 let undrawn = 0;
 
+// Players' names by id, for the labels over their heads: made again only
+// when the room changes, not every frame.
+let named: { room: RoomView; names: Map<string, string> } | null = null;
+function namesIn(room: RoomView) {
+  if (named?.room !== room) named = { room, names: new Map(room.members.map(m => [m.id, m.name])) };
+  return named.names;
+}
+
 function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
@@ -164,9 +173,7 @@ function frame(now: number) {
     if (rules && rules.kind !== 'endless') state.info = [rulesName(rules), rulesLine(rules, state.clock ?? 0, state.score)];
   }
   if (mode.kind !== 'attract') me = session.me;
-  if (session.room && mode.kind !== 'solo' && mode.kind !== 'attract') {
-    names = new Map(session.room.members.map(m => [m.id, m.name]));
-  }
+  if (session.room && mode.kind !== 'solo' && mode.kind !== 'attract') names = namesIn(session.room);
 
   undrawn += dt;
   const every = !document.hasFocus() ? UNFOCUSED_FRAME : mode.kind === 'attract' ? MENU_FRAME : 0;

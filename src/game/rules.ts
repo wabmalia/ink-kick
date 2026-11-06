@@ -36,7 +36,7 @@ export const clockText = (seconds: number) => {
 
 /** How the match is won, for the board under the billboard. */
 export function rulesName(rules: Rules): string {
-  if (rules.kind === 'first') return RULE_OPTIONS.find(o => ruleId(o.rules) === ruleId(rules))?.label ?? `First to ${rules.goals}`;
+  if (rules.kind === 'first') return `First to ${rules.goals}`;
   if (rules.kind === 'timed') return `${Math.round(rules.seconds / 60)} min match`;
   return '';
 }

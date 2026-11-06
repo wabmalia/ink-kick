@@ -36,12 +36,17 @@ function ballTexture() {
   return tex;
 }
 
+// One shape and one painted skin for every ball (the match ball and the
+// training ground's spares).
+let look: { geometry: THREE.SphereGeometry; material: THREE.MeshStandardMaterial } | null = null;
+
 export function createBall() {
   const r = CONFIG.ball.radius;
-  const mesh = new THREE.Mesh(
-    new THREE.SphereGeometry(r, 32, 16),
-    new THREE.MeshStandardMaterial({ map: ballTexture(), roughness: 0.45 }),
-  );
+  look ??= {
+    geometry: new THREE.SphereGeometry(r, 32, 16),
+    material: new THREE.MeshStandardMaterial({ map: ballTexture(), roughness: 0.45 }),
+  };
+  const mesh = new THREE.Mesh(look.geometry, look.material);
   mesh.castShadow = true;
   mesh.position.y = r;
   return mesh;

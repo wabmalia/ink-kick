@@ -206,7 +206,9 @@ export class Footballer {
         this.skidW = Math.max(want, this.skidW - dt / SKID_OUT);
       }
     }
-    this.lastV = pose.vx === undefined ? null : { x: vx, z: vz };
+    if (pose.vx === undefined) this.lastV = null;
+    else if (this.lastV) Object.assign(this.lastV, { x: vx, z: vz });
+    else this.lastV = { x: vx, z: vz };
     const along = vx * fx + vz * fz;
     const dir = Math.max(-1, Math.min(1, along / 1.5));
     this.skidDir += (dir - this.skidDir) * Math.min(1, dt * SKID_SWAP);

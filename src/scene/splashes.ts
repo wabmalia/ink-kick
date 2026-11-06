@@ -31,6 +31,8 @@ interface Drop {
   fadeFrom: number;
   // Stains spread and stay put; drops fly, then soak in and shrink.
   stain: boolean;
+  // Gone, and already hidden: nothing to do for it until it's used again.
+  hidden: boolean;
 }
 
 export interface Burst {
@@ -104,7 +106,7 @@ export class Splashes {
     // order things were made in, and the grass painted over every splash.
     this.mesh.renderOrder = 1;
     for (let i = 0; i < MAX; i++) {
-      this.drops.push({ x: 0, z: 0, vx: 0, vz: 0, size: 0, spin: 0, age: 1, life: 1, alpha: 0, fadeFrom: 0, stain: false });
+      this.drops.push({ x: 0, z: 0, vx: 0, vz: 0, size: 0, spin: 0, age: 1, life: 1, alpha: 0, fadeFrom: 0, stain: false, hidden: false });
       this.mesh.setColorAt(i, this.color.setHex(0xffffff));
     }
   }
@@ -129,6 +131,7 @@ export class Splashes {
         alpha: b.alpha ?? 0.8,
         fadeFrom: b.stain ? 0.55 : 0.3,
         stain: !!b.stain,
+        hidden: false,
       });
       this.mesh.setColorAt(k, this.color.setHex(b.colors[Math.floor(Math.random() * b.colors.length)]!));
     }
@@ -136,17 +139,23 @@ export class Splashes {
   }
 
   update(dt: number) {
+    const drag = Math.exp(-dt * 7);
+    // Only drops alive, or just gone, are touched, and nothing is sent to
+    // the GPU on a frame with no splashes at all.
+    let changed = false;
     for (let i = 0; i < MAX; i++) {
       const d = this.drops[i]!;
+      if (d.hidden) continue;
+      changed = true;
       d.age += dt;
       const t = d.age / d.life;
       if (t >= 1) {
+        d.hidden = true;
         this.matrix.makeScale(0, 0, 0);
         this.alphas.setX(i, 0);
       } else {
         d.x += d.vx * dt;
         d.z += d.vz * dt;
-        const drag = Math.exp(-dt * 7);
         d.vx *= drag;
         d.vz *= drag;
         // Lands and spreads; a drop then soaks in a little smaller.
@@ -160,11 +169,12 @@ export class Splashes {
       }
       this.mesh.setMatrixAt(i, this.matrix);
     }
+    if (!changed) return;
     this.mesh.instanceMatrix.needsUpdate = true;
     this.alphas.needsUpdate = true;
   }
 
   clear() {
-    for (const d of this.drops) d.age = d.life;
+    for (const d of this.drops) if (!d.hidden) d.age = d.life;
   }
 }
