@@ -155,6 +155,19 @@ export const CONFIG = {
     // this speed, and the slider can't trap it for this long.
     rearKnock: 2.5,
     rearSlideCooldown: 0.9,
+    // Stamina, as fractions of a full bar. A poke or slide costs its
+    // tackler this, less the better a tackler they are (more than they have
+    // empties the bar and tires them);
+    // winning the ball gives stealRefund back and costs the player robbed
+    // robbedCost, less the stronger they are.
+    pokeCost: 0.04,
+    slideCost: 0.12,
+    stealRefund: 0.06,
+    robbedCost: 0.1,
+    // Sliding while tired: this fraction of the speed, and this many times
+    // as long getting up.
+    tiredSlide: 0.7,
+    tiredRecover: 1.6,
   },
 
   // The goalkeepers, when a match has them (engine/keeper.ts).

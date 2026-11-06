@@ -30,8 +30,8 @@ own values when a match starts. The global `CONFIG` values are what a 5 gives.
 | Stamina | Sprint longer, recover sooner | `stamina.drain`, `stamina.regen`, `stamina.tiredTime` |
 | Dribbling | Agility: tighter, faster turns with the ball, and quicker changes of direction and stops with or without it | `player.turnRateWithBall`, `dribble.turnSlowdown`, `dribble.speedFactor`, `player.response` on a turn or stop (8% a point) |
 | Power | Harder shots, charged sooner, more curl | `kick.shotSpeed`, `kick.chargeTime`, `kick.curl` (8% a point) |
-| Tackling | Pokes and slides that reach and keep the ball | `tackle.pokeRange`, `tackle.slideReach`, `tackle.slideControlCos` |
-| Strength | Ride tackles, hold off bumps, get up sooner, shove harder | the hold chance, `dribble.loseDistance`, `tackle.stumbleTime`, `tackle.slideShove` |
+| Tackling | Pokes and slides that reach and keep the ball, for less stamina | `tackle.pokeRange`, `tackle.slideReach`, `tackle.slideControlCos`, `tackle.pokeCost`, `tackle.slideCost` |
+| Strength | Ride tackles, hold off bumps, get up sooner (10% a point), shove harder and get shoved less, lose less stamina when robbed | the hold chance, `dribble.loseDistance`, `tackle.stumbleTime`, `tackle.slideShove`, `tackle.robbedCost` |
 
 Each touches two or three values, so it stays easy to explain on a stats
 screen and to tune one at a time.
@@ -57,10 +57,12 @@ screen and to tune one at a time.
 | Tackling | Poke range, edge to edge (8% a point) | 0.41 m | 0.60 m | 0.84 m |
 | Tackling | Slide reach | 0.63 m | 0.75 m | 0.90 m |
 | Tackling | Controlled-slide angle | 29° | 35° | 42° |
+| Tackling | Stamina a slide costs (a poke costs a third) | 14% | 12% | 10% |
 | Strength | Tackles ridden from a Tackling 5 | 0% | 15% | 51% |
 | Strength | Knock before losing the ball | 0.42 m | 0.50 m | 0.60 m |
-| Strength | Off balance after being slid into | 0.60 s | 0.50 s | 0.42 s |
-| Strength | Shove on others in a slide | 2.52 m/s | 3.00 m/s | 3.60 m/s |
+| Strength | Off balance after being slid into | 0.83 s | 0.50 s | 0.33 s |
+| Strength | Shove on others in a slide (divided by theirs) | 2.52 m/s | 3.00 m/s | 3.60 m/s |
+| Strength | Stamina lost when robbed of the ball | 12% | 10% | 8% |
 
 ## Things to watch when this goes in
 

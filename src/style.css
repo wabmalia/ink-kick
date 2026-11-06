@@ -463,6 +463,11 @@ html, body {
 .attr-list { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; margin: 6px 0 16px; align-self: stretch; }
 .attr-list dt { font-family: 'Caveat Brush', cursive; font-size: 22px; color: var(--gold); }
 .attr-list dd { margin: 0; font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; line-height: 1.15; color: var(--text); }
+.attr-list ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+.attr-list li { padding-left: 16px; text-indent: -16px; }
+.attr-list li::before { content: '•'; display: inline-block; width: 16px; text-indent: 0; color: var(--gold); }
+/* A trade-off rather than a gain. */
+.attr-list li.con::before { content: '−'; color: #ff8a73; }
 .info .card-note.small { margin-bottom: 16px; }
 
 /* --- How to play --------------------------------------------------------- */

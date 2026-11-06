@@ -47,6 +47,8 @@ export interface Player extends Disc {
   stamina: number;
   tired: number;
   sprinting: boolean;
+  // Who last slid this player over: one slide takes a player down once.
+  downBy?: string;
   // Can't trap the ball until this reaches 0.
   cooldown: number;
   // Whether the current poke or slide already touched the ball.
@@ -409,7 +411,27 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
     endIfWon(match, events);
   }
 
+  for (const e of events) {
+    if (e.type !== 'steal') continue;
+    const thief = match.players.find(p => p.id === e.player);
+    const robbed = match.players.find(p => p.id === e.from);
+    if (thief) thief.stamina = Math.min(1, thief.stamina + CONFIG.tackle.stealRefund);
+    if (robbed) spend(robbed, CONFIG.tackle.robbedCost / robbed.stats.holdFactor);
+  }
+
   return events;
+}
+
+// Takes stamina off a player; emptying the bar tires them, as running dry
+// does.
+function spend(p: Player, cost: number) {
+  if (p.stamina > cost) {
+    p.stamina -= cost;
+    return;
+  }
+  p.stamina = 0;
+  if (p.tired <= 0) p.tired = p.stats.tiredTime;
+  p.sprinting = false;
 }
 
 // A keeper throwing itself at a shot: a slide that way, turned to face it,
@@ -471,13 +493,18 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
         setAction(p, 'charge');
       } else if (inPokeRange(match, p)) {
         setAction(p, 'poke');
+        spend(p, tackle.pokeCost / p.stats.tackleFactor);
         p.vx += p.fx * tackle.pokeLunge;
         p.vy += p.fy * tackle.pokeLunge;
         events.push({ type: 'poke', player: p.id });
       } else {
+        // Tired, it's a sluggish slide, slower to get up from.
+        const slide = tackle.slideSpeed * (p.tired > 0 ? tackle.tiredSlide : 1);
         setAction(p, 'slide');
-        p.vx = p.fx * tackle.slideSpeed;
-        p.vy = p.fy * tackle.slideSpeed;
+        spend(p, tackle.slideCost / p.stats.tackleFactor);
+        for (const q of match.players) if (q.downBy === p.id) delete q.downBy;
+        p.vx = p.fx * slide;
+        p.vy = p.fy * slide;
         events.push({ type: 'slide', player: p.id });
       }
       break;
@@ -511,7 +538,7 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
       if (p.actionT >= tackle.slideTime) setAction(p, 'recover');
       break;
     case 'recover':
-      if (p.actionT >= tackle.recoverTime) setAction(p, 'none');
+      if (p.actionT >= tackle.recoverTime * (p.tired > 0 ? tackle.tiredRecover : 1)) setAction(p, 'none');
       break;
     case 'stumble':
       if (p.actionT >= p.stats.stumbleTime) setAction(p, 'none');
@@ -665,9 +692,16 @@ function rearSlide(match: Match, p: Player, q: Player, events: SimEvent[]) {
   match.ball.vy = q.fy * t.rearKnock + q.vy * 0.3;
   p.cooldown = Math.max(p.cooldown, t.rearSlideCooldown);
   p.struck = true;
+  knockDown(p, q);
+}
+
+// p's slide takes q off their feet: off balance for a moment, shoved on by
+// p's strength, less the stronger q is.
+function knockDown(p: Player, q: Player) {
+  q.downBy = p.id;
   setAction(q, 'stumble');
-  q.vx += p.fx * p.stats.shove;
-  q.vy += p.fy * p.stats.shove;
+  q.vx += (p.fx * p.stats.shove) / q.stats.holdFactor;
+  q.vy += (p.fy * p.stats.shove) / q.stats.holdFactor;
 }
 
 // A tackle that reaches a dribbler can be ridden: it wins with chance
@@ -777,7 +811,7 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
 
   if (poking) return;
   for (const q of match.players) {
-    if (q === p || q.action === 'stumble') continue;
+    if (q === p || q.action === 'stumble' || q.downBy === p.id) continue;
     if (q.keeper && match.owner === q.id) continue;
     if (Math.hypot(q.x - p.x, q.y - p.y) > p.r + q.r + 0.1) continue;
     if (match.owner === q.id && isBehind(q, p)) {
@@ -790,9 +824,7 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
     }
     if (match.owner === q.id) events.push({ type: 'steal', player: p.id, from: q.id });
     loseBall(match, q, t.stealCooldown);
-    setAction(q, 'stumble');
-    q.vx += p.fx * p.stats.shove;
-    q.vy += p.fy * p.stats.shove;
+    knockDown(p, q);
   }
 }
 

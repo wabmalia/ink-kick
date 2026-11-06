@@ -48,6 +48,9 @@ export const CURL_STEP = 0.08;
 // Pace over 5 burns stamina faster, 6% a point: a quick player needs
 // Stamina to keep it up.
 export const PACE_DRAIN_STEP = 0.06;
+// Strength cuts the time off balance after being slid into 10% a point:
+// a strong player is back on their feet noticeably sooner.
+export const STUMBLE_STEP = 0.1;
 // Agility moves 8% a point, so a change of direction feels different.
 export const AGILITY_STEP = 0.08;
 // Shot speed loses only half as much per point below 5: a weak shooter
@@ -77,7 +80,7 @@ export function statsFor(attrs: Attributes = evenAttributes()): Stats {
     slideReach: tackle.slideReach * m('tackling'),
     slideControlCos: Math.cos(Math.acos(tackle.slideControlCos) * m('tackling')),
     loseDistance: dribble.loseDistance * m('strength'),
-    stumbleTime: tackle.stumbleTime / m('strength'),
+    stumbleTime: tackle.stumbleTime / multiplier(attrs.strength, STUMBLE_STEP),
     shove: tackle.slideShove * m('strength'),
     tackleFactor: m('tackling'),
     holdFactor: m('strength'),

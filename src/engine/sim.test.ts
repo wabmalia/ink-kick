@@ -231,6 +231,90 @@ describe('sim', () => {
     expect(match.owner).not.toBe('them');
   });
 
+  it('tackling costs stamina; short of it, you still go, and tire', () => {
+    const { match, me } = setup();
+    moveTo(me, -10, 0);
+    me.stamina = 0.5;
+    run(match, 1, { me: { kick: true } });
+    expect(me.action).toBe('slide');
+    expect(me.stamina).toBeCloseTo(0.5 - CONFIG.tackle.slideCost / me.stats.tackleFactor, 2);
+    const { match: m2, me: short } = setup();
+    moveTo(short, -10, 0);
+    short.stamina = CONFIG.tackle.slideCost / 2;
+    run(m2, 1, { me: { kick: true } });
+    expect(short.action).toBe('slide');
+    expect(short.stamina).toBe(0);
+    expect(short.tired).toBeGreaterThan(0);
+  });
+
+  it('a tired slide is slower and slower to get up from', () => {
+    const slide = (tired: boolean) => {
+      const { match, me } = setup();
+      moveTo(me, -10, 0);
+      if (tired) me.tired = 5;
+      run(match, 1, { me: { kick: true } });
+      const speed = me.vx;
+      let down = 0;
+      while (me.action !== 'none' && down < 600) {
+        run(match, 1);
+        down++;
+      }
+      return { speed, down };
+    };
+    const fresh = slide(false);
+    const tired = slide(true);
+    expect(tired.speed).toBeCloseTo(fresh.speed * CONFIG.tackle.tiredSlide, 1);
+    expect(tired.down).toBeGreaterThan(fresh.down + ticks(0.3));
+  });
+
+  it('winning the ball gives the tackler stamina back and costs the player robbed, less the stronger', () => {
+    const robbedLoss = (strength: number) => {
+      const { match, me, them } = setup();
+      them.stats.holdFactor = 1 + 0.04 * (strength - 5);
+      // Sure to win it, however strong they are.
+      me.stats.tackleFactor = 2;
+      moveTo(them, 0, 0, 1, 0);
+      giveBall(match, them);
+      moveTo(me, match.ball.x + 1.1, 0, -1, 0);
+      me.stamina = 0.5;
+      them.stamina = 0.8;
+      const events = run(match, 2, { me: { kick: true } });
+      for (let i = 0; i < ticks(0.2) && !events.some(e => e.type === 'steal'); i++) events.push(...run(match, 1));
+      expect(events).toContainEqual({ type: 'steal', player: 'me', from: 'them' });
+      expect(me.stamina).toBeGreaterThan(0.5 - CONFIG.tackle.pokeCost + CONFIG.tackle.stealRefund / 2);
+      return 0.8 - them.stamina;
+    };
+    // (They get a little back each tick not sprinting, so compare.)
+    expect(robbedLoss(10)).toBeLessThan(robbedLoss(3));
+    expect(robbedLoss(3)).toBeGreaterThan(CONFIG.tackle.robbedCost * 0.8);
+  });
+
+  it('a strong player slid into is shoved less and back up sooner', () => {
+    const takeOut = (strength: number) => {
+      const match = createMatch([createPlayer('me', 'gold', SURE), createPlayer('them', 'red', { ...evenAttributes(), strength })]);
+      match.owner = null;
+      match.kickoffHeld = false;
+      const [me, them] = match.players as [Player, Player];
+      Object.assign(match.ball, { x: 0, y: -8, vx: 0, vy: 0 });
+      moveTo(me, -6, 3, 1, 0);
+      moveTo(them, -4, 3, 1, 0);
+      let k = 0;
+      while (them.action !== 'stumble' && k++ < 60) run(match, 1, { me: { kick: true } });
+      expect(them.action).toBe('stumble');
+      const shove = Math.hypot(them.vx, them.vy);
+      let down = 0;
+      while (them.action === 'stumble' && down < 300) {
+        run(match, 1);
+        down++;
+      }
+      return { shove, down };
+    };
+    const strong = takeOut(10);
+    const weak = takeOut(1);
+    expect(strong.shove).toBeLessThan(weak.shove);
+    expect(strong.down).toBeLessThan(weak.down - ticks(0.3));
+  });
+
   it('deadens a shot that hits a player', () => {
     const { match, me } = setup();
     moveTo(me, 0, 0, -1, 0);
