@@ -60,8 +60,9 @@ const SKID_TOO_SUDDEN = 220;
 // full from SKID_SPEED_FULL.
 const SKID_SPEED_FROM = 3;
 const SKID_SPEED_FULL = 4.5;
-// How fast the planted leg swaps from in front to behind as you turn round.
-const SKID_SWAP = 3;
+// How quickly (per second) the planted leg swaps from in front to behind as
+// you turn round.
+const SKID_SWAP = 12;
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
@@ -181,7 +182,6 @@ export class Footballer {
     let drop = 0;
     let back = 0;
     let spread = 0.12;
-    let tilt = 0;
 
     // Skid: braking hard, one leg planted towards the way you're still
     // sliding, the other bent under, leaning the way you want to go: the
@@ -207,13 +207,13 @@ export class Footballer {
     this.lastV = pose.vx === undefined ? null : { x: vx, z: vz };
     const along = vx * fx + vz * fz;
     const dir = Math.max(-1, Math.min(1, along / 1.5));
-    this.skidDir += (dir - this.skidDir) * Math.min(1, dt * SKID_SWAP * 4);
+    this.skidDir += (dir - this.skidDir) * Math.min(1, dt * SKID_SWAP);
     // Sideways speed relative to facing: positive is to the player's left.
     const across = vx * fz - vz * fx;
     // Eased, so it doesn't twitch with every change of speed.
     const turnLean = Math.max(-0.22, Math.min(0.22, across * 0.05));
     this.tiltS += (turnLean - this.tiltS) * Math.min(1, dt * 8);
-    tilt = this.tiltS;
+    let tilt = this.tiltS;
 
     // Idle: a little breathing and weight shift, quicker when tired.
     const idle = 1 - Math.min(1, s * 4);

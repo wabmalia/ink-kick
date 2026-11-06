@@ -30,7 +30,7 @@
     </div>
     <div class="goal-list" id="goal-list"></div>
     <div class="scoreboard-actions">
-      <button class="ink-btn" id="scoreboard-menu" type="button">Menu</button>
+      <button class="ink-btn" id="scoreboard-menu" type="button">Back to menu</button>
       <button class="brush gold" id="play-again" type="button">Play again</button>
       <button class="brush gold" id="scoreboard-lobby" type="button">Back to lobby</button>
       <p class="waiting" id="scoreboard-waiting">Waiting for the host…</p>
@@ -103,12 +103,12 @@
     <button class="brush gold" id="attr-info-close" type="button">Got it</button>
   </dialog>
 
-  <div class="train-side">
-    <aside class="card train-panel" id="train-panel" aria-label="Your attributes" hidden>
+  <div class="side-column">
+    <aside class="card attr-panel" id="attr-panel" aria-label="Your attributes" hidden>
       <h2>Attributes</h2>
       <button class="ink-btn info-btn" data-attr-info type="button" aria-haspopup="dialog" aria-label="What the attributes do">?</button>
-      <div class="radar-wrap" id="train-radar" role="group" aria-label="Attributes"></div>
-      <p class="spare" id="train-spare" aria-live="polite"></p>
+      <div class="radar-wrap" id="side-radar" role="group" aria-label="Attributes"></div>
+      <p class="spare" id="side-spare" aria-live="polite"></p>
     </aside>
     <section class="card train-hud" id="train-hud" aria-label="Times" hidden>
       <h2>Training</h2>
@@ -170,9 +170,7 @@
           <button class="brush green big" id="solo-kickoff" type="button">Kick off!</button>
         </div>
       </section>
-      <footer class="lobby-foot">
-        <button class="ink-btn back-to-menu" id="solo-back" type="button">Back to menu</button>
-      </footer>
+      <button class="ink-btn back-to-menu" id="solo-back" type="button">Back to menu</button>
     </section>
 
     <section class="screen notice" id="connecting" hidden>
@@ -212,9 +210,7 @@
           <p class="waiting" id="waiting">Waiting for the host to kick off…</p>
         </div>
       </section>
-      <footer class="lobby-foot">
-        <button class="ink-btn back-to-menu" id="lobby-leave" type="button">Back to menu</button>
-      </footer>
+      <button class="ink-btn back-to-menu" id="lobby-leave" type="button">Back to menu</button>
     </section>
   </main>
 

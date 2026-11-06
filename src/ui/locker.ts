@@ -60,7 +60,7 @@ function infoDialog() {
 export function mountLocker() {
   infoDialog();
   mountChart(document.getElementById('radar')!, document.getElementById('spare')!);
-  mountChart(document.getElementById('train-radar')!, document.getElementById('train-spare')!);
+  mountChart(document.getElementById('side-radar')!, document.getElementById('side-spare')!);
 }
 
 function mountChart(host: HTMLElement, left: HTMLElement) {
@@ -99,7 +99,7 @@ function mountChart(host: HTMLElement, left: HTMLElement) {
       b.addEventListener('click', e => {
         change(act(attrs, a));
         // Clicked with the mouse in a match, give the keys back to the game.
-        if (e.detail > 0 && host.closest('.train-panel')) b.blur();
+        if (e.detail > 0 && host.closest('.attr-panel')) b.blur();
       });
       return b;
     };

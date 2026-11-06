@@ -28,13 +28,19 @@ export const CONFIG = {
     // that grip, less the slower you're going, so you skid a little first
     // (dribble.skidGrip with the ball, which slows you on a turn already).
     skidGrip: 0.2,
-    // A hard turn: pressing back the way you came while still going that
-    // way faster than turnBackFrom times your running speed. You turn round
-    // at turnBackRate (radians a second) and slide on with only
-    // turnBackGrip of your grip (dribble.turnBackGrip with the ball).
+    // A hard turn: pressing more than turnBackAngle degrees round from the
+    // way you're going, while still going that way faster than
+    // turnBackFrom times your running speed. You turn round at
+    // turnBackRate (radians a second) and slide on with only turnBackGrip
+    // of your grip (dribble.turnBackGrip with the ball) until you've lost
+    // turnBackSlip of your speed; pressing turnBackLetGo degrees elsewhere
+    // ends it.
     turnBackFrom: 0.6,
+    turnBackAngle: 120,
     turnBackRate: 32,
     turnBackGrip: 0.17,
+    turnBackSlip: 0.3,
+    turnBackLetGo: 30,
     // The momentum a hard turn is judged against: velocity smoothed over
     // about this long (seconds).
     driftTime: 0.15,

@@ -353,7 +353,6 @@ html, body {
 .team-col li.away { color: var(--muted); }
 .team-col li small { font-size: 18px; color: var(--soft); }
 
-.lobby-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; }
 .waiting { margin: 0; font-family: 'Caveat', cursive; font-weight: 700; font-size: 22px; color: var(--soft); }
 
 /* --- In a match ---------------------------------------------------------- */
@@ -617,13 +616,13 @@ html, body {
   .or { margin: 4px 0; }
 }
 
-/* --- Training ground ----------------------------------------------------- */
+/* --- Side column: attributes, and the training ground's drills ---------- */
 
-
-/* Down the left, over the stands and the empty left goal: the attributes,
-   then the drills' card under them, so the keeper's goal on the right and
-   the near touchline stay in view. */
-.train-side {
+/* Down the left, over the stands and the empty left goal: the attributes
+   (in the training ground and while setting up a match), then in training
+   the drills' card under them, so the keeper's goal on the right and the
+   near touchline stay in view. */
+.side-column {
   position: fixed;
   z-index: 1;
   left: 12px;
@@ -633,16 +632,16 @@ html, body {
   flex-direction: column;
   gap: 10px;
 }
-.train-panel,
-.train-hud { position: relative; padding: 12px 16px 14px; }
-.train-panel { display: flex; flex-direction: column; align-items: center; }
-.train-panel h2,
+.attr-panel,
+.train-hud { position: relative; }
+.attr-panel { padding: 12px 16px 14px; display: flex; flex-direction: column; align-items: center; }
+.attr-panel h2,
 .train-hud h2 { align-self: flex-start; font-size: 24px; margin: 0 0 2px; }
 /* The same size on the home screen as beside a match being set up. */
 .radar-wrap { zoom: 0.74; }
-.train-panel .radar-wrap { margin: 2px 0 0; }
-.train-panel .info-btn { top: 8px; right: 10px; }
-.train-panel .spare { margin-top: 2px; font-size: 19px; }
+.attr-panel .radar-wrap { margin: 2px 0 0; }
+.attr-panel .info-btn { top: 8px; right: 10px; }
+.attr-panel .spare { margin-top: 2px; font-size: 19px; }
 
 .train-hud { padding: 10px 16px 12px; }
 .train-hud h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
@@ -685,14 +684,13 @@ html, body {
 }
 .rule.switch[aria-checked='true']::before { background: var(--ink) radial-gradient(circle at 25px 50%, #ffc23a 6px, transparent 7px); }
 .solo-setup .card { width: min(600px, 100%); }
-.solo-setup .lobby-foot { width: min(600px, 100%); }
 /* Back to the menu from setting up a match: top left, where it is in a
    match and the training ground, over the attributes. */
-.lobby-foot .back-to-menu { position: fixed; z-index: 2; top: max(12px, env(safe-area-inset-top)); left: 16px; }
-/* Kick off at the foot of the match card, beside the goalkeepers switch. */
-.match-go { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; margin-top: 14px; }
+.back-to-menu { position: fixed; z-index: 2; top: max(12px, env(safe-area-inset-top)); left: 16px; }
+/* Under the match lengths, the goalkeepers switch; Kick off (or the
+   guests' wait for it) up in the card's top right corner. */
+.match-go { margin-top: 14px; }
 .match-go .rule.switch { margin-top: 0; }
-/* Kick off (or the guests' wait for it) up in the card's top right corner. */
 .match-go .brush.big,
 .match-go .waiting { position: absolute; top: 16px; right: 20px; }
 .match-go .brush.big { font-size: 26px; padding: 8px 28px 10px; }

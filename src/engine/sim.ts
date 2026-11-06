@@ -1,5 +1,6 @@
 import { CONFIG } from '../config';
 import type { Attributes } from '../game/attributes';
+import { curlStep } from './curl';
 import { statsFor, type Stats } from './stats';
 import { keeperBox, keeperInput, type KeeperState } from './keeper';
 
@@ -329,17 +330,12 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
   if (owner) {
     match.spin = 0;
   } else if (match.spin) {
-    // Curl: the ball's path turns, the spin fading as it goes. However
-    // hard it's curled, it bends so far and no further: full until most of
-    // the way to maxTurn, then easing off, so it never loops round.
-    const { maxTurn, turnEase } = CONFIG.kick;
-    const left = Math.max(0, Math.min(1, (maxTurn - Math.abs(match.curled)) / (maxTurn * turnEase)));
-    const a = match.spin * Math.hypot(ball.vx, ball.vy) * dt * left;
-    match.curled += a;
-    const { vx, vy } = ball;
-    ball.vx = vx * Math.cos(a) - vy * Math.sin(a);
-    ball.vy = vx * Math.sin(a) + vy * Math.cos(a);
-    match.spin *= Math.exp(-CONFIG.kick.spinFade * dt);
+    // Curl (engine/curl.ts).
+    const c = { vx: ball.vx, vy: ball.vy, spin: match.spin, curled: match.curled };
+    curlStep(c, dt);
+    Object.assign(ball, { vx: c.vx, vy: c.vy });
+    match.spin = c.spin;
+    match.curled = c.curled;
   }
   ball.x += ball.vx * dt;
   ball.y += ball.vy * dt;
@@ -393,10 +389,8 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
   if (match.guard && (match.guard.left -= dt) <= 0) match.guard = null;
   const holder = byId(match.owner);
   if (holder && match.pullingIn === 0 && !holder.turnBack) {
-    const gap = Math.hypot(
-      ball.x - (holder.x + holder.fx * holdDistance(holder)),
-      ball.y - (holder.y + holder.fy * holdDistance(holder)),
-    );
+    const d = holdDistance(holder);
+    const gap = Math.hypot(ball.x - (holder.x + holder.fx * d), ball.y - (holder.y + holder.fy * d));
     if (gap > holder.stats.loseDistance && !holder.keeper) loseBall(match, holder, CONFIG.dribble.lostCooldown);
   } else if (!holder && match.restartIn <= 0) {
     trap(match, events);
@@ -428,8 +422,8 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
 
   for (const e of events) {
     if (e.type !== 'steal') continue;
-    const thief = match.players.find(p => p.id === e.player);
-    const robbed = match.players.find(p => p.id === e.from);
+    const thief = byId(e.player);
+    const robbed = byId(e.from);
     if (thief) thief.stamina = Math.min(1, thief.stamina + CONFIG.tackle.stealRefund);
     if (robbed) spend(robbed, CONFIG.tackle.robbedCost / robbed.stats.holdFactor);
   }
@@ -647,11 +641,14 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
     // Judged against the last moment's momentum, not facing or this
     // tick's, so keys rolled round a finger at a time still count.
     const back = -(p.vx * dx + p.vy * dy);
-    if (p.turnBack && (p.turnBack.dx * dx + p.turnBack.dy * dy < 0.87 || back <= 0)) endTurnBack(match, p);
-    const drift = p.drift ?? { x: p.vx, y: p.vy };
+    const letGo = Math.cos((pl.turnBackLetGo * Math.PI) / 180);
+    if (p.turnBack && (p.turnBack.dx * dx + p.turnBack.dy * dy < letGo || back <= 0)) endTurnBack(match, p);
     const was = -(drift.x * dx + drift.y * dy);
-    if (!p.turnBack && was > pl.turnBackFrom * p.stats.runSpeed && was > 0.5 * Math.hypot(drift.x, drift.y) && back > 0) {
-      p.turnBack = { dx, dy, from: Math.max(back, 0.7 * was) };
+    const round = -Math.cos((pl.turnBackAngle * Math.PI) / 180);
+    if (!p.turnBack && was > pl.turnBackFrom * p.stats.runSpeed && was > round * Math.hypot(drift.x, drift.y) && back > 0) {
+      // Measured from this tick's speed, or most of the moment's if the
+      // keys rolling round have slowed you already.
+      p.turnBack = { dx, dy, from: Math.max(back, (1 - pl.turnBackSlip) * was) };
     }
     if (p.turnBack) a = current + Math.sign(turn) * Math.min(Math.abs(turn), pl.turnBackRate * dt);
     p.fx = Math.cos(a);
@@ -692,12 +689,12 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
   const ty = my * speed;
   const v = Math.hypot(p.vx, p.vy);
   const t = v < 0.5 ? 0 : !moving ? 1 : (1 - (p.vx * mx + p.vy * my) / v) / 2;
-  // Grip comes back as the slide slows: in a hard turn, once below 70% of
-  // the speed it began at, so one from a run slides as long as one from a
-  // sprint, just not as far.
+  // Grip comes back as the slide slows: in a hard turn, once it's lost
+  // turnBackSlip of the speed it began at, so one from a run slides as long
+  // as one from a sprint, just not as far.
   const tb = p.turnBack;
   const grip = tb
-    ? 1 - (1 - (dribbling ? CONFIG.dribble.turnBackGrip : pl.turnBackGrip)) * Math.min(1, v / (0.7 * tb.from))
+    ? 1 - (1 - (dribbling ? CONFIG.dribble.turnBackGrip : pl.turnBackGrip)) * Math.min(1, v / ((1 - pl.turnBackSlip) * tb.from))
     : 1 - (1 - (dribbling ? CONFIG.dribble.skidGrip : pl.skidGrip)) * t * Math.min(1, v / pl.runSpeed);
   const k = Math.min(1, pl.response * grip * (1 + (p.stats.agility - 1) * t) * dt);
   p.vx += (tx - p.vx) * k;

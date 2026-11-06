@@ -15,7 +15,7 @@ import { helpOpen, onHelp } from './ui/help';
 // and takes the keys.
 const attrInfo = document.getElementById('attr-info') as HTMLDialogElement;
 const dialogOpen = () => helpOpen() || attrInfo.open;
-import { inMatch, offerInvite, render, settingUp } from './ui/menu';
+import { inMatch, offerInvite, render } from './ui/menu';
 import { paintMenu } from './ui/wash';
 import { currentAttributes, mountLocker, onAttributes } from './ui/locker';
 import { Training } from './game/training';
@@ -91,7 +91,6 @@ function pickMode() {
   }
   const trainingOn = mode.kind === 'training';
   view.setTraining(trainingOn);
-  document.getElementById('train-panel')!.hidden = !trainingOn && !settingUp();
   document.getElementById('train-hud')!.hidden = !trainingOn;
   // Keys steer only in a match, and not while the help is up.
   enableKeys(inMatch() && !dialogOpen());

@@ -1,4 +1,5 @@
 import { CONFIG } from '../config';
+import { curlStep } from './curl';
 import type { Input, Match, Player } from './sim';
 
 // A goalkeeper: a bot kept to its own small box (see keepPlayerIn). It reads
@@ -95,27 +96,19 @@ function space(match: Match, p: Player, x: number, y: number) {
 // get there.
 function predictCross(match: Match, toX: number, read: number) {
   const dt = CONFIG.tick;
-  const { maxTurn, turnEase, spinFade } = CONFIG.kick;
-  let { x, y, vx, vy, damping } = match.ball;
-  let spin = match.spin * read;
-  let curled = match.curled * read;
+  const { ball } = match;
+  let { x, y } = ball;
+  const c = { vx: ball.vx, vy: ball.vy, spin: match.spin * read, curled: match.curled * read };
   for (let i = 0; i < 4 / dt; i++) {
-    const speed = Math.hypot(vx, vy);
-    if (speed < 1) return null;
-    if (spin) {
-      const left = Math.max(0, Math.min(1, (maxTurn - Math.abs(curled)) / (maxTurn * turnEase)));
-      const a = spin * speed * dt * left;
-      curled += a;
-      [vx, vy] = [vx * Math.cos(a) - vy * Math.sin(a), vx * Math.sin(a) + vy * Math.cos(a)];
-      spin *= Math.exp(-spinFade * dt);
-    }
-    const nx = x + vx * dt;
-    const ny = y + vy * dt;
+    if (Math.hypot(c.vx, c.vy) < 1) return null;
+    if (c.spin) curlStep(c, dt);
+    const nx = x + c.vx * dt;
+    const ny = y + c.vy * dt;
     if ((toX - x) * (toX - nx) <= 0 && nx !== x) return y + (ny - y) * ((toX - x) / (nx - x));
     x = nx;
     y = ny;
-    vx *= damping;
-    vy *= damping;
+    c.vx *= ball.damping;
+    c.vy *= ball.damping;
   }
   return null;
 }

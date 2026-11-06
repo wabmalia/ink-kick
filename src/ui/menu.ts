@@ -81,15 +81,12 @@ export function inMatch() {
 function show(screen: keyof typeof screens | null) {
   for (const [k, el] of Object.entries(screens)) el.hidden = k !== screen;
   $('menu').hidden = screen === null;
-  // Setting up a match, your attributes sit down the left as in the
-  // training ground, the menu's cards moved over to make room.
+  // Your attributes sit down the left in the training ground and while
+  // setting up a match, the menu's cards kept clear of them.
   const side = screen === 'soloSetup' || screen === 'lobby';
   $('menu').classList.toggle('with-side', side);
-  if (screen !== null) $('train-panel').hidden = !side;
+  $('attr-panel').hidden = !side && !(screen === null && session.status === 'training');
 }
-
-/** Whether a screen setting up a match (with the attributes beside it) is up. */
-export const settingUp = () => !$('menu').hidden && (!screens.soloSetup.hidden || !screens.lobby.hidden);
 
 function renderLobby() {
   const room = session.room!;

@@ -11,7 +11,7 @@ import { InfoBoards } from '../scene/info-boards';
 import { buildStadium } from '../scene/stadium';
 import { buildReachRing, buildTraining } from '../scene/training';
 import { Watercolor } from '../scene/watercolor';
-import type { ViewState } from './state';
+import type { PlayerView, ViewState } from './state';
 
 // The painted stadium and everyone in it. Draws a ViewState each frame,
 // whoever is running the match, and plays the events that come with it.
@@ -286,7 +286,7 @@ export class GameView {
         if (out >= 1) heading = Math.atan2(p.fx, p.fy);
       }
       this.last.set(p.id, { x, y });
-      this.kickUp(p.id, p.team, p.action, x, y, speed, heading, dt, state, f.skid, p.vx, p.vy);
+      this.kickUp(p, x, y, speed, heading, dt, state, f.skid);
       f.group.position.set(x, 0, y);
       f.update(dt, {
         speed,
@@ -330,14 +330,11 @@ export class GameView {
 
   // Droplets thrown up by one player this frame: a few at each footstep
   // (more when sprinting), a spray while sliding, a burst when they kick.
-  private kickUp(
-    id: string, team: Team, action: string, x: number, y: number, speed: number, heading: number, dt: number,
-    state: ViewState, skid: number, vx: number, vy: number,
-  ) {
-    let st = this.strides.get(id);
+  private kickUp(p: PlayerView, x: number, y: number, speed: number, heading: number, dt: number, state: ViewState, skid: number) {
+    let st = this.strides.get(p.id);
     if (!st) {
       st = { dist: 0, foot: 1, spray: 0 };
-      this.strides.set(id, st);
+      this.strides.set(p.id, st);
     }
     const fx = Math.sin(heading);
     const fz = Math.cos(heading);
@@ -355,13 +352,13 @@ export class GameView {
         colors: GRASS_DROPS, spread: 2.2, life: 0.55,
       });
     }
-    if (action === 'slide') {
+    if (p.action === 'slide') {
       st.spray += dt;
       while (st.spray > 0.04) {
         st.spray -= 0.04;
         this.splashes.burst({
           x: x + fx * 0.5, z: y + fz * 0.5, dx: fx, dz: fz,
-          count: 4, speed: 3.4, size: 0.12, colors: [...GRASS_DROPS, KIT_LIGHT[team]], spread: 2.6, life: 0.7,
+          count: 4, speed: 3.4, size: 0.12, colors: [...GRASS_DROPS, KIT_LIGHT[p.team]], spread: 2.6, life: 0.7,
         });
       }
     } else if (skid > 0.3 && speed > 1) {
@@ -370,17 +367,17 @@ export class GameView {
       while (st.spray > 0.035) {
         st.spray -= 0.035;
         this.splashes.burst({
-          x, z: y, dx: vx, dz: vy,
-          count: 3, speed: 1 + speed * 0.35, size: 0.1, colors: [...GRASS_DROPS, KIT_LIGHT[team]], spread: 1.8, life: 0.6,
+          x, z: y, dx: p.vx, dz: p.vy,
+          count: 3, speed: 1 + speed * 0.35, size: 0.1, colors: [...GRASS_DROPS, KIT_LIGHT[p.team]], spread: 1.8, life: 0.6,
         });
       }
     } else {
       st.spray = 0;
     }
-    const power = this.kicks.get(id);
+    const power = this.kicks.get(p.id);
     if (power !== undefined) {
-      this.kicks.delete(id);
-      const ink = INK[team];
+      this.kicks.delete(p.id);
+      const ink = INK[p.team];
       // A fan of ink thrown ahead with the ball, more and further the
       // harder the kick...
       this.splashes.burst({
@@ -408,15 +405,15 @@ export class GameView {
     }
     // A tackle won: a flick of the winner's ink off the ball, a splash of
     // it after a slide.
-    if (this.steals.delete(id)) {
-      const slide = action === 'slide';
+    if (this.steals.delete(p.id)) {
+      const slide = p.action === 'slide';
       this.splashes.burst({
         x: state.ballX, z: state.ballY, dx: fx, dz: fz, count: slide ? 22 : 10, speed: slide ? 5 : 3, size: slide ? 0.14 : 0.1,
-        colors: [...INK[team], 0xffffff], spread: 2.6, life: 0.8, alpha: 0.9,
+        colors: [...INK[p.team], 0xffffff], spread: 2.6, life: 0.8, alpha: 0.9,
       });
       this.splashes.burst({
         x: state.ballX, z: state.ballY, dx: fx, dz: fz, count: 1, speed: 0, size: slide ? 0.7 : 0.4,
-        colors: INK[team], spread: 0, life: 3, alpha: 0.55, stain: true,
+        colors: INK[p.team], spread: 0, life: 3, alpha: 0.55, stain: true,
       });
     }
   }
