@@ -26,9 +26,9 @@ own values when a match starts. The global `CONFIG` values are what a 5 gives.
 
 | Attribute | In short | `CONFIG` values it scales |
 |---|---|---|
-| Pace | Top speed without the ball | `player.runSpeed`, `player.sprintSpeed` |
+| Pace | Top speed and take-off, at the cost of a heavier touch with the ball and a faster stamina drain | `player.runSpeed`, `player.sprintSpeed`, `dribble.sprintTouch`, `stamina.drain` (6% a point above 5) |
 | Stamina | Sprint longer, recover sooner | `stamina.drain`, `stamina.regen`, `stamina.tiredTime` |
-| Dribbling | Tighter, faster turns with the ball | `player.turnRateWithBall`, `dribble.turnSlowdown`, `dribble.speedFactor` |
+| Dribbling | Agility: tighter, faster turns with the ball, and quicker changes of direction and stops with or without it | `player.turnRateWithBall`, `dribble.turnSlowdown`, `dribble.speedFactor`, `player.response` on a turn or stop (8% a point) |
 | Power | Harder shots, charged sooner, more curl | `kick.shotSpeed`, `kick.chargeTime`, `kick.curl` (8% a point) |
 | Tackling | Pokes and slides that reach and keep the ball | `tackle.pokeRange`, `tackle.slideReach`, `tackle.slideControlCos` |
 | Strength | Ride tackles, hold off bumps, get up sooner, shove harder | the hold chance, `dribble.loseDistance`, `tackle.stumbleTime`, `tackle.slideShove` |
@@ -42,12 +42,15 @@ screen and to tune one at a time.
 |---|---|---|---|---|
 | Pace | Run speed | 4.28 m/s | 5.10 m/s | 6.12 m/s |
 | Pace | Sprint speed | 6.30 m/s | 7.50 m/s | 9.00 m/s |
+| Pace | Ball further ahead when sprinting with it | 0 m | 0 m | 0.35 m |
+| Pace | Sprint before tiring, from full (Stamina 5) | 3.00 s | 3.00 s | 2.31 s |
 | Stamina | Sprint before tiring, from full | 2.52 s | 3.00 s | 3.60 s |
 | Stamina | Refill, empty to full | 5.95 s | 5.00 s | 4.17 s |
 | Stamina | Tired spell | 2.98 s | 2.50 s | 2.08 s |
 | Dribbling | Turn rate with the ball | 2.69 rad/s | 3.20 rad/s | 3.84 rad/s |
 | Dribbling | Speed kept on a sharp turn | 58% | 65% | 71% |
 | Dribbling | Speed with the ball, vs without | 90% | 92% | 93% |
+| Dribbling | Full sprint turned round to half speed back | 0.17 s | 0.13 s | 0.12 s |
 | Power | Full-power shot (2% a point below 5, 4% above) | 30.4 m/s | 33.0 m/s | 39.6 m/s |
 | Power | Time to full power | 0.83 s | 0.70 s | 0.58 s |
 | Power | Most curl, how fast the path turns (any kick bends 75° at most) | 4.6° a metre | 6.7° a metre | 9.4° a metre |

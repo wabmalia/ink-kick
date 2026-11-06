@@ -304,8 +304,8 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
   const owner = byId(match.owner);
   if (owner) {
     // The ball is pulled to a spot ahead of the dribbler's feet.
-    const tx = owner.x + owner.fx * CONFIG.dribble.distance;
-    const ty = owner.y + owner.fy * CONFIG.dribble.distance;
+    const tx = owner.x + owner.fx * holdDistance(owner);
+    const ty = owner.y + owner.fy * holdDistance(owner);
     ball.vx = owner.vx + (tx - ball.x) * CONFIG.dribble.spring;
     ball.vy = owner.vy + (ty - ball.y) * CONFIG.dribble.spring;
   }
@@ -377,8 +377,8 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
   const holder = byId(match.owner);
   if (holder && match.pullingIn === 0) {
     const gap = Math.hypot(
-      ball.x - (holder.x + holder.fx * CONFIG.dribble.distance),
-      ball.y - (holder.y + holder.fy * CONFIG.dribble.distance),
+      ball.x - (holder.x + holder.fx * holdDistance(holder)),
+      ball.y - (holder.y + holder.fy * holdDistance(holder)),
     );
     if (gap > holder.stats.loseDistance && !holder.keeper) loseBall(match, holder, CONFIG.dribble.lostCooldown);
   } else if (!holder && match.restartIn <= 0) {
@@ -625,10 +625,21 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
     }
   }
 
-  const k = Math.min(1, pl.response * dt);
-  p.vx += (mx * speed - p.vx) * k;
-  p.vy += (my * speed - p.vy) * k;
+  // Agility (from Dribbling) quickens a change of direction or a stop, not
+  // speeding up straight on: none of it going the way you already are, all
+  // of it for an about turn or letting go of the keys.
+  const tx = mx * speed;
+  const ty = my * speed;
+  const v = Math.hypot(p.vx, p.vy);
+  const t = v < 0.5 ? 0 : !moving ? 1 : (1 - (p.vx * mx + p.vy * my) / v) / 2;
+  const k = Math.min(1, pl.response * (1 + (p.stats.agility - 1) * t) * dt);
+  p.vx += (tx - p.vx) * k;
+  p.vy += (ty - p.vy) * k;
 }
+
+// How far ahead of a dribbler the ball is held: further when sprinting,
+// the more so the quicker they are.
+const holdDistance = (p: Player) => CONFIG.dribble.distance + (p.sprinting ? p.stats.sprintTouch : 0);
 
 // Whether a tackle pressed now is a poke: the ball is within a foot's reach,
 // or the player on it is close enough to get round. Not from behind a

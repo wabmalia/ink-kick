@@ -62,6 +62,9 @@ export const CONFIG = {
     distance: 0.6,
     // How hard the ball is pulled back to that spot, per second.
     spring: 22,
+    // Sprinting with it, each point of Pace over 5 pushes that spot this
+    // much further ahead: a quick player's heavier touch.
+    sprintTouch: 0.07,
     // Knocked further than this from that spot, the ball is loose.
     loseDistance: 0.5,
     speedFactor: 0.92,

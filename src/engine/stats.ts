@@ -8,6 +8,12 @@ import { evenAttributes, type Attributes } from '../game/attributes';
 export interface Stats {
   runSpeed: number;
   sprintSpeed: number;
+  // Agility: how many times quicker than usual velocity closes on where
+  // you're heading when that's a change of direction or a stop (the full
+  // amount for an about turn or a stop, none for speeding up straight on).
+  agility: number;
+  // How much further ahead the ball runs when sprinting with it.
+  sprintTouch: number;
   drain: number;
   regen: number;
   tiredTime: number;
@@ -39,6 +45,11 @@ export const multiplier = (value: number, step = STEP) => 1 + step * (value - 5)
 export const POKE_STEP = 0.08;
 // And curl, so Power's effect on it is plain to see.
 export const CURL_STEP = 0.08;
+// Pace over 5 burns stamina faster, 6% a point: a quick player needs
+// Stamina to keep it up.
+export const PACE_DRAIN_STEP = 0.06;
+// Agility moves 8% a point, so a change of direction feels different.
+export const AGILITY_STEP = 0.08;
 // Shot speed loses only half as much per point below 5: a weak shooter
 // still hits the ball hard enough to score.
 export const SHOT_STEP_BELOW = 0.02;
@@ -51,9 +62,11 @@ export function statsFor(attrs: Attributes = evenAttributes()): Stats {
   return {
     runSpeed: player.runSpeed * m('pace'),
     sprintSpeed: player.sprintSpeed * m('pace'),
-    drain: stamina.drain / m('stamina'),
+    sprintTouch: dribble.sprintTouch * Math.max(0, attrs.pace - 5),
+    drain: (stamina.drain * multiplier(Math.max(5, attrs.pace), PACE_DRAIN_STEP)) / m('stamina'),
     regen: stamina.regen * m('stamina'),
     tiredTime: stamina.tiredTime / m('stamina'),
+    agility: multiplier(attrs.dribbling, AGILITY_STEP),
     turnRateWithBall: player.turnRateWithBall * m('dribbling'),
     turnSlowdown: keep(dribble.turnSlowdown, m('dribbling')),
     dribbleSpeed: keep(dribble.speedFactor, m('dribbling')),

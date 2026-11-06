@@ -32,6 +32,40 @@ describe('stats from attributes', () => {
     expect(statsFor(build('tackling', 1)).pokeRange).toBeCloseTo(0.408, 3);
     expect(statsFor(build('strength', 10)).loseDistance).toBeCloseTo(0.6, 3);
     expect(statsFor(build('dribbling', 1)).turnSlowdown).toBeCloseTo(0.583, 3);
+    expect(statsFor(build('dribbling', 10)).agility).toBeCloseTo(1.4, 3);
+    expect(statsFor(build('dribbling', 1)).agility).toBeCloseTo(0.68, 3);
+    expect(statsFor(build('pace', 10)).sprintTouch).toBeCloseTo(0.35, 3);
+    expect(1 / statsFor(build('pace', 10)).drain).toBeCloseTo(2.31, 2);
+    expect(1 / statsFor(build('pace', 1)).drain).toBeCloseTo(3, 2);
+    expect(statsFor(build('pace', 5)).sprintTouch).toBe(0);
+  });
+
+  it('Dribbling turns a sprint round sooner, without speeding up a straight start', () => {
+    // Ticks from standing to 3 m, and from a full sprint one way to half
+    // speed the other.
+    const run = (dribbling: number) => {
+      const match = createMatch([createPlayer('me', 'gold', build('dribbling', dribbling))]);
+      match.kickoffHeld = false;
+      const me = match.players[0]!;
+      Object.assign(me, { x: -14, y: 5, vx: 0, vy: 0, fx: 1, fy: 0 });
+      let start = 0;
+      while (me.x + 14 < 3 && start < 600) {
+        step(match, { me: { x: 1, y: 0, kick: false, sprint: true } });
+        start++;
+      }
+      Object.assign(me, { x: -10, vx: me.stats.sprintSpeed, vy: 0 });
+      let turn = 0;
+      while (me.vx > -me.stats.sprintSpeed / 2 && turn < 600) {
+        step(match, { me: { x: -1, y: 0, kick: false, sprint: true } });
+        turn++;
+      }
+      return { start, turn };
+    };
+    const [nimble, even, stiff] = [run(10), run(5), run(1)];
+    expect(nimble.start).toBe(even.start);
+    expect(stiff.start).toBe(even.start);
+    expect(nimble.turn).toBeLessThan(even.turn);
+    expect(even.turn).toBeLessThan(stiff.turn);
   });
 
   it('Pace 10 outruns Pace 1', () => {
