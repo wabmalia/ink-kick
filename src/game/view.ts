@@ -32,8 +32,9 @@ const INK: Record<Team, number[]> = { gold: [0xf2b134, 0xffe3a0, 0xd99a1a, 0xffc
 // Kicks harder than this leave an ink trail, a spot every TRAIL_GAP metres.
 const TRAIL_FROM = 0.3;
 const TRAIL_GAP = 0.4;
-// Ground covered per footstep splash, in metres.
+// Ground covered per footstep splash, in metres, running and sprinting.
 const STEP = 0.85;
+const SPRINT_STEP = 0.6;
 
 // The coin toss, in seconds from the coin going up: the camera holds on the
 // centre circle, then pulls back to the broadcast view while the captains
@@ -340,18 +341,27 @@ export class GameView {
     }
     const fx = Math.sin(heading);
     const fz = Math.cos(heading);
-    st.dist = Math.min(STEP * 2, st.dist + speed * dt);
-    if (speed > 1.2 && st.dist >= STEP) {
-      st.dist -= STEP;
+    // Footsteps: a small splash of paint at each, like a kick's in
+    // miniature: a blot soaking into the grass under the foot and a few
+    // drops flicked back off it, all colours. Closer together, bigger and
+    // livelier the faster the run.
+    const step = p.sprinting ? SPRINT_STEP : STEP;
+    st.dist = Math.min(step * 2, st.dist + speed * dt);
+    if (speed > 1.2 && st.dist >= step) {
+      st.dist -= step;
       st.foot = -st.foot;
-      const { sprinting } = p;
+      const pace = Math.min(1, speed / CONFIG.player.sprintSpeed);
+      // Beside the planted foot, a little behind.
+      const sx = x + fz * 0.12 * st.foot - fx * 0.1;
+      const sz = y - fx * 0.12 * st.foot - fz * 0.1;
       this.splashes.burst({
-        // Beside the planted foot, a little behind.
-        x: x + fz * 0.12 * st.foot - fx * 0.1,
-        z: y - fx * 0.12 * st.foot - fz * 0.1,
-        dx: -fx, dz: -fz,
-        count: sprinting ? 7 : 4, speed: sprinting ? 2.4 : 1.5, size: sprinting ? 0.13 : 0.09,
-        colors: GRASS_DROPS, spread: 2.2, life: 0.55,
+        x: sx, z: sz, dx: -fx, dz: -fz, count: 1, speed: 0, size: 0.14 + pace * 0.08,
+        colors: BRIGHT, spread: 0, life: 1 + pace * 0.6, alpha: 0.5, stain: true,
+      });
+      this.splashes.burst({
+        x: sx, z: sz, dx: -fx, dz: -fz,
+        count: Math.round(3 + pace * 3), speed: 1.4 + pace * 1.8, size: 0.06 + pace * 0.04,
+        colors: BRIGHT, spread: 1.8, life: 0.5, alpha: 0.9,
       });
     }
     if (p.action === 'slide') {
