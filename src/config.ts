@@ -24,9 +24,26 @@ export const CONFIG = {
     tiredSpeed: 3.6,
     // How quickly velocity closes on the target velocity, per second.
     response: 10,
-    // Radians per second; slower with the ball so it swings round.
+    // Turning back on yourself, or stopping, at a run: only this much of
+    // that grip, less the slower you're going, so you skid a little first
+    // (dribble.skidGrip with the ball, which slows you on a turn already).
+    skidGrip: 0.2,
+    // A hard turn: pressing back the way you came while still going that
+    // way faster than turnBackFrom times your running speed. You turn round
+    // at turnBackRate (radians a second) and slide on with only
+    // turnBackGrip of your grip (dribble.turnBackGrip with the ball).
+    turnBackFrom: 0.6,
+    turnBackRate: 32,
+    turnBackGrip: 0.17,
+    // The momentum a hard turn is judged against: velocity smoothed over
+    // about this long (seconds).
+    driftTime: 0.15,
+    // Radians per second at a run; slower with the ball so it swings round.
+    // Without it, the slower you're going the quicker you turn, up to
+    // pivotBoost times as quick standing still (dribble.pivotBoost with it).
     turnRate: 8,
     turnRateWithBall: 3.2,
+    pivotBoost: 1.6,
   },
 
   stamina: {
@@ -75,7 +92,14 @@ export const CONFIG = {
     reverseKeep: 0.08,
     // Turning with the ball is this many times quicker standing still than
     // at a run, so a reversal is a pivot rather than a loop.
-    pivotBoost: 2.2,
+    pivotBoost: 4,
+    skidGrip: 0.45,
+    // A hard turn with the ball: a longer slide than without, the ball left
+    // to stop (losing turnBackStop of its speed a second) while you slide
+    // past it, then turnBackGather seconds to bring it back to your feet.
+    turnBackGrip: 0.14,
+    turnBackStop: 14,
+    turnBackGather: 0.3,
     // Slower than this with the ball, you turn on the spot and move along
     // the way you're pressing, rather than curving.
     pivotSpeed: 1,

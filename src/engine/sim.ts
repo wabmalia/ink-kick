@@ -49,6 +49,14 @@ export interface Player extends Disc {
   sprinting: boolean;
   // Who last slid this player over: one slide takes a player down once.
   downBy?: string;
+  // A hard turn: turning back on yourself while moving, the way you're
+  // pressing. You turn round at once and slide on with your momentum until
+  // you can push off; with the ball, it's left where it was and you slide
+  // past it.
+  turnBack?: { dx: number; dy: number; from: number };
+  // Velocity smoothed over the last moment, what a hard turn is judged
+  // against: keys rolled round a finger at a time barely move it.
+  drift?: { x: number; y: number };
   // Can't trap the ball until this reaches 0.
   cooldown: number;
   // Whether the current poke or slide already touched the ball.
@@ -305,11 +313,18 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
 
   const owner = byId(match.owner);
   if (owner) {
-    // The ball is pulled to a spot ahead of the dribbler's feet.
-    const tx = owner.x + owner.fx * holdDistance(owner);
-    const ty = owner.y + owner.fy * holdDistance(owner);
-    ball.vx = owner.vx + (tx - ball.x) * CONFIG.dribble.spring;
-    ball.vy = owner.vy + (ty - ball.y) * CONFIG.dribble.spring;
+    if (owner.turnBack) {
+      // A hard turn: the ball's stopped where it was, and the dribbler
+      // slides past it.
+      const keep = Math.exp(-CONFIG.dribble.turnBackStop * dt);
+      ball.vx *= keep;
+      ball.vy *= keep;
+    } else {
+      // The ball is pulled to a spot ahead of the dribbler's feet.
+      const d = holdDistance(owner);
+      ball.vx = owner.vx + (owner.x + owner.fx * d - ball.x) * CONFIG.dribble.spring;
+      ball.vy = owner.vy + (owner.y + owner.fy * d - ball.y) * CONFIG.dribble.spring;
+    }
   }
   if (owner) {
     match.spin = 0;
@@ -377,7 +392,7 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
   match.pullingIn = Math.max(0, match.pullingIn - dt);
   if (match.guard && (match.guard.left -= dt) <= 0) match.guard = null;
   const holder = byId(match.owner);
-  if (holder && match.pullingIn === 0) {
+  if (holder && match.pullingIn === 0 && !holder.turnBack) {
     const gap = Math.hypot(
       ball.x - (holder.x + holder.fx * holdDistance(holder)),
       ball.y - (holder.y + holder.fy * holdDistance(holder)),
@@ -484,6 +499,10 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
   p.sprintDown = input.sprint;
   p.actionT += dt;
   p.cooldown = Math.max(0, p.cooldown - dt);
+  const drift = (p.drift ??= { x: p.vx, y: p.vy });
+  const blend = Math.min(1, dt / CONFIG.player.driftTime);
+  drift.x += (p.vx - drift.x) * blend;
+  drift.y += (p.vy - drift.y) * blend;
   const hasBall = match.owner === p.id;
 
   switch (p.action) {
@@ -610,18 +629,31 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
     // the keys are free to set up the curl.
     mx = p.fx;
     my = p.fy;
+  } else if (!moving) {
+    endTurnBack(match, p);
   } else if (moving) {
-    let rate = pl.turnRate;
-    if (dribbling) {
-      // Quicker to turn the slower you're going: a pivot when stopped, so
-      // a reversal brakes, turns with the ball and goes, rather than
-      // looping round at speed.
-      const slow = 1 - Math.min(1, Math.hypot(p.vx, p.vy) / p.stats.runSpeed);
-      rate = p.stats.turnRateWithBall * (1 + (CONFIG.dribble.pivotBoost - 1) * slow * slow);
-    }
+    // Quicker to turn the slower you're going the way you face: a pivot
+    // when stopped, so a reversal brakes, turns and goes, rather than
+    // looping round at speed. Moving back or across counts as stopped.
+    const slow = 1 - Math.min(1, Math.max(0, p.vx * p.fx + p.vy * p.fy) / p.stats.runSpeed);
+    const rate = dribbling
+      ? p.stats.turnRateWithBall * (1 + (CONFIG.dribble.pivotBoost - 1) * slow * slow)
+      : pl.turnRate * (1 + (pl.pivotBoost - 1) * slow * slow);
     const current = Math.atan2(p.fy, p.fx);
     const turn = angleBetween(current, Math.atan2(dy, dx));
-    const a = current + Math.sign(turn) * Math.min(Math.abs(turn), rate * dt);
+    let a = current + Math.sign(turn) * Math.min(Math.abs(turn), rate * dt);
+    // A hard turn: pressing back the way you came while still moving at a
+    // run. You turn round at once and slide on until you can push off.
+    // Judged against the last moment's momentum, not facing or this
+    // tick's, so keys rolled round a finger at a time still count.
+    const back = -(p.vx * dx + p.vy * dy);
+    if (p.turnBack && (p.turnBack.dx * dx + p.turnBack.dy * dy < 0.87 || back <= 0)) endTurnBack(match, p);
+    const drift = p.drift ?? { x: p.vx, y: p.vy };
+    const was = -(drift.x * dx + drift.y * dy);
+    if (!p.turnBack && was > pl.turnBackFrom * p.stats.runSpeed && was > 0.5 * Math.hypot(drift.x, drift.y) && back > 0) {
+      p.turnBack = { dx, dy, from: Math.max(back, 0.7 * was) };
+    }
+    if (p.turnBack) a = current + Math.sign(turn) * Math.min(Math.abs(turn), pl.turnBackRate * dt);
     p.fx = Math.cos(a);
     p.fy = Math.sin(a);
     if (dribbling) {
@@ -652,14 +684,22 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
     }
   }
 
-  // Agility (from Dribbling) quickens a change of direction or a stop, not
-  // speeding up straight on: none of it going the way you already are, all
-  // of it for an about turn or letting go of the keys.
+  // A change of direction or a stop at speed skids a little: grip falls
+  // to skidGrip for an about turn or letting go of the keys at a run (none
+  // of it lost speeding up straight on, or from a standstill). Agility
+  // (from Dribbling) quickens it.
   const tx = mx * speed;
   const ty = my * speed;
   const v = Math.hypot(p.vx, p.vy);
   const t = v < 0.5 ? 0 : !moving ? 1 : (1 - (p.vx * mx + p.vy * my) / v) / 2;
-  const k = Math.min(1, pl.response * (1 + (p.stats.agility - 1) * t) * dt);
+  // Grip comes back as the slide slows: in a hard turn, once below 70% of
+  // the speed it began at, so one from a run slides as long as one from a
+  // sprint, just not as far.
+  const tb = p.turnBack;
+  const grip = tb
+    ? 1 - (1 - (dribbling ? CONFIG.dribble.turnBackGrip : pl.turnBackGrip)) * Math.min(1, v / (0.7 * tb.from))
+    : 1 - (1 - (dribbling ? CONFIG.dribble.skidGrip : pl.skidGrip)) * t * Math.min(1, v / pl.runSpeed);
+  const k = Math.min(1, pl.response * grip * (1 + (p.stats.agility - 1) * t) * dt);
   p.vx += (tx - p.vx) * k;
   p.vy += (ty - p.vy) * k;
 }
@@ -667,6 +707,14 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
 // How far ahead of a dribbler the ball is held: further when sprinting,
 // the more so the quicker they are.
 const holdDistance = (p: Player) => CONFIG.dribble.distance + (p.sprinting ? p.stats.sprintTouch : 0);
+
+// A hard turn's over: pushing off the new way. The ball, left behind on
+// the turn, is gathered back in to the feet without being lost.
+function endTurnBack(match: Match, p: Player) {
+  if (!p.turnBack) return;
+  p.turnBack = undefined;
+  if (match.owner === p.id) match.pullingIn = Math.max(match.pullingIn, CONFIG.dribble.turnBackGather);
+}
 
 // Whether a tackle pressed now is a poke: the ball is within a foot's reach,
 // or the player on it is close enough to get round. Not from behind a

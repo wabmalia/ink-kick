@@ -315,6 +315,41 @@ describe('sim', () => {
     expect(strong.down).toBeLessThan(weak.down - ticks(0.3));
   });
 
+  it('turns round quickly once it stops going the way it faces', () => {
+    const { match, me } = setup();
+    Object.assign(match.ball, { x: 0, y: -8 });
+    moveTo(me, -8, 0);
+    me.vx = CONFIG.player.sprintSpeed;
+    let k = 0;
+    while (me.fx > -0.98 && k < 60) {
+      run(match, 1, { me: { x: -1, y: 0.001, sprint: true } });
+      k++;
+    }
+    expect(k).toBeLessThan(ticks(0.35));
+  });
+
+  it('a hard turn still happens when the keys roll round to the new way', () => {
+    for (const [ball, sprint, steps] of [[false, true, 2], [true, true, 2], [false, false, 5], [true, false, 5]] as const) {
+      const { match, me, them } = setup();
+      moveTo(them, 10, 8);
+      moveTo(me, -8, -3, Math.SQRT1_2, Math.SQRT1_2);
+      match.kickoffHeld = false;
+      if (ball) giveBall(match, me);
+      else Object.assign(match.ball, { x: 0, y: -8 });
+      run(match, 50, { me: { x: 1, y: 1, sprint } });
+      // Up and right to down and left, a finger at a time.
+      run(match, steps, { me: { x: 1, y: 0, sprint } });
+      run(match, 1, { me: { sprint } });
+      run(match, steps, { me: { x: 0, y: -1, sprint } });
+      let turned = false;
+      for (let i = 0; i < 10; i++) {
+        run(match, 1, { me: { x: -1, y: -1, sprint } });
+        if (me.turnBack) turned = true;
+      }
+      expect(turned, `ball ${ball}, sprint ${sprint}`).toBe(true);
+    }
+  });
+
   it('deadens a shot that hits a player', () => {
     const { match, me } = setup();
     moveTo(me, 0, 0, -1, 0);
@@ -409,9 +444,9 @@ describe('sim', () => {
         expect(match.owner).toBe('me');
       }
       // Along the same line: it used to loop 2 to 3 m wide and run 1.3 to
-      // 1.9 m on.
+      // 1.9 m on at a run. A hard turn's slide on is fine.
       expect(wide).toBeLessThan(0.1);
-      expect(past).toBeLessThan(0.6);
+      expect(past).toBeLessThan(1.4);
       expect(me.vx).toBeLessThan(-3);
     }
   });

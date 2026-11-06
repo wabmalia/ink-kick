@@ -286,11 +286,12 @@ export class GameView {
         if (out >= 1) heading = Math.atan2(p.fx, p.fy);
       }
       this.last.set(p.id, { x, y });
-      this.kickUp(p.id, p.team, p.action, x, y, speed, heading, dt, state);
+      this.kickUp(p.id, p.team, p.action, x, y, speed, heading, dt, state, f.skid, p.vx, p.vy);
       f.group.position.set(x, 0, y);
       f.update(dt, {
         speed,
         heading,
+        ...(captain ? {} : { vx: p.vx, vz: p.vy }),
         action: p.action,
         actionT: p.actionT,
         charge: p.charge,
@@ -329,7 +330,10 @@ export class GameView {
 
   // Droplets thrown up by one player this frame: a few at each footstep
   // (more when sprinting), a spray while sliding, a burst when they kick.
-  private kickUp(id: string, team: Team, action: string, x: number, y: number, speed: number, heading: number, dt: number, state: ViewState) {
+  private kickUp(
+    id: string, team: Team, action: string, x: number, y: number, speed: number, heading: number, dt: number,
+    state: ViewState, skid: number, vx: number, vy: number,
+  ) {
     let st = this.strides.get(id);
     if (!st) {
       st = { dist: 0, foot: 1, spray: 0 };
@@ -358,6 +362,16 @@ export class GameView {
         this.splashes.burst({
           x: x + fx * 0.5, z: y + fz * 0.5, dx: fx, dz: fz,
           count: 4, speed: 3.4, size: 0.12, colors: [...GRASS_DROPS, KIT_LIGHT[team]], spread: 2.6, life: 0.7,
+        });
+      }
+    } else if (skid > 0.3 && speed > 1) {
+      // A skid scuffs up grass and a little ink, thrown on the way it's going.
+      st.spray += dt;
+      while (st.spray > 0.035) {
+        st.spray -= 0.035;
+        this.splashes.burst({
+          x, z: y, dx: vx, dz: vy,
+          count: 3, speed: 1 + speed * 0.35, size: 0.1, colors: [...GRASS_DROPS, KIT_LIGHT[team]], spread: 1.8, life: 0.6,
         });
       }
     } else {

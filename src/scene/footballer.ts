@@ -44,7 +44,24 @@ export interface Pose {
   tired: boolean;
   // 0..1: right arm raised overhead, as a referee tossing the coin.
   armUp?: number;
+  // Ground velocity, world x and z, for skids and leaning into turns.
+  vx?: number;
+  vz?: number;
 }
+
+// Braking harder than this (m/s²) starts a skid pose, full at SKID_FULL more;
+// it eases in over SKID_IN seconds and is held, then eases out over SKID_OUT.
+const SKID_FROM = 8;
+const SKID_FULL = 10;
+const SKID_IN = 0.05;
+const SKID_OUT = 0.28;
+const SKID_TOO_SUDDEN = 220;
+// Only a skid from a run shows: none from below SKID_SPEED_FROM (m/s),
+// full from SKID_SPEED_FULL.
+const SKID_SPEED_FROM = 3;
+const SKID_SPEED_FULL = 4.5;
+// How fast the planted leg swaps from in front to behind as you turn round.
+const SKID_SWAP = 3;
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
@@ -77,6 +94,18 @@ export class Footballer {
   private kickPower = 1;
   // Blend weights that ease the slide pose in and out.
   private slideW = 0;
+  // The skid: its weight, and the side the slide is carrying you, 1
+  // forward, -1 back (relative to facing), eased as you turn round; and
+  // last frame's velocity to measure braking by.
+  private skidW = 0;
+  private skidDir = 1;
+  private tiltS = 0;
+  private lastV: { x: number; z: number } | null = null;
+
+  /** 0..1, how hard this player is skidding, for the scuff marks. */
+  get skid() {
+    return this.skidW;
+  }
 
   // Each drawn piece: which shared part it is, the joint-space slot that
   // places it, and its colour. StickmanBatch draws them all, instanced.
@@ -152,6 +181,39 @@ export class Footballer {
     let drop = 0;
     let back = 0;
     let spread = 0.12;
+    let tilt = 0;
+
+    // Skid: braking hard, one leg planted towards the way you're still
+    // sliding, the other bent under, leaning the way you want to go: the
+    // front leg as the turn starts, the trailing one once round. And a lean
+    // into a turn.
+    const vx = pose.vx ?? 0;
+    const vz = pose.vz ?? 0;
+    const fx = Math.sin(pose.heading);
+    const fz = Math.cos(pose.heading);
+    if (this.lastV && dt > 0) {
+      const v0 = Math.hypot(this.lastV.x, this.lastV.z);
+      let brake = v0 > 1.5 ? -((vx - this.lastV.x) * this.lastV.x + (vz - this.lastV.z) * this.lastV.z) / v0 / dt : 0;
+      // Faster than any skid: put back on a spot for a restart, not braking.
+      if (brake > SKID_TOO_SUDDEN) brake = 0;
+      const fast = Math.max(0, Math.min(1, (v0 - SKID_SPEED_FROM) / (SKID_SPEED_FULL - SKID_SPEED_FROM)));
+      const want = fast * Math.max(0, Math.min(1, (brake - SKID_FROM) / SKID_FULL));
+      if (want > this.skidW) {
+        this.skidW = Math.min(want, this.skidW + dt / SKID_IN);
+      } else {
+        this.skidW = Math.max(want, this.skidW - dt / SKID_OUT);
+      }
+    }
+    this.lastV = pose.vx === undefined ? null : { x: vx, z: vz };
+    const along = vx * fx + vz * fz;
+    const dir = Math.max(-1, Math.min(1, along / 1.5));
+    this.skidDir += (dir - this.skidDir) * Math.min(1, dt * SKID_SWAP * 4);
+    // Sideways speed relative to facing: positive is to the player's left.
+    const across = vx * fz - vz * fx;
+    // Eased, so it doesn't twitch with every change of speed.
+    const turnLean = Math.max(-0.22, Math.min(0.22, across * 0.05));
+    this.tiltS += (turnLean - this.tiltS) * Math.min(1, dt * 8);
+    tilt = this.tiltS;
 
     // Idle: a little breathing and weight shift, quicker when tired.
     const idle = 1 - Math.min(1, s * 4);
@@ -172,6 +234,25 @@ export class Footballer {
     }
 
     const mix = (from: number, to: number, w: number) => from + (to - from) * w;
+
+    const kw = pose.action === 'none' ? smooth(this.skidW) : 0;
+    if (kw > 0) {
+      const d = this.skidDir;
+      // Planted leg (left) out towards the slide, the other bent under.
+      hipL = mix(hipL, -0.65 * d, kw);
+      kneeL = mix(kneeL, 0.1, kw);
+      hipR = mix(hipR, 0.25 * d, kw);
+      kneeR = mix(kneeR, 1.15, kw);
+      shoulderL = mix(shoulderL, 0.55 * d, kw);
+      shoulderR = mix(shoulderR, -0.75 * d, kw);
+      spread = mix(spread, 0.5, kw);
+      elbow = mix(elbow, -0.6, kw);
+      // Leaning against the slide, the way you want to go.
+      lean = mix(lean, -0.34 * d, kw);
+      drop = mix(drop, -0.14, kw);
+      back = mix(back, -0.14 * d, kw);
+      tilt = mix(tilt, 0, kw);
+    }
 
     if (pose.action === 'charge') {
       // Right leg drawn back further the more power is stored.
@@ -254,8 +335,9 @@ export class Footballer {
     this.elbowL.rotation.x = elbow;
     this.elbowR.rotation.x = elbow;
     this.body.rotation.x = lean;
+    this.body.rotation.z = tilt;
     this.body.position.set(0, bob + drop, back);
     // Counter-twist the shoulders against the hips while running.
-    this.torso.rotation.y = -swing * 0.25;
+    this.torso.rotation.y = -swing * 0.25 * (1 - kw);
   }
 }
