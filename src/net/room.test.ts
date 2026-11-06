@@ -111,10 +111,10 @@ describe('host room', () => {
     // Anything not on offer falls back to the default.
     r.setRules({ kind: 'first', goals: 99 });
     expect(r.view().rules).toEqual({ kind: 'first', goals: 3 });
-    r.setRules({ kind: 'first', goals: 2 });
+    r.setRules({ kind: 'first', goals: 7 });
     r.start();
-    expect(r.match!.rules).toEqual({ kind: 'first', goals: 2 });
+    expect(r.match!.rules).toEqual({ kind: 'first', goals: 7 });
     r.setRules({ kind: 'timed', seconds: 300 });
-    expect(r.match!.rules).toEqual({ kind: 'first', goals: 2 });
+    expect(r.match!.rules).toEqual({ kind: 'first', goals: 7 });
   });
 });

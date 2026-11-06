@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { BOARD, farMiddleBoards, outline, PANEL_H, PANEL_W } from './ads';
 
 // During a match, the two boards under the billboard give up their adverts
-// to the match: how it's won on the left ("Best of 5"), how it stands on the
-// right ("First to 3", the time left, "Golden goal"). Painted like the
+// to the match: how it's won on the left ("First to 3"), how it stands on
+// the right ("2 to win", "Match point", the time left, "Golden goal"). Painted like the
 // adverts, on faces laid just over theirs, so the baked boards stay as they
 // are and show through again after the match.
 

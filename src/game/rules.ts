@@ -1,8 +1,7 @@
 import type { Rules } from '../engine/sim';
 
 // The match lengths on offer before a kickoff, and how each reads on the
-// scoreboard. "Best of" counts goals, like games in a series: best of 5 is
-// first to 3.
+// scoreboard.
 
 export interface RuleOption {
   id: string;
@@ -11,14 +10,14 @@ export interface RuleOption {
 }
 
 export const RULE_OPTIONS: RuleOption[] = [
-  { id: 'bo3', label: 'Best of 3', rules: { kind: 'first', goals: 2 } },
-  { id: 'bo5', label: 'Best of 5', rules: { kind: 'first', goals: 3 } },
-  { id: 'bo7', label: 'Best of 7', rules: { kind: 'first', goals: 4 } },
+  { id: 'ft3', label: 'First to 3', rules: { kind: 'first', goals: 3 } },
+  { id: 'ft5', label: 'First to 5', rules: { kind: 'first', goals: 5 } },
+  { id: 'ft7', label: 'First to 7', rules: { kind: 'first', goals: 7 } },
   { id: 't3', label: '3 min', rules: { kind: 'timed', seconds: 180 } },
   { id: 't5', label: '5 min', rules: { kind: 'timed', seconds: 300 } },
 ];
 
-export const DEFAULT_RULES = RULE_OPTIONS[1]!.rules;
+export const DEFAULT_RULES = RULE_OPTIONS[0]!.rules;
 
 export const ruleId = (rules: Rules) =>
   RULE_OPTIONS.find(o => JSON.stringify(o.rules) === JSON.stringify(rules))?.id ?? null;
@@ -41,9 +40,12 @@ export function rulesName(rules: Rules): string {
   return '';
 }
 
-/** How it stands: the target, the time left, or a golden goal. */
-export function rulesLine(rules: Rules, clock: number): string {
-  if (rules.kind === 'first') return `First to ${rules.goals}`;
+/** How it stands: goals still to win (or match point), the time left, or a golden goal. */
+export function rulesLine(rules: Rules, clock: number, score: { gold: number; red: number }): string {
+  if (rules.kind === 'first') {
+    const left = rules.goals - Math.max(score.gold, score.red);
+    return left <= 1 ? 'Match point' : `${left} to win`;
+  }
   if (rules.kind === 'timed') return clock >= rules.seconds ? 'Golden goal' : clockText(rules.seconds - clock);
   return '';
 }

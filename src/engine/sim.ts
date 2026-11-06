@@ -78,7 +78,7 @@ export interface Input {
   sprint: boolean;
 }
 
-// How a match is won: first to a number of goals ("best of" 2n-1), most
+// How a match is won: first to a number of goals, most
 // goals when the clock runs out (then a golden goal if level), or never (the
 // bots behind the menu).
 export type Rules =

@@ -162,7 +162,7 @@ function frame(now: number) {
   if (mode.kind === 'solo' || mode.kind === 'host' || mode.kind === 'guest') {
     matchEvents(played, nameOf, mode.kind);
     const rules = mode.kind === 'guest' ? session.room?.rules : mode.local.match.rules;
-    if (rules && rules.kind !== 'endless') state.info = [rulesName(rules), rulesLine(rules, state.clock ?? 0)];
+    if (rules && rules.kind !== 'endless') state.info = [rulesName(rules), rulesLine(rules, state.clock ?? 0, state.score)];
   }
   if (mode.kind !== 'attract') me = session.me;
   if (session.room && mode.kind !== 'solo' && mode.kind !== 'attract') {
