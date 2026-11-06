@@ -468,7 +468,8 @@ function endIfWon(match: Match, events: SimEvent[]) {
   events.push({ type: 'end', winner: leader, score: { ...score }, goals: match.goals.map(g => ({ ...g })) });
 }
 
-function setAction(p: Player, action: Action) {
+/** Starts an action, its clock from zero (the only way to change one). */
+export function setAction(p: Player, action: Action) {
   p.action = action;
   p.actionT = 0;
   p.struck = false;

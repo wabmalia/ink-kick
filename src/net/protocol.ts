@@ -32,9 +32,10 @@ export const ACTIONS: Action[] = ['none', 'charge', 'poke', 'slide', 'recover', 
 
 // One player in a snapshot, packed to keep it small:
 // [id, team (0 gold, 1 red), x, y, vx, vy, fx, fy, action, actionT, charge,
-//  stamina, tired]
+//  stamina, tired, stumble (seconds the current stumble lasts, else 0),
+//  sprinting (0 or 1)]
 export type PlayerState = [
-  string, 0 | 1, number, number, number, number, number, number, number, number, number, number, number,
+  string, 0 | 1, number, number, number, number, number, number, number, number, number, number, number, number, 0 | 1,
 ];
 
 export interface Snapshot {

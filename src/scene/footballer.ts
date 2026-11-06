@@ -44,6 +44,8 @@ export interface Pose {
   tired: boolean;
   // 0..1: right arm raised overhead, as a referee tossing the coin.
   armUp?: number;
+  // How long a stumble lasts, seconds (it varies with Strength).
+  stumble?: number;
   // Ground velocity, world x and z, for skids and leaning into turns.
   vx?: number;
   vz?: number;
@@ -316,7 +318,7 @@ export class Footballer {
 
     if (pose.action === 'stumble') {
       // Knocked off balance: a wobble that settles.
-      const t = pose.actionT / tackle.stumbleTime;
+      const t = Math.min(1, pose.actionT / (pose.stumble || tackle.stumbleTime));
       lean += Math.sin(pose.actionT * 22) * 0.35 * (1 - t);
       spread = mix(spread, 1.1, 1 - t);
       shoulderL = mix(shoulderL, -1.2, 1 - t);

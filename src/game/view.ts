@@ -296,6 +296,7 @@ export class GameView {
         actionT: p.actionT,
         charge: p.charge,
         tired: p.tired > 0,
+        stumble: p.stumble,
       });
     }
     this.drawReferee(dt, out);
@@ -342,7 +343,7 @@ export class GameView {
     if (speed > 1.2 && st.dist >= STEP) {
       st.dist -= STEP;
       st.foot = -st.foot;
-      const sprinting = speed > CONFIG.player.runSpeed + 0.4;
+      const { sprinting } = p;
       this.splashes.burst({
         // Beside the planted foot, a little behind.
         x: x + fz * 0.12 * st.foot - fx * 0.1,

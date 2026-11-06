@@ -1,6 +1,6 @@
 import { CONFIG } from '../config';
 import { Bot } from '../engine/ai';
-import { createMatch, createPlayer, KEEPER_IDS, step, type Input, type Match, type Player, type SimEvent } from '../engine/sim';
+import { createMatch, createPlayer, KEEPER_IDS, setAction, step, type Input, type Match, type Player, type SimEvent } from '../engine/sim';
 import { statsFor } from '../engine/stats';
 import type { Attributes } from './attributes';
 
@@ -233,7 +233,8 @@ export class Training {
       if (this.inNet >= NET_WAIT) {
         this.inNet = 0;
         const d = CONFIG.dribble.distance;
-        Object.assign(keeper, { fx: -1, fy: 0, action: 'none', vx: 0, vy: 0 });
+        Object.assign(keeper, { fx: -1, fy: 0, vx: 0, vy: 0 });
+        setAction(keeper, 'none');
         Object.assign(ball, { x: keeper.x - d, y: keeper.y, vx: 0, vy: 0 });
         match.owner = keeper.id;
         match.spin = 0;
@@ -341,7 +342,7 @@ export class Training {
         if (match.owner === me.id) {
           me.cooldown = Math.max(me.cooldown, 0.4);
           // A kick being charged is called off with the ball gone.
-          if (me.action === 'charge') me.action = 'none';
+          if (me.action === 'charge') setAction(me, 'none');
           me.charge = 0;
         }
         this.giveDummy();

@@ -20,6 +20,10 @@ export interface PlayerView {
   stamina: number;
   // Fraction of the tired spell left, 0 when not tired.
   tired: number;
+  // While stumbling, how long this one lasts (it's shorter the stronger
+  // they are); 0 otherwise.
+  stumble: number;
+  sprinting: boolean;
 }
 
 export interface ViewState {
@@ -51,14 +55,19 @@ export function toSnapshot(match: Match, tick: number): Snapshot {
       p.id, p.team === 'gold' ? 0 : 1,
       round(p.x), round(p.y), round(p.vx), round(p.vy), round(p.fx), round(p.fy),
       ACTIONS.indexOf(p.action), round(p.actionT), round(p.charge), round(p.stamina),
-      round(p.tired / p.stats.tiredTime),
+      round(p.tired / p.stats.tiredTime), stumbleOf(p), p.sprinting ? 1 : 0,
     ]),
   };
 }
 
+const stumbleOf = (p: Match['players'][number]) => (p.action === 'stumble' ? round(p.stats.stumbleTime) : 0);
+
 function fromState(s: PlayerState): PlayerView {
-  const [id, team, x, y, vx, vy, fx, fy, action, actionT, charge, stamina, tired] = s;
-  return { id, team: team ? 'red' : 'gold', x, y, vx, vy, fx, fy, action: ACTIONS[action] ?? 'none', actionT, charge, stamina, tired };
+  const [id, team, x, y, vx, vy, fx, fy, action, actionT, charge, stamina, tired, stumble, sprinting] = s;
+  return {
+    id, team: team ? 'red' : 'gold', x, y, vx, vy, fx, fy, action: ACTIONS[action] ?? 'none', actionT, charge, stamina, tired,
+    stumble: stumble ?? 0, sprinting: sprinting === 1,
+  };
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -189,7 +198,7 @@ export class LocalMatch {
           x: lerp(from.x, p.x, t), y: lerp(from.y, p.y, t),
           vx: p.vx, vy: p.vy, fx: p.fx, fy: p.fy,
           action: p.action, actionT: p.actionT, charge: p.charge,
-          stamina: p.stamina, tired: p.tired / p.stats.tiredTime,
+          stamina: p.stamina, tired: p.tired / p.stats.tiredTime, stumble: stumbleOf(p), sprinting: p.sprinting,
         };
       }),
       ballX: lerp(this.prevBall.x, match.ball.x, t),
