@@ -495,7 +495,8 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
         match.owner = null;
         match.spin = 0;
         match.curled = 0;
-        match.aftertouch = { player: p.id, dx: p.fx, dy: p.fy, left: kick.aftertouch };
+        // A keeper's kick out goes straight: walking off after it is no aftertouch.
+        match.aftertouch = p.keeper ? null : { player: p.id, dx: p.fx, dy: p.fy, left: kick.aftertouch };
         if (p.keeper) match.guard = { team: p.team, left: CONFIG.keeper.kickGuard };
         p.cooldown = kick.cooldown;
         events.push({ type: 'kick', player: p.id, power: p.charge });

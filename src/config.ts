@@ -173,11 +173,15 @@ export const CONFIG = {
     // How far off its line it stands at the least.
     lineOff: 0.55,
     // A ball heading for goal faster than this is a shot. The keeper moves
-    // for it this long after it's struck, to where it guessed it would
-    // cross, off by up to error metres (more for harder shots).
+    // for it reaction seconds after a ball that fast comes into its half,
+    // to where it guessed it would cross, off by up to error metres (more
+    // for harder shots). It reads curlRead of the curl and looks again
+    // every reread seconds.
     shotSpeed: 6,
     reaction: 0.22,
     error: 1.8,
+    curlRead: 0.6,
+    reread: 0.2,
     // A loose ball in its box slower than this, it goes and gets.
     collectSpeed: 7,
     // Holding the ball this long before kicking it out.

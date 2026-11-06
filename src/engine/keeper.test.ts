@@ -141,6 +141,33 @@ describe('goalkeepers', () => {
     expect(closest).toBeGreaterThan(1);
   });
 
+  it('kicks it out to the most open teammate, dead straight', () => {
+    const match = createMatch(
+      [createPlayer('near', 'red'), createPlayer('far', 'red'), createPlayer('them', 'gold')],
+      { keepers: true, seed: 3 },
+    );
+    match.kickoffHeld = false;
+    const gk = match.players.find(p => p.id === KEEPER_IDS.red)!;
+    const near = match.players.find(p => p.id === 'near')!;
+    const far = match.players.find(p => p.id === 'far')!;
+    const them = match.players.find(p => p.id === 'them')!;
+    Object.assign(match.ball, { x: gk.x - 0.6, y: 0, vx: 0, vy: 0 });
+    Object.assign(gk, { y: 0, fx: -1, fy: 0 });
+    match.owner = gk.id;
+    // The nearer one is marked; the further one has nobody near.
+    Object.assign(near, { x: gk.x - 6, y: 5, vx: 0, vy: 0 });
+    Object.assign(them, { x: gk.x - 7, y: 6.5, vx: 0, vy: 0 });
+    Object.assign(far, { x: gk.x - 12, y: -6, vx: 0, vy: 0 });
+    const idles = { near: idle, far: idle, them: idle };
+    for (let i = 0; i < ticks(3) && match.owner === gk.id; i++) step(match, idles);
+    expect(match.owner).toBeNull();
+    const dir = Math.atan2(match.ball.vy, match.ball.vx);
+    for (let i = 0; i < ticks(0.4); i++) step(match, idles);
+    expect(match.spin).toBe(0);
+    expect(Math.atan2(match.ball.vy, match.ball.vx)).toBeCloseTo(dir, 5);
+    expect(match.ball.y).toBeLessThan(gk.y);
+  });
+
   it("dives for a shot it can't reach on its feet", () => {
     let dived = 0;
     for (let seed = 1; seed <= 10; seed++) {
