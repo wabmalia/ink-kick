@@ -71,35 +71,40 @@ function showBoard(end: Extract<SimEvent, { type: 'end' }>, nameOf: NameOf, role
   title.textContent = end.winner ? `${TEAM[end.winner]} wins!` : 'A draw';
   board.className = `card scoreboard ${end.winner ?? ''}`;
   $('scoreboard-final').textContent = `${end.score.gold} - ${end.score.red}`;
-  // A row a goal: the scorer on the side of the team it counted for (so an
-  // own goal sits on the other side from their own team), the time and the
-  // score after it in the middle.
-  const running = { gold: 0, red: 0 };
+  // A line a scorer, on the side of the team their goals counted for (so
+  // own goals sit on the other side from their own team), with the time of
+  // each underneath. In the order they first scored.
   const span = (cls: string, text: string) => {
     const el = document.createElement('span');
     el.className = cls;
     el.textContent = text;
     return el;
   };
-  $('goal-list').replaceChildren(...end.goals.map(goal => {
-    running[goal.team]++;
-    const li = document.createElement('li');
-    li.className = goal.team;
+  const scorers = new Map<string, { team: Team; name: string; own: boolean; times: number[] }>();
+  for (const goal of end.goals) {
+    const key = `${goal.team}|${goal.scorer ?? ''}|${goal.own}`;
     const name = (goal.scorer && nameOf(goal.scorer)) || TEAM[goal.team];
-    const who = span('who', name);
-    if (goal.own) who.append(span('own', 'own goal'));
-    const mid = span('mid', '');
-    mid.append(span('at', clockText(goal.at)), span('tally', `${running.gold} - ${running.red}`));
-    const blank = span('who', '');
-    li.append(...(goal.team === 'gold' ? [who, mid, blank] : [blank, mid, who]));
-    return li;
-  }));
-  if (!end.goals.length) {
-    const li = document.createElement('li');
-    li.className = 'none';
-    li.textContent = 'No goals';
-    $('goal-list').append(li);
+    const s = scorers.get(key) ?? { team: goal.team, name, own: goal.own, times: [] };
+    s.times.push(goal.at);
+    scorers.set(key, s);
   }
+  const column = (team: Team) => {
+    const ul = document.createElement('ul');
+    ul.className = `scorers ${team}`;
+    for (const s of scorers.values()) {
+      if (s.team !== team) continue;
+      const li = document.createElement('li');
+      // An own goal's scorer keeps their own team's colour.
+      if (s.own) li.className = `by-${team === 'gold' ? 'red' : 'gold'}`;
+      const who = span('who', s.name);
+      if (s.own) who.append(span('own', ' (own goal)'));
+      li.append(who, span('times', s.times.map(clockText).join(' · ')));
+      ul.append(li);
+    }
+    return ul;
+  };
+  if (end.goals.length) $('goal-list').replaceChildren(column('gold'), column('red'));
+  else $('goal-list').replaceChildren(span('none', 'No goals'));
   $('scoreboard-menu').hidden = role !== 'solo';
   $('play-again').hidden = role !== 'solo';
   $('scoreboard-lobby').hidden = role !== 'host';

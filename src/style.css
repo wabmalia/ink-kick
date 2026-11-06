@@ -700,35 +700,39 @@ html, body {
 .scoreboard.gold h2 { color: #ffc53d; }
 .scoreboard.red h2 { color: #ff7660; }
 /* Gold on the left, Red on the right, all the way down. */
-.scoreboard .final,
-.goal-list li { display: grid; grid-template-columns: 1fr 110px 1fr; align-items: center; width: 100%; }
+.scoreboard .final { display: grid; grid-template-columns: 1fr 110px 1fr; align-items: center; width: 100%; }
 .scoreboard .final { margin-bottom: 10px; font-family: 'Caveat Brush', cursive; }
 .final .side { font-size: 26px; }
 .final .side.gold { color: #ffc53d; text-align: right; }
 .final .side.red { color: #ff7660; text-align: left; }
 .final .score { font-size: 46px; line-height: 1; text-align: center; color: var(--text); }
 .goal-list {
-  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 44px;
   margin: 0 0 18px;
-  padding: 0;
+  padding: 10px 0;
   width: 100%;
+  border-top: 1px dashed rgba(238, 240, 250, 0.18);
+  border-bottom: 1px dashed rgba(238, 240, 250, 0.18);
   font-family: 'Caveat', cursive;
   font-weight: 700;
-  font-size: 22px;
-  /* A long timed match scrolls the goals, not the card. */
+  /* A very long timed match scrolls the scorers, not the card. */
   max-height: min(46vh, 330px);
   overflow-y: auto;
   scrollbar-width: none;
 }
 .goal-list::-webkit-scrollbar { display: none; }
-.goal-list li { padding: 4px 0; border-top: 1px dashed rgba(238, 240, 250, 0.18); }
-.goal-list li:last-child { border-bottom: 1px dashed rgba(238, 240, 250, 0.18); }
-.goal-list .who { display: flex; flex-direction: column; line-height: 1.05; }
-.goal-list li.gold .who { color: #ffd774; text-align: right; align-items: flex-end; }
-.goal-list li.red .who { color: #ff9c8a; text-align: left; align-items: flex-start; }
+.goal-list .scorers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.goal-list .scorers.gold { text-align: right; }
+.goal-list .scorers.red { text-align: left; }
+.goal-list li { display: flex; flex-direction: column; line-height: 1.05; }
+.goal-list .who { font-size: 23px; }
+.goal-list .gold .who { color: #ffd774; }
+.goal-list .red .who { color: #ff9c8a; }
+.goal-list .scorers .by-gold .who { color: #ffd774; }
+.goal-list .scorers .by-red .who { color: #ff9c8a; }
 .goal-list .own { font-size: 16px; color: var(--soft); }
-.goal-list .mid { display: flex; flex-direction: column; align-items: center; line-height: 1.05; }
-.goal-list .at { font-size: 16px; color: var(--soft); font-variant-numeric: tabular-nums; }
-.goal-list .tally { font-family: 'Caveat Brush', cursive; font-size: 24px; color: var(--text); font-variant-numeric: tabular-nums; }
-.goal-list li.none { display: block; text-align: center; color: var(--soft); border: 0; }
+.goal-list .times { font-size: 17px; color: var(--soft); font-variant-numeric: tabular-nums; }
+.goal-list .none { grid-column: 1 / -1; text-align: center; color: var(--soft); font-size: 22px; }
 .scoreboard-actions { display: flex; gap: 14px; align-items: center; justify-content: center; }
