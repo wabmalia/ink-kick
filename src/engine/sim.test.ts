@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../config';
+import { Bot } from './ai';
 import { evenAttributes } from '../game/attributes';
 import { createMatch, createPlayer, step, type Input, type Match, type Player, type SimEvent } from './sim';
 
@@ -348,6 +349,21 @@ describe('sim', () => {
       }
       expect(turned, `ball ${ball}, sprint ${sprint}`).toBe(true);
     }
+  });
+
+  it('a seeded match, bot and all, plays out the same every time', () => {
+    const play = () => {
+      const match = createMatch([createPlayer('me', 'gold'), createPlayer('bot', 'red')], { seed: 42, keepers: true });
+      const bot = new Bot('bot');
+      const events: string[] = [];
+      for (let i = 0; i < ticks(20); i++) {
+        // A wandering human: sprints about, and kicks now and then.
+        const me: Input = { x: Math.cos(i / 40), y: Math.sin(i / 55), kick: i % 90 < 20, sprint: i % 300 < 150 };
+        for (const e of step(match, { me, bot: bot.think(match) })) events.push(e.type);
+      }
+      return { events: events.join(), ball: [match.ball.x, match.ball.y], score: { ...match.score }, seed: match.seed };
+    };
+    expect(play()).toEqual(play());
   });
 
   it('deadens a shot that hits a player', () => {
