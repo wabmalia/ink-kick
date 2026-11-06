@@ -193,6 +193,20 @@ void iceServers();
 session.restore();
 const invite = session.invitedTo();
 if (session.status === 'home' && invite) offerInvite(invite);
+// A join link opened in a tab that already has the game: the browser only
+// changes the hash, without reloading, so offer the room now. From solo or
+// training, back to the menu first; never out of a room or a match with
+// others, which a click on a link shouldn't end.
+window.addEventListener('hashchange', () => {
+  const code = session.invitedTo();
+  if (!code) return;
+  if (session.status === 'solo' || session.status === 'training' || session.status === 'error') {
+    session.leave();
+    location.hash = `#/join/${code}`;
+    return;
+  }
+  if (session.status === 'home') offerInvite(code);
+});
 render();
 pickMode();
 mountLocker();
