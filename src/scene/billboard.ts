@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
 import type { Team } from '../engine/sim';
+import { seeded } from '../math';
+import { whenFontReady } from './font';
 
 // The scoreboard: a big painted board at the middle of the far side, raised
 // above the advertising boards in front of the stand. Placed from the camera,
@@ -22,8 +24,7 @@ const MIN_CENTRE = BOARD.h / 2 + 1.3;
 
 function rough(ctx: CanvasRenderingContext2D, seed: number) {
   // A wandering rounded edge, like the menu's washes.
-  let s = seed;
-  const rand = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  const rand = seeded(seed);
   const pts: [number, number][] = [];
   const inset = 10;
   const n = 64;
@@ -83,8 +84,7 @@ export class Billboard {
     }
     this.group.add(this.face);
     this.draw({ gold: 0, red: 0 });
-    // The hand-drawn font may still be loading.
-    void document.fonts.load("80px 'Caveat Brush'").then(() => {
+    whenFontReady(() => {
       this.shown = '';
       this.draw({ gold: 0, red: 0 });
     });

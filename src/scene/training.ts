@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CONE_RADIUS, CONE_SPOTS, CONES, DUEL, SPRINT, TACKLE, type Box, type Lane } from '../game/training';
+import { whenFontReady } from './font';
 
 // The training ground's markings, painted in gold over the pitch: the duel
 // and tackle boxes on the left half, the two lanes running up the right half
@@ -47,8 +48,7 @@ function word(text: string, x: number, z: number, color = '#ffc23a', size = 1, o
   m.rotation.x = -Math.PI / 2;
   m.position.set(x, LIFT, z);
   m.renderOrder = 1;
-  // The font may still be loading; paint again once it's in.
-  void document.fonts.ready.then(() => {
+  whenFontReady(() => {
     ctx.clearRect(0, 0, 512, 128);
     paintText();
     tex.needsUpdate = true;

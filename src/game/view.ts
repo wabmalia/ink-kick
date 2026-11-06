@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
-import { KEEPER_IDS, type SimEvent, type Team } from '../engine/sim';
+import { KEEPER_IDS, TEAM_NAME, type SimEvent, type Team } from '../engine/sim';
 import { createBall, rollBall } from '../scene/ball';
 import { Footballer } from '../scene/footballer';
 import { StickmanBatch } from '../scene/stickmen';
@@ -12,6 +12,8 @@ import { buildStadium } from '../scene/stadium';
 import { buildReachRing, buildTraining } from '../scene/training';
 import { Watercolor } from '../scene/watercolor';
 import type { PlayerView, ViewState } from './state';
+import { DUMMY_ID } from './training';
+import { lerp, smooth } from '../math';
 
 // The painted stadium and everyone in it. Draws a ViewState each frame,
 // whoever is running the match, and plays the events that come with it.
@@ -41,11 +43,6 @@ const TOSS_SPOT: Record<Team, { x: number; y: number }> = { gold: { x: -1.5, y: 
 const REF_SPOT = { x: 0, y: -1.1 };
 const REF_EXIT = { x: 0, y: -(CONFIG.pitch.height / 2 + 2) };
 
-const smooth = (t: number) => {
-  const c = Math.min(1, Math.max(0, t));
-  return c * c * (3 - 2 * c);
-};
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 export class GameView {
   private renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -173,7 +170,7 @@ export class GameView {
     }
     if (!entry) {
       // The training ground's tackle dummy is grey, and keepers wear their own.
-      const f = new Footballer({ color: id === 'dummy' ? DUMMY_KIT : KEEPER_KIT[id] ?? KIT[team] });
+      const f = new Footballer({ color: id === DUMMY_ID ? DUMMY_KIT : KEEPER_KIT[id] ?? KIT[team] });
       f.group.scale.setScalar(0.975);
       this.stickmen.add(f);
       entry = { team, f };
@@ -608,7 +605,7 @@ export class GameView {
     const coin = document.getElementById('coin')!;
     const text = document.getElementById('coin-text')!;
     coin.style.setProperty('--end', `${team === 'gold' ? 1800 : 1980}deg`);
-    text.textContent = `${team === 'gold' ? 'Gold' : 'Red'} kicks off!`;
+    text.textContent = `${TEAM_NAME[team]} kicks off!`;
     text.className = `coin-text ${team}`;
     toss.hidden = true;
     void toss.offsetWidth;
@@ -618,7 +615,9 @@ export class GameView {
     this.coinTimer = setTimeout(() => (toss.hidden = true), CONFIG.coinTime * 1000);
   }
 
-  clearBanner() {
+  /** A new match or mode: the coin toss, splashes, kick trail and the rest
+   *  of the last one's effects cleared away. */
+  clearEffects() {
     clearTimeout(this.coinTimer);
     document.getElementById('coin-toss')!.hidden = true;
     this.toss = null;

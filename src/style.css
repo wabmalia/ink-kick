@@ -1,4 +1,7 @@
 :root {
+  --ink: #0d1026;
+  --blue: #3d8bff;
+  --green: #3fbf6a;
   --navy: #1d2140;
   --navy-deep: #12152a;
   --gold: #f2b134;
@@ -105,12 +108,6 @@ html, body {
 
 
 [hidden] { display: none !important; }
-
-:root {
-  --ink: #0d1026;
-  --blue: #3d8bff;
-  --green: #3fbf6a;
-}
 
 /* Names over heads in a room. */
 .labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
@@ -293,7 +290,7 @@ html, body {
 }
 .tagline { margin: -4px 0 4px; font-family: 'Caveat', cursive; font-weight: 700; font-size: 24px; color: var(--text); text-shadow: 0 1px 2px var(--ink), 0 0 10px rgba(13, 16, 38, 0.9); }
 
-.cards { display: flex; flex-direction: column; gap: 14px; width: min(520px, 100%); }
+.cards { display: flex; flex-direction: column; gap: 14px; width: min(600px, 100%); }
 .cards .card { display: flex; flex-direction: column; align-items: stretch; }
 /* Every card: title, a line saying what it's for, then its controls. */
 .cards .card h2 { margin-bottom: 2px; }
@@ -551,13 +548,11 @@ html, body {
 
 /* --- Locker room --------------------------------------------------------- */
 
-.cards { width: min(600px, 100%); }
 .cards .card.locker { position: relative; display: grid; grid-template-columns: 1fr 300px; column-gap: 12px; grid-template-rows: auto auto 1fr; }
 /* The chart sits beside the title, note and nickname, all the card's height. */
 .locker-body { display: contents; }
 .locker-chart { grid-column: 2; grid-row: 1 / span 3; align-self: center; margin: 0 0 -4px; display: flex; flex-direction: column; align-items: center; }
-.locker-name { align-self: center; }
-.locker-name { display: flex; flex-direction: column; gap: 6px; }
+.locker-name { align-self: center; display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; color: var(--soft); }
 .card-note.small { margin: 0; font-size: 18px; line-height: 1.1; }
 .spare { margin: 8px 0 0; font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; color: var(--soft); }
@@ -719,8 +714,7 @@ html, body {
 .scoreboard.gold h2 { color: #ffc53d; }
 .scoreboard.red h2 { color: #ff7660; }
 /* Gold on the left, Red on the right, all the way down. */
-.scoreboard .final { display: grid; grid-template-columns: 1fr 110px 1fr; align-items: center; width: 100%; }
-.scoreboard .final { margin-bottom: 10px; font-family: 'Caveat Brush', cursive; }
+.scoreboard .final { display: grid; grid-template-columns: 1fr 110px 1fr; align-items: center; width: 100%; margin-bottom: 10px; font-family: 'Caveat Brush', cursive; }
 .final .side { font-size: 26px; }
 .final .side.gold { color: #ffc53d; text-align: right; }
 .final .side.red { color: #ff7660; text-align: left; }

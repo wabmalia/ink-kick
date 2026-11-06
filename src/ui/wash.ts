@@ -1,4 +1,5 @@
 import { BRIGHT } from '../scene/splashes';
+import { seeded } from '../math';
 
 // Watercolour washes behind the menu's cards and buttons, and the splash
 // behind the title, painted onto a canvas at each element's size the way the
@@ -38,15 +39,6 @@ const SPLATS: Record<string, string[]> = {
   purple: ['#b08cff', '#9068f5', '#e6dbff'],
 };
 const TITLE_PAD = 70;
-
-function seeded(seed: number) {
-  return () => {
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 function hash(text: string) {
   let h = 2166136261;
@@ -201,7 +193,7 @@ function paintSplash(ctx: CanvasRenderingContext2D, w: number, h: number, rand: 
   }
 }
 
-// The favicon: the title's splash in a square, with S! on it. Run once to
+// The favicon: the title's splash in a square, with the split K on it. Run once to
 // make the files in public/ (see the README), not at load.
 export async function iconDataUrl(size: number) {
   await document.fonts.load(`${size}px 'Caveat Brush'`);

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
+import { whenFontReady } from './font';
 
 // Pitch-side advertising boards along the far side and both ends, for
 // sponsors that don't exist. One painted canvas holds every advert; each
@@ -75,8 +76,7 @@ function adsTexture() {
   // Sharp at a glancing angle too, for the boards behind the goals (three.js
   // caps this at what the GPU allows).
   tex.anisotropy = 16;
-  // The fonts may still be loading the first time: paint again once they're in.
-  void document.fonts.load("80px 'Caveat Brush'").then(() => {
+  whenFontReady(() => {
     paintAds(canvas);
     tex.needsUpdate = true;
   });

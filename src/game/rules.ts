@@ -1,4 +1,5 @@
 import type { Rules } from '../engine/sim';
+import { KEYS, store } from '../storage';
 
 // The match lengths on offer before a kickoff, and how each reads on the
 // scoreboard.
@@ -50,38 +51,7 @@ export function rulesLine(rules: Rules, clock: number, score: { gold: number; re
   return '';
 }
 
-const KEEPERS_KEY = 'inkkick.keepers';
-
-export function loadKeepers(): boolean {
-  try {
-    return localStorage.getItem(KEEPERS_KEY) === 'on';
-  } catch {
-    return false;
-  }
-}
-
-export function saveKeepers(on: boolean) {
-  try {
-    localStorage.setItem(KEEPERS_KEY, on ? 'on' : 'off');
-  } catch {
-    /* not remembered, that's all */
-  }
-}
-
-const KEY = 'inkkick.rules';
-
-export function loadRules(): Rules {
-  try {
-    return cleanRules(JSON.parse(localStorage.getItem(KEY) ?? 'null'));
-  } catch {
-    return { ...DEFAULT_RULES };
-  }
-}
-
-export function saveRules(rules: Rules) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(rules));
-  } catch {
-    /* not remembered, that's all */
-  }
-}
+export const loadKeepers = () => store.get(localStorage, KEYS.keepers) === 'on';
+export const saveKeepers = (on: boolean) => store.set(localStorage, KEYS.keepers, on ? 'on' : 'off');
+export const loadRules = (): Rules => cleanRules(store.getJSON(localStorage, KEYS.rules));
+export const saveRules = (rules: Rules) => store.setJSON(localStorage, KEYS.rules, rules);

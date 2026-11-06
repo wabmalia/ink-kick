@@ -1,14 +1,13 @@
-import type { Rules, Team } from '../engine/sim';
+import { TEAM_NAME, type Rules, type Team } from '../engine/sim';
 import { RULE_OPTIONS, ruleId } from '../game/rules';
 import { normalizeCode, type MemberView } from '../net/protocol';
 import { session } from '../net/session';
-import { helpOpen } from './help';
+import { $, dialogOpen } from './dom';
 
 // The screens over the stadium: home, solo setup, connecting, error and the
 // lobby, and the buttons shown during a match. Everything is drawn from the
 // session, except whether solo setup is open.
 
-const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const screens = {
   home: $('home'),
@@ -97,7 +96,7 @@ function renderLobby() {
     list.replaceChildren(...room.members.filter(m => m.team === team).map(memberItem));
     const button = document.querySelector<HTMLButtonElement>(`[data-team="${team}"]`)!;
     button.disabled = mine?.team === team;
-    button.textContent = mine?.team === team ? `You're on ${team === 'gold' ? 'Gold' : 'Red'}` : `Play for ${team === 'gold' ? 'Gold' : 'Red'}`;
+    button.textContent = mine?.team === team ? `You're on ${TEAM_NAME[team]}` : `Play for ${TEAM_NAME[team]}`;
   }
   $('kickoff').hidden = !session.isHost;
   $('waiting').hidden = session.isHost;
@@ -232,6 +231,5 @@ $('copy-link').addEventListener('click', async () => {
 // Esc leaves a solo game or the training ground (when it isn't closing a
 // dialog: the help, or what the attributes do).
 window.addEventListener('keydown', e => {
-  const dialogOpen = helpOpen() || !!document.querySelector('dialog[open]');
-  if (e.key === 'Escape' && (session.status === 'solo' || session.status === 'training') && !dialogOpen) session.leave();
+  if (e.key === 'Escape' && (session.status === 'solo' || session.status === 'training') && !dialogOpen()) session.leave();
 });

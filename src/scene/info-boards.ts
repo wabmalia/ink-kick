@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { BOARD, farMiddleBoards, outline, PANEL_H, PANEL_W } from './ads';
+import { whenFontReady } from './font';
 
 // During a match, the two boards under the billboard give up their adverts
 // to the match: how it's won on the left ("First to 3"), how it stands on
@@ -78,7 +79,7 @@ export class InfoBoards {
   constructor() {
     this.boards = farMiddleBoards().map((at, i) => new InfoBoard(at, INKS[i]!));
     for (const b of this.boards) this.group.add(b.mesh);
-    void document.fonts.load("80px 'Caveat Brush'").then(() => this.boards.forEach(b => b.repaint()));
+    whenFontReady(() => this.boards.forEach(b => b.repaint()));
   }
 
   /** The two lines to show, or null for the adverts. */

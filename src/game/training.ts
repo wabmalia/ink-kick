@@ -1,8 +1,13 @@
 import { CONFIG } from '../config';
 import { Bot } from '../engine/ai';
-import { createMatch, createPlayer, KEEPER_IDS, setAction, step, type Input, type Match, type Player, type SimEvent } from '../engine/sim';
+import { NO_INPUT, toward } from '../engine/input';
+import { createMatch, createPlayer, goalScoredBy, KEEPER_IDS, setAction, step, type Input, type Match, type Player, type SimEvent } from '../engine/sim';
 import { statsFor } from '../engine/stats';
 import type { Attributes } from './attributes';
+import { angleBetween } from '../math';
+
+/** The tackling drill's dummy, drawn in its own kit. */
+export const DUMMY_ID = 'dummy';
 
 // The training ground: you on the pitch with five drills to feel your
 // attributes by.
@@ -125,7 +130,7 @@ export class Training {
   constructor(readonly id: string, attrs: Attributes) {
     this.me = createPlayer(id, 'gold', attrs);
     this.bot = createPlayer('bot', 'red');
-    this.dummy = createPlayer('dummy', 'red');
+    this.dummy = createPlayer(DUMMY_ID, 'red');
     this.keeper = createPlayer(KEEPER_IDS.red, 'red', undefined, true);
     this.match = createMatch([this.me, this.bot, this.dummy, this.keeper], { practice: true });
     Object.assign(this.me, { ...ME_START, vx: 0, vy: 0, fx: 1, fy: 0 });
@@ -184,26 +189,17 @@ export class Training {
   // waits in the middle. A ball it wins, it rolls back to you.
   private botInput(): Input {
     const { match, bot, me } = this;
-    const idle = { x: 0, y: 0, kick: false, sprint: false };
+    const idle = NO_INPUT;
     if (match.owner === bot.id) {
       this.botHeld += CONFIG.tick;
-      if (this.botHeld >= GIVE_BACK) {
-        match.owner = null;
-        bot.cooldown = 1;
-        const dx = me.x - match.ball.x;
-        const dy = me.y - match.ball.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const speed = Math.min(6, 1.5 + len * 0.9);
-        match.ball.vx = (dx / len) * speed;
-        match.ball.vy = (dy / len) * speed;
-      }
+      if (this.botHeld >= GIVE_BACK) this.rollBack(bot, 1.5, 0.9, 6);
       return idle;
     }
     this.botHeld = 0;
     if (match.owner === me.id && inBox(DUEL, me)) return this.brain.think(match);
     // Keeps out of loose balls, so it doesn't take one you left lying.
     bot.cooldown = Math.max(bot.cooldown, 0.1);
-    return this.walkTo(bot, DUEL);
+    return toward(bot, DUEL.x, DUEL.y, false, 0.3);
   }
 
   private countChallenges(events: SimEvent[]) {
@@ -226,9 +222,9 @@ export class Training {
   // clearing it upfield (to the bot or the dummy, its teammates). A ball in
   // the net it picks out, a moment later.
   private keeperInput(): Input | null {
-    const { match, keeper, me } = this;
+    const { match, keeper } = this;
     const { ball } = match;
-    if (ball.x > CONFIG.pitch.width / 2 + ball.r && match.owner === null) {
+    if (goalScoredBy(ball) === 'gold' && match.owner === null) {
       this.inNet += CONFIG.tick;
       if (this.inNet >= NET_WAIT) {
         this.inNet = 0;
@@ -248,17 +244,23 @@ export class Training {
       return null;
     }
     this.keeperHeld += CONFIG.tick;
-    if (this.keeperHeld >= KEEPER_HOLD) {
-      match.owner = null;
-      keeper.cooldown = 1;
-      const dx = me.x - ball.x;
-      const dy = me.y - ball.y;
-      const len = Math.hypot(dx, dy) || 1;
-      const speed = Math.min(9, 2 + len * 0.8);
-      ball.vx = (dx / len) * speed;
-      ball.vy = (dy / len) * speed;
-    }
-    return { x: 0, y: 0, kick: false, sprint: false };
+    if (this.keeperHeld >= KEEPER_HOLD) this.rollBack(keeper, 2, 0.8, 9);
+    return NO_INPUT;
+  }
+
+  // The bot or the keeper lets go of the ball and rolls it to you: harder
+  // the further you are (from speed plus perMetre a metre, up to most).
+  private rollBack(from: Player, speed: number, perMetre: number, most: number) {
+    const { match, me } = this;
+    const { ball } = match;
+    match.owner = null;
+    from.cooldown = 1;
+    const dx = me.x - ball.x;
+    const dy = me.y - ball.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const v = Math.min(most, speed + len * perMetre);
+    ball.vx = (dx / len) * v;
+    ball.vy = (dy / len) * v;
   }
 
   // A shot is one of your kicks the keeper reads as on target; a goal, any
@@ -286,7 +288,7 @@ export class Training {
       this.shot.counted = true;
       keeperStats.shots++;
     }
-    if (match.ball.x > CONFIG.pitch.width / 2 + match.ball.r) {
+    if (goalScoredBy(match.ball) === 'gold') {
       // One that curled in without being read still counts as a shot.
       if (!this.shot.counted) keeperStats.shots++;
       keeperStats.goals++;
@@ -302,15 +304,15 @@ export class Training {
     const { dummy, me } = this;
     dummy.cooldown = Math.max(dummy.cooldown, 0.1);
     if (Math.hypot(dummy.x - DUMMY_SPOT.x, dummy.y - DUMMY_SPOT.y) > 0.3 && dummy.action === 'none') {
-      return this.walkTo(dummy, DUMMY_SPOT);
+      return toward(dummy, DUMMY_SPOT.x, DUMMY_SPOT.y, false, 0.3);
     }
     const want = Math.atan2(me.y - dummy.y, me.x - dummy.x);
     const now = Math.atan2(dummy.fy, dummy.fx);
-    const turn = Math.atan2(Math.sin(want - now), Math.cos(want - now));
+    const turn = angleBetween(now, want);
     const a = now + Math.sign(turn) * Math.min(Math.abs(turn), DUMMY_TURN * CONFIG.tick);
     dummy.fx = Math.cos(a);
     dummy.fy = Math.sin(a);
-    return { x: 0, y: 0, kick: false, sprint: false };
+    return NO_INPUT;
   }
 
   // Swaps the real ball in and out of the dummy's feet, and gives it the
@@ -376,13 +378,6 @@ export class Training {
   }
 
   // --- Props and lanes -------------------------------------------------------
-
-  private walkTo(p: Player, to: { x: number; y: number }): Input {
-    const dx = to.x - p.x;
-    const dy = to.y - p.y;
-    const len = Math.hypot(dx, dy);
-    return len < 0.3 ? { x: 0, y: 0, kick: false, sprint: false } : { x: dx / len, y: dy / len, kick: false, sprint: false };
-  }
 
   // Your feet free and touching a prop ball: it becomes the real one, and
   // the real one is left as a prop where it lies.

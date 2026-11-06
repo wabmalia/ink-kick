@@ -1,8 +1,10 @@
 import { CONFIG } from '../config';
 import type { Attributes } from '../game/attributes';
 import { curlStep } from './curl';
+import { NO_INPUT } from './input';
 import { statsFor, type Stats } from './stats';
 import { keeperBox, keeperInput, type KeeperState } from './keeper';
+import { angleBetween, mulberry32 } from '../math';
 
 // The match as plain 2D data: discs on a rectangle. Nothing here knows about
 // Three.js; the scene maps sim (x, y) to world (x, 0, y). Gold attacks +x,
@@ -13,6 +15,12 @@ import { keeperBox, keeperInput, type KeeperState } from './keeper';
 // the ball is close and slides in when it isn't.
 
 export type Team = 'gold' | 'red';
+/** How each team is named on screen. */
+export const TEAM_NAME: Record<Team, string> = { gold: 'Gold', red: 'Red' };
+/** The end a team defends: -1 the left (Gold's), 1 the right (Red's). */
+export const homeSide = (team: Team) => (team === 'gold' ? -1 : 1);
+/** A player in the match by id. */
+export const playerById = (match: Match, id: string | null) => match.players.find(p => p.id === id);
 
 export type Action =
   | 'none'
@@ -157,14 +165,13 @@ export type SimEvent =
   | { type: 'kickoff' };
 
 const still = () => ({ vx: 0, vy: 0 });
-const NO_INPUT: Input = { x: 0, y: 0, kick: false, sprint: false };
 
 export function createPlayer(id: string, team: Team, attrs?: Attributes, keeper = false): Player {
   const p = CONFIG.player;
   return {
     id, team, x: 0, y: 0, ...still(),
     r: p.radius, invMass: p.invMass, damping: 1, bounce: p.bounce,
-    fx: team === 'gold' ? 1 : -1, fy: 0,
+    fx: -homeSide(team), fy: 0,
     action: 'none', actionT: 0, charge: 0,
     stamina: 1, tired: 0, sprinting: false,
     cooldown: 0, struck: false, kickDown: false, sprintDown: false,
@@ -173,11 +180,11 @@ export function createPlayer(id: string, team: Team, attrs?: Attributes, keeper 
   };
 }
 
-// kickoff: the team starting on the ball. coin: open with a coin toss
-// (a 'coin' event, then everyone held still while it plays).
 /** The goalkeepers' ids, one a team. */
 export const KEEPER_IDS: Record<Team, string> = { gold: 'keeper-gold', red: 'keeper-red' };
 
+// kickoff: the team starting on the ball. coin: open with a coin toss
+// (a 'coin' event, then everyone held still while it plays).
 export function createMatch(players: Player[], opts: { kickoff?: Team; coin?: boolean; practice?: boolean; seed?: number; rules?: Rules; keepers?: boolean } = {}): Match {
   if (opts.keepers) players = [...players, createPlayer(KEEPER_IDS.gold, 'gold', undefined, true), createPlayer(KEEPER_IDS.red, 'red', undefined, true)];
   const b = CONFIG.ball;
@@ -243,7 +250,7 @@ export function kickoff(match: Match) {
     .filter(p => p.team === match.kickoffTeam && !p.keeper)
     .sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y))[0];
   if (kicker) {
-    const side = kicker.team === 'gold' ? -1 : 1;
+    const side = homeSide(kicker.team);
     Object.assign(kicker, { x: side * CONFIG.dribble.distance, y: 0, fx: -side, fy: 0 });
     match.owner = kicker.id;
   }
@@ -252,7 +259,7 @@ export function kickoff(match: Match) {
 // Kickoff spot for the i-th of n players on a team: columns of up to four
 // across the pitch, each further back towards their own goal.
 function formation(team: Team, i: number, n: number) {
-  const side = team === 'gold' ? -1 : 1;
+  const side = homeSide(team);
   const col = Math.floor(i / FORMATION_ROWS);
   const row = i % FORMATION_ROWS;
   const inCol = Math.min(FORMATION_ROWS, n - col * FORMATION_ROWS);
@@ -267,7 +274,7 @@ const FORMATION_ROWS = 4;
 
 // A player joining a match in progress starts on their own goal line.
 export function addPlayer(match: Match, p: Player) {
-  const side = p.team === 'gold' ? -1 : 1;
+  const side = homeSide(p.team);
   const others = match.players.filter(q => q.team === p.team).length;
   Object.assign(p, { x: side * (CONFIG.pitch.width / 2 - 1.5), y: ((others % 5) - 2) * 2, fx: -side, fy: 0 });
   match.players.push(p);
@@ -277,7 +284,7 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
   const events: SimEvent[] = [];
   const dt = CONFIG.tick;
   const { ball } = match;
-  const byId = (id: string | null) => match.players.find(p => p.id === id);
+  const byId = (id: string | null) => playerById(match, id);
 
   if (match.coinPending) {
     match.coinPending = false;
@@ -412,7 +419,7 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
       match.restartIn = CONFIG.restartDelay;
       match.owner = null;
       const scorer = match.lastTouch;
-      const by = match.players.find(p => p.id === scorer);
+      const by = byId(scorer);
       const goal: GoalRecord = { team, scorer, own: !!by && by.team !== team, at: match.clock };
       match.goals.push(goal);
       events.push({ type: 'goal', ...goal });
@@ -498,6 +505,7 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
   const blend = Math.min(1, dt / CONFIG.player.driftTime);
   drift.x += (p.vx - drift.x) * blend;
   drift.y += (p.vy - drift.y) * blend;
+  // Before this tick's kick, which may let the ball go (dribbling, below, is after).
   const hasBall = match.owner === p.id;
 
   switch (p.action) {
@@ -611,12 +619,12 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
   }
 
   const pl = CONFIG.player;
+  const dribbling = match.owner === p.id;
   let speed = p.tired > 0 ? pl.tiredSpeed : p.sprinting ? p.stats.sprintSpeed : p.stats.runSpeed;
-  if (match.owner === p.id) speed *= p.stats.dribbleSpeed;
+  if (dribbling) speed *= p.stats.dribbleSpeed;
   if (p.action === 'charge') speed *= kick.moveFactor;
   if (p.action === 'recover') speed *= tackle.recoverFactor;
 
-  const dribbling = match.owner === p.id;
   let mx = dx;
   let my = dy;
   if (moving && p.action === 'charge') {
@@ -626,7 +634,7 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
     my = p.fy;
   } else if (!moving) {
     endTurnBack(match, p);
-  } else if (moving) {
+  } else {
     // Quicker to turn the slower you're going the way you face: a pivot
     // when stopped, so a reversal brakes, turns and goes, rather than
     // looping round at speed. Moving back or across counts as stopped.
@@ -719,7 +727,7 @@ function endTurnBack(match: Match, p: Player) {
 // dribbler, where a poke can't reach: that press is a slide instead.
 function inPokeRange(match: Match, p: Player) {
   const { ball } = match;
-  const owner = match.players.find(q => q.id === match.owner);
+  const owner = playerById(match, match.owner);
   if (owner && owner !== p && isBehind(owner, p)) return false;
   if (Math.hypot(ball.x - p.x, ball.y - p.y) - p.r - ball.r <= p.stats.pokeRange) return true;
   return !!owner && owner !== p && Math.hypot(owner.x - p.x, owner.y - p.y) - p.r - owner.r <= CONFIG.tackle.pokeBodyReach;
@@ -751,9 +759,8 @@ function knockDown(p: Player, q: Player) {
 }
 
 // A tackle that reaches a dribbler can be ridden: it wins with chance
-// 0.85 × (tackling / strength)³, as multipliers, capped at 1. Level players
-// win 85%; Strength 10 against a 5 rides about half; Strength 3 or less
-// against a 5 never rides one.
+// holdBase × (tackling / strength) to the holdPower, as attribute
+// multipliers, capped at 1 (docs/attributes.md has what that comes to).
 function beatsHold(match: Match, p: Player, victim: Player) {
   const { holdBase, holdPower } = CONFIG.tackle;
   const chance = Math.min(1, holdBase * (p.stats.tackleFactor / victim.stats.holdFactor) ** holdPower);
@@ -768,11 +775,10 @@ function shrug(p: Player, victim: Player, events: SimEvent[]) {
 
 // The match's own random numbers (mulberry32), so a seeded match replays the
 // same. Only the host's sim draws them.
-function random(match: Match) {
-  let t = (match.seed = (match.seed + 0x6d2b79f5) | 0);
-  t = Math.imul(t ^ (t >>> 15), t | 1);
-  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+export function random(match: Match) {
+  const [s, v] = mulberry32(match.seed);
+  match.seed = s;
+  return v;
 }
 
 // Whether p is in the arc behind a dribbler that their body shields.
@@ -795,7 +801,7 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
   const poking = p.action === 'poke';
   const footX = p.x + p.fx * (p.r + (poking ? 0.3 : 0.2));
   const footY = p.y + p.fy * (p.r + (poking ? 0.3 : 0.2));
-  const victim = match.players.find(q => q.id === match.owner);
+  const victim = playerById(match, match.owner);
   // A keeper holding the ball can't be tackled.
   if (victim?.keeper && victim !== p) return;
   // A keeper's dive reaches less far than a slide tackle.
@@ -905,10 +911,6 @@ function trap(match: Match, events: SimEvent[]) {
   events.push({ type: 'trap', player: best.id });
 }
 
-function angleBetween(from: number, to: number) {
-  return ((((to - from) % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
-}
-
 // bounce overrides the pair's restitution, which is otherwise the product
 // of their own.
 function collide(a: Disc, b: Disc, bounce = a.bounce * b.bounce) {
@@ -970,7 +972,7 @@ function keepKickoffShape(p: Player, defending: boolean) {
   const dist = Math.hypot(p.x, p.y);
   if (dist >= min) return;
   // Pushed back out to the circle, towards their own side if dead centre.
-  const nx = dist > 1e-6 ? p.x / dist : p.team === 'gold' ? -1 : 1;
+  const nx = dist > 1e-6 ? p.x / dist : homeSide(p.team);
   const ny = dist > 1e-6 ? p.y / dist : 0;
   p.x = nx * min;
   p.y = ny * min;
@@ -999,7 +1001,8 @@ function keepBallIn(ball: Disc) {
 }
 
 // A goal counts once the whole ball is over the line.
-function goalScoredBy(ball: Disc): Team | null {
+/** The team a ball over a goal line has scored for, if it's over one. */
+export function goalScoredBy(ball: Disc): Team | null {
   const half = CONFIG.pitch.width / 2;
   if (ball.x > half + ball.r) return 'gold';
   if (ball.x < -half - ball.r) return 'red';

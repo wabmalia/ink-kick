@@ -43,10 +43,10 @@ async function fetchServers(): Promise<RTCIceServer[] | undefined> {
     if (!res.ok) throw new Error(`relay answered ${res.status}`);
     const { iceServers: servers } = (await res.json()) as { iceServers: RTCIceServer[] };
     cached = { servers, at: Date.now(), ttl: REUSE_MS };
-    console.info('[score] relay ready');
+    console.info('[ink-kick] relay ready');
     return servers;
   } catch (e) {
-    console.info('[score] no relay, direct connections only', e);
+    console.info('[ink-kick] no relay, direct connections only', e);
     cached = { servers: undefined, at: Date.now(), ttl: RETRY_MS };
     return undefined;
   }

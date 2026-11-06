@@ -3,6 +3,7 @@ import {
   addPlayer, createMatch, createPlayer, step,
   type Input, type Match, type Rules, type SimEvent, type Team,
 } from '../engine/sim';
+import { NO_INPUT } from '../engine/input';
 import { cleanRules } from '../game/rules';
 import { toSnapshot } from '../game/state';
 import { cleanAttributes, type Attributes } from '../game/attributes';
@@ -28,7 +29,6 @@ interface Member extends MemberView {
   input: WireInput | null;
 }
 
-const NO_INPUT: Input = { x: 0, y: 0, kick: false, sprint: false };
 
 export class HostRoom {
   private members: Member[] = [];
@@ -59,10 +59,14 @@ export class HostRoom {
     this.listener.change(room);
   }
 
+  private member(id: string) {
+    return this.members.find(x => x.id === id);
+  }
+
   // A new guest goes on the team with fewer players; a returning one keeps
   // their place.
   join(id: string, name: string, link: Link, attrs?: unknown) {
-    let m = this.members.find(x => x.id === id);
+    let m = this.member(id);
     if (m) {
       Object.assign(m, { name: cleanName(name), attrs: cleanAttributes(attrs), connected: true, link, input: null });
     } else {
@@ -77,14 +81,14 @@ export class HostRoom {
 
   // Their player stays on the pitch, standing still, until they come back.
   disconnect(id: string, link: Link) {
-    const m = this.members.find(x => x.id === id);
+    const m = this.member(id);
     if (!m || m.link !== link) return;
     Object.assign(m, { connected: false, link: null, input: null });
     this.changed();
   }
 
   setTeam(id: string, team: Team) {
-    const m = this.members.find(x => x.id === id);
+    const m = this.member(id);
     if (!m || m.team === team || this.phase !== 'lobby') return;
     m.team = team;
     this.changed();
@@ -93,7 +97,7 @@ export class HostRoom {
   // Attributes changed in the lobby count from the next kickoff; a match on
   // keeps the ones it started with.
   setAttributes(id: string, attrs: unknown) {
-    const m = this.members.find(x => x.id === id);
+    const m = this.member(id);
     if (!m || this.phase !== 'lobby') return;
     m.attrs = cleanAttributes(attrs);
   }
@@ -111,7 +115,7 @@ export class HostRoom {
   }
 
   input(id: string, input: WireInput) {
-    const m = this.members.find(x => x.id === id);
+    const m = this.member(id);
     if (m && (!m.input || input.seq > m.input.seq)) m.input = input;
   }
 

@@ -1,6 +1,7 @@
 import { CONFIG } from '../config';
 import type { Action, Match, SimEvent, Team } from '../engine/sim';
 import { ACTIONS, type PlayerState, type Snapshot } from '../net/protocol';
+import { lerp } from '../math';
 
 // What the scene draws, whoever runs the match: positions already
 // interpolated for this frame.
@@ -70,7 +71,6 @@ function fromState(s: PlayerState): PlayerView {
   };
 }
 
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 // Facing blends round the shorter way, renormalised.
 function lerpFacing(a: PlayerView, b: PlayerView, t: number) {
@@ -104,10 +104,6 @@ export class RemoteMatch {
 
   pushEvents(tick: number, events: SimEvent[]) {
     this.events.push({ tick, events });
-  }
-
-  get started() {
-    return this.renderTick !== null;
   }
 
   // Moves the drawn tick on, easing it towards a steady distance behind the

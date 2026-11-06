@@ -3,27 +3,26 @@ import './rename';
 import { CONFIG } from './config';
 import { Bot } from './engine/ai';
 import { createMatch, createPlayer, KEEPER_IDS, step } from './engine/sim';
-import { loadAttributes } from './game/attributes';
 import { enableKeys, keyboardInput } from './game/input';
 import { LocalMatch, RemoteMatch, type ViewState } from './game/state';
 import { GameView } from './game/view';
 import { session } from './net/session';
 import { iceServers } from './net/relay';
-import { helpOpen, onHelp } from './ui/help';
-
-// The help, or what the attributes do: either one pauses a game played alone
-// and takes the keys.
-const attrInfo = document.getElementById('attr-info') as HTMLDialogElement;
-const dialogOpen = () => helpOpen() || attrInfo.open;
+import { onHelp } from './ui/help';
+import { dialogOpen } from './ui/dom';
 import { inMatch, offerInvite, render } from './ui/menu';
 import { paintMenu } from './ui/wash';
 import { currentAttributes, mountLocker, onAttributes } from './ui/locker';
 import { Training } from './game/training';
 import { showTimes } from './ui/training-hud';
-import { matchEvents, resetMatchUi, type NameOf, type Role } from './ui/match-ui';
+import { matchEvents, resetMatchUi, type NameOf } from './ui/match-ui';
 import { rulesLine, rulesName } from './game/rules';
 import type { SimEvent } from './engine/sim';
 import './style.css';
+
+// The help, or what the attributes do: either one pauses a game played
+// alone and takes the keys (dialogOpen).
+const attrInfo = document.getElementById('attr-info') as HTMLDialogElement;
 
 // Picks what's on the pitch from the session: bots playing behind the menu,
 // a solo game, a hosted match, or a guest's view of one.
@@ -47,7 +46,7 @@ function attract(): Mode {
 
 function solo(): Mode {
   const kickoff = Math.random() < 0.5 ? 'gold' : 'red';
-  const match = createMatch([createPlayer(session.me, 'gold', loadAttributes()), createPlayer('bot', 'red')], {
+  const match = createMatch([createPlayer(session.me, 'gold', currentAttributes()), createPlayer('bot', 'red')], {
     kickoff, coin: true, rules: session.soloRules, keepers: session.soloKeepers,
   });
   const bot = new Bot('bot');
@@ -86,7 +85,7 @@ function pickMode() {
     mode = attract();
   }
   if (mode !== before) {
-    view.clearBanner();
+    view.clearEffects();
     resetMatchUi();
   }
   const trainingOn = mode.kind === 'training';

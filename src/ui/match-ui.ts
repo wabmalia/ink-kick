@@ -1,6 +1,7 @@
-import type { GoalRecord, SimEvent, Team } from '../engine/sim';
+import { TEAM_NAME, type GoalRecord, type SimEvent, type Team } from '../engine/sim';
 import { clockText } from '../game/rules';
 import { paintNow } from './wash';
+import { $ } from './dom';
 
 // What a match shows on top of the pitch: the goal banner, its letters
 // splashing in one after another with the scorer under them, and the
@@ -9,13 +10,11 @@ import { paintNow } from './wash';
 export type Role = 'solo' | 'host' | 'guest';
 export type NameOf = (id: string) => string | null;
 
-const $ = (id: string) => document.getElementById(id)!;
 const banner = $('banner');
 const word = $('goal-word');
 const by = $('goal-by');
 const board = $('scoreboard');
 
-const TEAM: Record<Team, string> = { gold: 'Gold', red: 'Red' };
 // How long the last goal's banner stays up before the scoreboard comes in.
 const BOARD_DELAY = 1700;
 let boardTimer: ReturnType<typeof setTimeout> | undefined;
@@ -68,7 +67,7 @@ export function hideGoal() {
 
 function showBoard(end: Extract<SimEvent, { type: 'end' }>, nameOf: NameOf, role: Role) {
   const title = $('scoreboard-title');
-  title.textContent = end.winner ? `${TEAM[end.winner]} wins!` : 'A draw';
+  title.textContent = end.winner ? `${TEAM_NAME[end.winner]} wins!` : 'A draw';
   board.className = `card scoreboard ${end.winner ?? ''}`;
   $('scoreboard-final').textContent = `${end.score.gold} - ${end.score.red}`;
   // A line a scorer, on the side of the team their goals counted for (so
@@ -83,7 +82,7 @@ function showBoard(end: Extract<SimEvent, { type: 'end' }>, nameOf: NameOf, role
   const scorers = new Map<string, { team: Team; name: string; own: boolean; times: number[] }>();
   for (const goal of end.goals) {
     const key = `${goal.team}|${goal.scorer ?? ''}|${goal.own}`;
-    const name = (goal.scorer && nameOf(goal.scorer)) || TEAM[goal.team];
+    const name = (goal.scorer && nameOf(goal.scorer)) || TEAM_NAME[goal.team];
     const s = scorers.get(key) ?? { team: goal.team, name, own: goal.own, times: [] };
     s.times.push(goal.at);
     scorers.set(key, s);

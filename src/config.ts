@@ -218,6 +218,11 @@ export const CONFIG = {
     rushPoke: 0.12,
     // How far off its line it stands at the least.
     lineOff: 0.55,
+    // It comes off its line as the ball comes within comeOutFrom metres of
+    // the middle of the goal, all the way (to near the front of its small
+    // box) once it's comeOutOver metres closer.
+    comeOutFrom: 16,
+    comeOutOver: 12,
     // A ball heading for goal faster than this is a shot. The keeper moves
     // for it reaction seconds after a ball that fast comes into its half,
     // to where it guessed it would cross, off by up to error metres (more

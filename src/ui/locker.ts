@@ -2,6 +2,7 @@ import {
   ATTRIBUTES, canLower, canRaise, LABELS, loadAttributes, lower, MAX, raise, saveAttributes, spare,
   type Attribute, type Attributes,
 } from '../game/attributes';
+import { closeOnBackdrop, openDialog } from './dom';
 
 // The Locker room's attributes: a hexagon with one corner per attribute, and
 // at each corner its name and − / + buttons. Lowering one frees a point to
@@ -43,17 +44,10 @@ function change(next: Attributes) {
 function infoDialog() {
   const dialog = document.getElementById('attr-info') as HTMLDialogElement;
   for (const button of document.querySelectorAll('[data-attr-info]')) {
-    button.addEventListener('click', () => {
-      dialog.showModal();
-      // The dialog itself, so Got it doesn't open wearing the focus ring.
-      dialog.focus();
-    });
+    button.addEventListener('click', () => openDialog(dialog));
   }
   document.getElementById('attr-info-close')!.addEventListener('click', () => dialog.close());
-  dialog.addEventListener('click', e => {
-    const r = dialog.getBoundingClientRect();
-    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) dialog.close();
-  });
+  closeOnBackdrop(dialog);
 }
 
 /** The home screen's chart, the training ground's, and the info dialog. */

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
 import type { Action } from '../engine/sim';
+import { smooth } from '../math';
 
 // A stickman footballer: team-coloured sticks and a round head, with a joint hierarchy
 // (hips, knees, shoulders, elbows) animated in code: run cycle from the
@@ -66,7 +67,6 @@ const SKID_SPEED_FULL = 4.5;
 // you turn round.
 const SKID_SWAP = 12;
 
-const smooth = (t: number) => t * t * (3 - 2 * t);
 
 // Piecewise keyframes: [time 0..1, value], eased between each pair.
 function keys(frames: [number, number][], t: number) {

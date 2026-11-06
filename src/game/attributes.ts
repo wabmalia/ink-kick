@@ -3,6 +3,8 @@
 // Locker room; engine/stats.ts turns them into a player's speeds and reaches,
 // and docs/attributes.md has the table.
 
+import { KEYS, store } from '../storage';
+
 export const ATTRIBUTES = ['pace', 'stamina', 'dribbling', 'power', 'tackling', 'strength'] as const;
 export type Attribute = (typeof ATTRIBUTES)[number];
 export type Attributes = Record<Attribute, number>;
@@ -52,20 +54,5 @@ export function cleanAttributes(raw: unknown): Attributes {
   return Object.fromEntries(ATTRIBUTES.map((a, i) => [a, values[i]])) as Attributes;
 }
 
-const KEY = 'inkkick.attributes';
-
-export function loadAttributes(): Attributes {
-  try {
-    return cleanAttributes(JSON.parse(localStorage.getItem(KEY) ?? 'null'));
-  } catch {
-    return evenAttributes();
-  }
-}
-
-export function saveAttributes(attrs: Attributes) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(attrs));
-  } catch {
-    /* private mode or blocked storage: it just won't be remembered */
-  }
-}
+export const loadAttributes = (): Attributes => cleanAttributes(store.getJSON(localStorage, KEYS.attributes));
+export const saveAttributes = (attrs: Attributes) => store.setJSON(localStorage, KEYS.attributes, attrs);

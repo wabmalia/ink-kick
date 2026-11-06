@@ -1,6 +1,7 @@
 import { CONFIG } from '../config';
 import { curlStep } from './curl';
-import type { Input, Match, Player } from './sim';
+import { NO_INPUT, toward } from './input';
+import { homeSide, type Input, type Match, type Player } from './sim';
 
 // A goalkeeper: a bot kept to its own small box (see keepPlayerIn). It reads
 // the game from where it stands, playing through the same Input as anyone:
@@ -47,7 +48,6 @@ export interface KeeperMove {
   dive?: { x: number; y: number };
 }
 
-const IDLE: Input = { x: 0, y: 0, kick: false, sprint: false };
 
 export const newKeeperState = (): KeeperState => ({
   watching: 0, guess: null, offset: 0, readIn: 0, shotSeen: false, dived: false, rushAt: null, rushing: false, holding: 0, target: null, charging: 0,
@@ -58,17 +58,18 @@ export const newKeeperState = (): KeeperState => ({
 export function keeperBox(p: Player) {
   const { width } = CONFIG.pitch;
   const { boxDepth, boxHalf, areaDepth, areaHalf } = CONFIG.keeper;
-  const side = p.team === 'gold' ? -1 : 1;
+  const side = homeSide(p.team);
   const line = (side * width) / 2;
   return { side, line, depth: boxDepth, half: boxHalf, areaDepth, areaHalf };
 }
 
-const toward = (p: Player, x: number, y: number, sprint = false, near = 0.12): Input => {
-  const dx = x - p.x;
-  const dy = y - p.y;
-  const len = Math.hypot(dx, dy);
-  return len < near ? IDLE : { x: dx / len, y: dy / len, kick: false, sprint };
-};
+// How far off its line it stands with the ball dist metres from the middle
+// of its goal: further the closer the ball, up to just inside the front of
+// its small box (depth deep).
+function standOff(dist: number, depth: number) {
+  const { lineOff, comeOutFrom, comeOutOver } = CONFIG.keeper;
+  return lineOff + (depth - lineOff - 0.3) * Math.max(0, Math.min(1, (comeOutFrom - dist) / comeOutOver));
+}
 
 // How far the nearest opponent is from the ball's path out to (tx, ty).
 function clearance(match: Match, p: Player, tx: number, ty: number) {
@@ -142,13 +143,13 @@ export function keeperInput(match: Match, p: Player, random: () => number): Keep
   const dt = CONFIG.tick;
   const cfg = CONFIG.keeper;
   const { ball } = match;
-  const { side, line, depth, half } = keeperBox(p);
+  const { side, line, depth, half, areaDepth, areaHalf } = keeperBox(p);
   if (match.restartIn > 0 || match.kickoffHeld) {
     Object.assign(k, newKeeperState());
     return { input: toward(p, line - side * cfg.lineOff, 0) };
   }
   // Down after a dive, or caught out: nothing to decide.
-  if (p.action !== 'none' && p.action !== 'charge') return { input: IDLE };
+  if (p.action !== 'none' && p.action !== 'charge') return { input: NO_INPUT };
 
   // With the ball: hold, pick where it goes, turn to it, charge, kick.
   if (match.owner === p.id) {
@@ -156,9 +157,9 @@ export function keeperInput(match: Match, p: Player, random: () => number): Keep
     k.guess = null;
     if (k.charging > 0) {
       k.charging -= dt;
-      return { input: { ...IDLE, kick: k.charging > 0 } };
+      return { input: { ...NO_INPUT, kick: k.charging > 0 } };
     }
-    if (k.holding < cfg.holdTime) return { input: IDLE };
+    if (k.holding < cfg.holdTime) return { input: NO_INPUT };
     // Looked at again while turning, in case someone steps into the way.
     k.target = chooseTarget(match, p, side);
     const dx = k.target.x - p.x;
@@ -166,7 +167,7 @@ export function keeperInput(match: Match, p: Player, random: () => number): Keep
     const dist = Math.hypot(dx, dy) || 1;
     if ((p.fx * dx + p.fy * dy) / dist > 0.97) {
       k.charging = k.target.charge;
-      return { input: { ...IDLE, kick: true } };
+      return { input: { ...NO_INPUT, kick: true } };
     }
     // Turn on the spot towards it (a step, so the turn happens).
     return { input: { x: dx / dist, y: dy / dist, kick: false, sprint: false } };
@@ -199,7 +200,7 @@ export function keeperInput(match: Match, p: Player, random: () => number): Keep
     k.guess = null;
   }
   if (k.shotSeen) {
-    if (k.watching < cfg.reaction) return { input: IDLE };
+    if (k.watching < cfg.reaction) return { input: NO_INPUT };
     k.readIn -= dt;
     if (k.guess === null || k.readIn <= 0) {
       k.guess = crossAt! + k.offset;
@@ -218,12 +219,11 @@ export function keeperInput(match: Match, p: Player, random: () => number): Keep
       const fx = -side * 0.25;
       const fy = Math.sign(gap);
       const l = Math.hypot(fx, fy);
-      return { input: IDLE, dive: { x: fx / l, y: fy / l } };
+      return { input: NO_INPUT, dive: { x: fx / l, y: fy / l } };
     }
     return { input: toward(p, keeperX, to, true, 0.05) };
   }
 
-  const { areaDepth, areaHalf } = keeperBox(p);
   const inside = (x: number, y: number, d: number, h: number, slack: number) =>
     (line - x) * side >= -slack && (line - x) * side <= d + slack && Math.abs(y) <= h + slack;
   const eta = (q: Player) => Math.hypot(ball.x - q.x, ball.y - q.y) / q.stats.sprintSpeed;
@@ -272,7 +272,7 @@ export function keeperInput(match: Match, p: Player, random: () => number): Keep
     const gx = ball.x - line;
     const l = Math.hypot(gx, ball.y) || 1;
     if (l < cfg.narrowFrom) {
-      const base = cfg.lineOff + (depth - cfg.lineOff - 0.3) * Math.max(0, Math.min(1, (16 - l) / 12));
+      const base = standOff(l, depth);
       const out = Math.min(base + cfg.narrowBy * Math.min(1, attacker.charge * 1.5), l - cfg.narrowGap, areaDepth);
       if (out > base) {
         const tx = line + (gx / l) * out;
@@ -287,7 +287,7 @@ export function keeperInput(match: Match, p: Player, random: () => number): Keep
   const dx = ball.x - line;
   const dy = ball.y;
   const dist = Math.hypot(dx, dy) || 1;
-  const off = cfg.lineOff + (depth - cfg.lineOff - 0.3) * Math.max(0, Math.min(1, (16 - dist) / 12));
+  const off = standOff(dist, depth);
   let tx = line + (dx / dist) * off;
   let ty = (dy / dist) * off * 2.2;
   tx = side > 0 ? Math.min(line - cfg.lineOff * 0.5, Math.max(line - depth, tx)) : Math.max(line + cfg.lineOff * 0.5, Math.min(line + depth, tx));
