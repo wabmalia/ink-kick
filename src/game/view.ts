@@ -95,6 +95,7 @@ export class GameView {
   private training: THREE.Group | null = null;
   private props: THREE.Mesh[] = [];
   private cones: THREE.Mesh[] = [];
+  private coneLabels: HTMLElement[] = [];
   private aimArrow: { group: THREE.Group; shaft: THREE.Mesh; head: THREE.Mesh; spot: THREE.Mesh } | null = null;
   private ray = new THREE.Raycaster();
   private ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -305,16 +306,28 @@ export class GameView {
     shaft.scale.x = Math.max(0.01, len - 0.55);
   }
 
-  private drawCones(cones: { x: number; y: number }[] = []) {
+  private drawCones(cones: { x: number; y: number; label?: string }[] = []) {
     while (this.cones.length < cones.length) {
       const cone = buildCone();
       this.scene.add(cone);
       this.cones.push(cone);
+      const label = document.createElement('span');
+      label.className = 'cone-label';
+      this.labelLayer.append(label);
+      this.coneLabels.push(label);
     }
     this.cones.forEach((cone, i) => {
       const c = cones[i];
+      const label = this.coneLabels[i]!;
       cone.visible = !!c;
-      if (c) cone.position.set(c.x, 0.25, c.y);
+      label.hidden = !c?.label;
+      if (!c) return;
+      cone.position.set(c.x, 0.25, c.y);
+      if (!c.label) return;
+      // A small number beside the cone, a little up and to its right.
+      if (label.textContent !== c.label) label.textContent = c.label;
+      this.projected.set(c.x + 0.35, 0.55, c.y).project(this.camera);
+      label.style.transform = `translate(${(this.projected.x + 1) * 50}vw, ${(1 - this.projected.y) * 50}vh) translate(0, -50%)`;
     });
   }
 

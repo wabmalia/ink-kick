@@ -35,7 +35,7 @@ export interface ViewState {
   // Spare balls lying about the training ground.
   props?: { x: number; y: number }[];
   // Cones set out by the lab (the training ground's are part of its markings).
-  cones?: { x: number; y: number }[];
+  cones?: { x: number; y: number; label?: string }[];
   // The lab's shot: its spot and where it's aimed, drawn as an arrow.
   aim?: { x: number; y: number; tx: number; ty: number };
   // On the training ground: the ring around you showing your poke range.

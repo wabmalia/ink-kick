@@ -123,6 +123,17 @@ html, body {
 }
 .label[data-team='gold'] { color: #ffd36b; }
 .label[data-team='red'] { color: #ff8a73; }
+/* The lab's cone numbers: which order they're taken in. */
+.cone-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-family: 'Caveat', cursive;
+  font-weight: 700;
+  font-size: 15px;
+  color: #ffd0a8;
+  text-shadow: 0 1px 0 var(--ink), 0 0 5px rgba(20, 24, 51, 0.9);
+}
 
 /* "Penalized": a painted tag that splashes in over the head of a player who
    slid through someone's back, then fades. Positioned with `translate`, so

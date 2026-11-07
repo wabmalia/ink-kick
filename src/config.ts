@@ -100,6 +100,15 @@ export const CONFIG = {
     // turn: you stop, turn with the ball and go.
     turnSlowdown: 0.58,
     reverseKeep: 0.08,
+    // Through a cut with the ball, what Pace adds over a 5's speed is kept
+    // only to this power of what the turn keeps: a little on a bend, almost
+    // none on a sharp cut. Cornering with the ball is Dribbling's.
+    cornerPower: 4,
+    // With the ball, Pace's extra speed builds up over paceRunIn seconds of
+    // running straight; turning more than cutFrom degrees starts it again.
+    // Pace needs space; Dribbling wins where there's none.
+    paceRunIn: 1,
+    cutFrom: 20,
     // Turning with the ball is this many times quicker standing still than
     // at a run, so a reversal is a pivot rather than a loop.
     pivotBoost: 4,

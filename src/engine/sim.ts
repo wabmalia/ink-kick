@@ -74,6 +74,9 @@ export interface Player extends Disc {
   // Riding a slide: hopping over this slider, so the two don't collide
   // until it's over or the slider's behind them.
   hurdling?: string;
+  // With the ball: seconds running straight since the last cut, which is
+  // how much of Pace's extra speed they've got into (dribble.paceRunIn).
+  straight?: number;
   // Whether the current poke or slide already touched the ball.
   struck: boolean;
   kickDown: boolean;
@@ -707,10 +710,20 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
       // No sprinting round a turn back on yourself with the ball: running
       // pace at most.
       if (left > quarter) speed = Math.min(speed, p.stats.runSpeed * p.stats.dribbleSpeed);
-      const { reverseKeep } = CONFIG.dribble;
-      speed *= left <= quarter
+      const { reverseKeep, cornerPower } = CONFIG.dribble;
+      const keep = left <= quarter
         ? 1 - (1 - p.stats.turnSlowdown) * (left / quarter)
         : p.stats.turnSlowdown - (p.stats.turnSlowdown - reverseKeep) * Math.min(1, (left - quarter) / quarter);
+      // Cornering with the ball is Dribbling's, not Pace's: the speed Pace
+      // adds over a 5's is kept only keep to the cornerPower through a cut,
+      // so a sharp one brings a quick player down to a 5's cornering speed.
+      const paceGain = p.tired > 0 ? 1 : Math.max(1, p.stats.runSpeed / pl.runSpeed);
+      const base = speed / paceGain;
+      // And Pace takes a straight run to get into: a cut starts it again.
+      const { paceRunIn, cutFrom } = CONFIG.dribble;
+      p.straight = Math.abs(turn) > (cutFrom * Math.PI) / 180 ? 0 : (p.straight ?? 0) + dt;
+      const into = paceRunIn > 0 ? Math.min(1, p.straight / paceRunIn) : 1;
+      speed = base * keep + (speed - base) * keep ** cornerPower * into;
     }
   }
 

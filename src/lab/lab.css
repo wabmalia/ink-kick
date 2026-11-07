@@ -19,7 +19,7 @@
   right: 16px;
   bottom: 16px;
   width: auto;
-  max-height: 42vh;
+  max-height: 46vh;
   padding: 8px 18px 12px;
 }
 .lab-out h2 { font-size: 22px; margin: 0 0 2px; }
@@ -104,3 +104,11 @@
 .lab-attr { line-height: 1.15; }
 .lab-btn.step { line-height: 1; font-size: 16px; }
 .lab-hint { margin: 4px 0 2px; font-size: 16px; color: var(--soft); }
+
+/* Tighter, so three tables fit side by side at 1280 wide. */
+.lab-blocks { gap: 6px 20px; }
+.lab-table { font-size: 15px; }
+.lab-table th { padding-right: 8px; }
+.lab-value { font-size: 12px; padding-right: 6px; }
+.lab-tag { font-size: 12px; padding: 0 5px; margin-right: 2px; }
+.lab-choice.off { opacity: 0.45; }

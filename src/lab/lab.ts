@@ -113,11 +113,14 @@ function build() {
     const select = document.createElement('select');
     select.append(...c.options.map(o => new Option(o.label, o.value)));
     select.value = opts()[c.key]!;
+    select.disabled = c.enabled ? !c.enabled(opts()) : false;
     select.addEventListener('change', () => {
       opts()[c.key] = select.value;
+      // Other options may only apply to some of this one's values.
+      if (scenario.choices.some(o => o.enabled)) build();
       restart();
     });
-    return el('label', { className: 'lab-choice' }, el('span', { textContent: c.label }), select);
+    return el('label', { className: `lab-choice${select.disabled ? ' off' : ''}` }, el('span', { textContent: c.label }), select);
   }), ...(scenario.hint ? [el('p', { className: 'lab-hint', textContent: scenario.hint })] : []));
 
   roles.replaceChildren(...scenario.roles.map(role => {

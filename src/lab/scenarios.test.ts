@@ -53,7 +53,7 @@ describe('lab scenarios', () => {
     const run = finish(slalom.start(attrs, { spacing: '3.5', pace: 'sprint', ball: 'with' }, 1));
     expect(run.t).toBeLessThan(20);
     const quicker = run.readout()[0]!.rows.find(r => r.label === 'Quicker')!.value;
-    expect(quicker).toMatch(/^Dribbler A by/);
+    expect(quicker).toMatch(/^A by/);
   });
 
   it('Shooting: every shot gets a result, and Power 10 scores more from range', () => {
@@ -73,5 +73,11 @@ describe('lab scenarios', () => {
     };
     expect(endY('left-full')).toBeLessThan(0);
     expect(endY('right-full')).toBeGreaterThan(0);
+  });
+
+  it('Slalom: through tight cones at a run, Dribbling 10 beats Pace 10 (Pace needs a straight run)', () => {
+    const attrs = { a: { ...evenAttributes(), pace: 10 }, b: { ...evenAttributes(), dribbling: 10 } };
+    const run = finish(slalom.start(attrs, { spacing: '2.5', pace: 'run', ball: 'with' }, 1));
+    expect(run.readout()[0]!.rows.find(r => r.label === 'Quicker')!.value).toMatch(/^B by/);
   });
 });

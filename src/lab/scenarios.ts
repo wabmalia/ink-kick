@@ -18,6 +18,8 @@ export interface Choice {
   key: string;
   label: string;
   options: { value: string; label: string }[];
+  // Greyed out unless this holds for the options picked.
+  enabled?: (opts: Options) => boolean;
 }
 
 export type Options = Record<string, string>;
@@ -48,7 +50,7 @@ export interface Run {
   // Other matches going on beside the main one, each with its own ball.
   extra?: Match[];
   // Cones to draw.
-  cones?: { x: number; y: number }[];
+  cones?: { x: number; y: number; label?: string }[];
   // Kits to draw players in, where it isn't the team they play for.
   kits?: Record<string, Team>;
   // A shot's spot and where it's aimed, drawn as a draggable arrow.
@@ -358,19 +360,100 @@ function holdOdds(tackler: Match['players'][number], dribbler: Match['players'][
 
 
 // --- Slalom --------------------------------------------------------------
-// Two dribblers in lanes of cones side by side, each with their own ball
-// (their own match, so they can't get in each other's way): weave through,
-// carry on to the end, turn back on yourself.
+// Two dribblers side by side, each with their own ball (their own match, so
+// they can't get in each other's way), round a course: weaving through a
+// lane of cones, or a Z of two hard corners with straights between. Then on
+// to the end and a turn back on yourself.
 
 const SLALOMERS: Role[] = [
   { id: 'a', label: 'Dribbler A', team: 'gold' },
   { id: 'b', label: 'Dribbler B', team: 'red' },
 ];
-const LANE_Y = [-2.6, 2.6];
+// The courses mirror each other across the pitch's middle line, each one
+// centred on a side line of the goal area (the keeper's small box).
+const MIRROR_Y = 0;
+const LANE_OFF = CONFIG.keeper.boxHalf;
 const SLALOM_START = -12;
 const SLALOM_END = 11;
-// How far either side of each cone the path goes.
-const WEAVE = 0.9;
+// How far either side of each cone the path goes, and how close to that
+// point counts as through the gate.
+const WEAVE = 1.2;
+const GATE = 0.5;
+// The Z: a straight, a diagonal back and a straight on, Z_HALF either side
+// of its middle, on the goal area's side line like the cone lanes (so the
+// two finishing straights are 4.2 m apart).
+const Z_HALF = 1.5;
+const Z_OFF = LANE_OFF;
+// Where a Z starts and finishes: short straights either side of its corners
+// (round x = 2), so nobody's tired by the end.
+const Z_START = -3;
+const Z_END = 7;
+
+type Point = { x: number; y: number };
+
+interface Course {
+  start: Point;
+  // The points to reach in turn; the last is the end, turned back from.
+  route: Point[];
+  cones: Point[];
+  // Whether a point is where the turns are, for the slowest-cut reading.
+  inTurns(p: Point): boolean;
+  // Which of the route's points are corners, for the overrun reading.
+  corners?: number[];
+  // Cones drawn to show the course's shape that nobody can run into.
+  markers?: Point[];
+}
+
+// The same course reflected in the mirror line: B's runs as A's does, the
+// other way up.
+function mirrored(c: Course): Course {
+  const flip = (p: Point) => ({ x: p.x, y: 2 * MIRROR_Y - p.y });
+  return {
+    start: flip(c.start),
+    route: c.route.map(flip),
+    cones: c.cones.map(flip),
+    inTurns: p => c.inTurns(flip(p)),
+    corners: c.corners,
+    markers: c.markers?.map(flip),
+  };
+}
+
+function coneCourse(y: number, spacing: number): Course {
+  const xs: number[] = [];
+  for (let x = SLALOM_START + 4; x <= SLALOM_END - 3; x += spacing) xs.push(x);
+  return {
+    start: { x: SLALOM_START, y },
+    // Either side of each cone in turn, then on to the end.
+    route: [...xs.map((x, k) => ({ x, y: y + (k % 2 ? WEAVE : -WEAVE) })), { x: SLALOM_END, y }],
+    cones: xs.map(x => ({ x, y })),
+    inTurns: p => p.x > xs[0]! && p.x < xs[xs.length - 1]!,
+  };
+}
+
+function zCourse(band: number, degrees: number): Course {
+  const top = band - Z_HALF;
+  const bottom = band + Z_HALF;
+  // The diagonal leans back by the corner's angle past square.
+  const back = (2 * Z_HALF) / Math.tan(((180 - degrees) * Math.PI) / 180);
+  const a = { x: 2 + back / 2, y: top };
+  const b = { x: 2 - back / 2, y: bottom };
+  // A cone just outside each corner, to go round, and one in the middle of
+  // each straight, gone round on the inside, so neither is a clear run.
+  const out = 0.7;
+  const mid1 = { x: (Z_START + a.x) / 2, y: top };
+  const mid2 = { x: (b.x + Z_END) / 2, y: bottom };
+  const round = 1.5;
+  return {
+    start: { x: Z_START, y: top },
+    route: [{ x: mid1.x, y: top + round }, a, b, { x: mid2.x, y: bottom - round }, { x: Z_END, y: bottom }],
+    cones: [mid1, { x: a.x + out, y: a.y - out }, { x: b.x - out, y: b.y + out }, mid2],
+    corners: [1, 2],
+    // The Z's open ends, where it starts and where it finishes.
+    markers: [{ x: Z_START - 0.8, y: top }, { x: Z_END + 0.8, y: bottom }],
+    // Within 3 m of either corner.
+    inTurns: p => Math.min(Math.hypot(p.x - a.x, p.y - a.y), Math.hypot(p.x - b.x, p.y - b.y)) < 3,
+  };
+}
 
 interface SlalomStat {
   wp: number;
@@ -383,6 +466,8 @@ interface SlalomStat {
   losses: number;
   path: number;
   lanePath: number | null;
+  // Time spent where the turns are.
+  turnsTime: number;
 }
 
 export const slalom: Scenario = {
@@ -390,36 +475,44 @@ export const slalom: Scenario = {
   name: 'Slalom',
   roles: SLALOMERS,
   choices: [
-    { key: 'spacing', label: 'Cones', options: [{ value: '2.5', label: 'Tight (2.5 m)' }, { value: '3.5', label: 'Medium (3.5 m)' }, { value: '5', label: 'Wide (5 m)' }] },
+    {
+      key: 'course', label: 'Course',
+      options: [{ value: 'cones', label: 'Cone weave' }, { value: 'z', label: 'Z, 110° corners' }, { value: 'z-sharp', label: 'Z, 145° corners' }],
+    },
+    {
+      key: 'spacing', label: 'Cone gaps', enabled: o => o.course === 'cones',
+      options: [{ value: '2.5', label: 'Tight (2.5 m)' }, { value: '3.5', label: 'Medium (3.5 m)' }, { value: '5', label: 'Wide (5 m)' }],
+    },
     { key: 'pace', label: 'Pace', options: [{ value: 'run', label: 'Run' }, { value: 'sprint', label: 'Sprint (hold)' }] },
     { key: 'ball', label: 'Ball', options: [{ value: 'with', label: 'With the ball' }, { value: 'without', label: 'Without' }] },
   ],
-  defaults: { spacing: '3.5', pace: 'run', ball: 'with' },
+  defaults: { course: 'cones', spacing: '3.5', pace: 'run', ball: 'with' },
   start(attrs, opts) {
     const spacing = Number(opts.spacing);
     const sprint = opts.pace === 'sprint';
     const withBall = opts.ball === 'with';
-    const coneXs: number[] = [];
-    for (let x = SLALOM_START + 4; x <= SLALOM_END - 3; x += spacing) coneXs.push(x);
-    const cones = LANE_Y.flatMap(y => coneXs.map(x => ({ x, y })));
+    const z = opts.course?.startsWith('z');
+    const first = z ? zCourse(MIRROR_Y - Z_OFF, opts.course === 'z-sharp' ? 145 : 110) : coneCourse(MIRROR_Y - LANE_OFF, spacing);
+    const courses = [first, mirrored(first)];
+    // Numbered in the order they're passed; the markers aren't.
+    const cones = courses.flatMap(c => [...c.cones.map((p, k) => ({ ...p, label: String(k + 1) })), ...(c.markers ?? [])]);
     const matches = SLALOMERS.map((role, i) => {
       const m = labMatch([{ role, attrs: attrs[role.id]! }], 1);
-      const y = LANE_Y[i]!;
-      for (const x of coneXs) m.posts.push({ x, y, vx: 0, vy: 0, r: CONE_RADIUS, invMass: 0, damping: 1, bounce: 0.3 });
+      const course = courses[i]!;
+      for (const c of course.cones) m.posts.push({ ...c, vx: 0, vy: 0, r: CONE_RADIUS, invMass: 0, damping: 1, bounce: 0.3 });
       const p = m.players[0]!;
-      Object.assign(p, { x: SLALOM_START, y, fx: 1, fy: 0 });
+      const { x, y } = course.start;
+      Object.assign(p, { x, y, fx: 1, fy: 0 });
       if (withBall) {
-        Object.assign(m.ball, { x: p.x + CONFIG.dribble.distance, y });
+        Object.assign(m.ball, { x: x + CONFIG.dribble.distance, y });
         m.owner = p.id;
       } else {
         Object.assign(m.ball, { x: -width / 2 + 0.5, y: (i ? 1 : -1) * (height / 2 - 0.5) });
       }
       return m;
     });
-    // The path: either side of each cone in turn, then on to the end.
-    const path = (y: number) => [...coneXs.map((x, k) => ({ x, y: y + (k % 2 ? WEAVE : -WEAVE) })), { x: SLALOM_END, y }];
-    const paths = LANE_Y.map(path);
-    const stat: SlalomStat[] = SLALOMERS.map(() => ({ wp: 0, phase: 'lane', laneTime: null, turnAt: null, turnTime: null, minSpeed: Infinity, widest: 0, losses: 0, path: 0, lanePath: null }));
+    const paths = courses.map(c => c.route);
+    const stat: SlalomStat[] = SLALOMERS.map(() => ({ wp: 0, phase: 'lane', laneTime: null, turnAt: null, turnTime: null, minSpeed: Infinity, widest: 0, losses: 0, path: 0, lanePath: null, turnsTime: 0 }));
 
     const run: Run = {
       match: matches[0]!, extra: matches.slice(1), cones, t: 0, done: false,
@@ -428,8 +521,8 @@ export const slalom: Scenario = {
         matches.forEach((m, i) => {
           const p = m.players[0]!;
           const st = stat[i]!;
-          const y = LANE_Y[i]!;
           const route = paths[i]!;
+          const end = route[route.length - 1]!;
           const had = m.owner === p.id;
           let input: Input = NO_INPUT;
           if (st.phase === 'done') input = NO_INPUT;
@@ -438,7 +531,8 @@ export const slalom: Scenario = {
             input = toward(p, m.ball.x, m.ball.y, sprint, 0);
           } else if (st.phase === 'lane') {
             const wp = route[st.wp]!;
-            if (Math.hypot(wp.x - p.x, wp.y - p.y) < 0.6 || p.x > wp.x + 0.2) st.wp++;
+            // Each gate has to be reached, so a wide line costs time.
+            if (Math.hypot(wp.x - p.x, wp.y - p.y) < GATE) st.wp++;
             if (st.wp >= route.length) {
               st.phase = 'turn';
               st.laneTime = run.t;
@@ -450,22 +544,34 @@ export const slalom: Scenario = {
           }
           if (st.phase === 'turn' || st.phase === 'back') {
             // Back the way you came, along the lane.
-            input = toward(p, SLALOM_END - 6, y, sprint, 0);
+            input = toward(p, end.x - 6, end.y, sprint, 0);
             // Turned: heading back at half running pace.
             if (st.phase === 'turn' && p.vx < -0.5 * p.stats.runSpeed) {
               st.phase = 'back';
               st.turnTime = run.t - st.turnAt!;
             }
-            if (st.phase === 'back' && p.x < SLALOM_END - 5.5) st.phase = 'done';
+            if (st.phase === 'back' && p.x < end.x - 5.5) st.phase = 'done';
           }
           const bx = p.x;
           const by = p.y;
           events.push(...step(m, { [p.id]: input }));
           st.path += Math.hypot(p.x - bx, p.y - by);
           if (withBall && had && m.owner !== p.id) st.losses++;
-          if (st.phase === 'lane' && p.x > coneXs[0]! && p.x < coneXs[coneXs.length - 1]!) {
+          if (st.phase === 'lane' && courses[i]!.inTurns(p)) {
+            st.turnsTime += CONFIG.tick;
             st.minSpeed = Math.min(st.minSpeed, Math.hypot(p.vx, p.vy));
-            st.widest = Math.max(st.widest, Math.abs(p.y - y));
+            if (!z) {
+              // Off the line through the cones.
+              st.widest = Math.max(st.widest, Math.abs(p.y - courses[i]!.start.y));
+            } else if (courses[i]!.corners?.includes(st.wp - 1)) {
+              // Past the last corner reached, the way you came into it: how
+              // far the corner was overrun.
+              const g = route[st.wp - 1]!;
+              const prev = st.wp >= 2 ? route[st.wp - 2]! : courses[i]!.start;
+              const len = Math.hypot(g.x - prev.x, g.y - prev.y) || 1;
+              const past = ((p.x - g.x) * (g.x - prev.x) + (p.y - g.y) * (g.y - prev.y)) / len;
+              st.widest = Math.max(st.widest, past);
+            }
           }
         });
         run.t += CONFIG.tick;
@@ -475,8 +581,13 @@ export const slalom: Scenario = {
       readout() {
         const lanes = stat.map(st => st.laneTime);
         const both = lanes.every(v => v !== null);
-        const lead = !both ? '-' : lanes[0] === lanes[1] ? 'level' : `${lanes[0]! < lanes[1]! ? SLALOMERS[0]!.label : SLALOMERS[1]!.label} by ${s(Math.abs(lanes[0]! - lanes[1]!))}`;
-        const sections: Section[] = [{ title: 'Slalom', rows: [row('Cones', `${coneXs.length}, ${spacing} m apart`), row('Quicker', lead)] }];
+        // Short, so the tables stay side by side: "B by 0.13s".
+        const who = (aFirst: boolean) => (aFirst ? 'A' : 'B');
+        const lead = !both ? '-' : lanes[0] === lanes[1] ? 'level' : `${who(lanes[0]! < lanes[1]!)} by ${s(Math.abs(lanes[0]! - lanes[1]!))}`;
+        const turns = stat.map(st => st.turnsTime);
+        const turnsLead = !both ? '-' : Math.abs(turns[0]! - turns[1]!) < 0.005 ? 'level' : `${who(turns[0]! < turns[1]!)} by ${s(Math.abs(turns[0]! - turns[1]!))}`;
+        const what = z ? `Z, ${opts.course === 'z-sharp' ? 145 : 110}°` : `${courses[0]!.cones.length} cones, ${spacing} m`;
+        const sections: Section[] = [{ title: 'Slalom', rows: [row('Course', what), row('Quicker', lead), row(z ? 'Round the corners' : 'Through the cones', turnsLead)] }];
         SLALOMERS.forEach((role, i) => {
           const st = stat[i]!;
           const p = matches[i]!.players[0]!;
@@ -485,8 +596,9 @@ export const slalom: Scenario = {
             title: role.label, team: role.team, rows: [
               row('Speed', `${Math.hypot(p.vx, p.vy).toFixed(2)} m/s`, ...ballAttrs),
               row('Lane', st.laneTime === null ? '-' : `${s(st.laneTime)}, avg ${(st.lanePath! / Math.max(st.laneTime, 0.01)).toFixed(2)} m/s`, ...ballAttrs),
+              row(z ? 'Round the corners' : 'Through the cones', st.laneTime === null ? '-' : s(st.turnsTime), 'dribbling'),
               row('Slowest cut', st.minSpeed === Infinity ? '-' : `${st.minSpeed.toFixed(2)} m/s`, 'dribbling'),
-              row('Widest swing', `${m(st.widest)} off the line`, 'dribbling'),
+              z ? row('Overran a corner', `by ${m(st.widest)}`, 'dribbling', 'pace') : row('Widest swing', `${m(st.widest)} off the line`, 'dribbling'),
               row('Turn back', st.turnTime === null ? '-' : s(st.turnTime), 'dribbling'),
               ...(withBall ? [row('Lost the ball', `${st.losses}×`, 'dribbling', 'pace')] : []),
             ],
