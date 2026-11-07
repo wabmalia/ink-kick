@@ -82,6 +82,17 @@ screen and to tune one at a time.
   more, not just high Strength keeping it. (Shrinking the tackler's reach
   instead was tried first and did nothing: pokes connect well inside their
   reach.) A ridden slide is hopped: the dribbler keeps the ball and passes over the slider at `tackle.hurdleKeep` (70%) of their speed. Rear slides aren't contested: they always win the ball, but the slider takes `tackle.rearRecover` (1.5×) as long to get up, and "Penalized" splashes over their head. There are no fouls.
+- The defensive stance (`CONFIG.guard`) isn't an attribute: anyone without
+  the ball, with an opponent who has it within 4 m and inside their cone
+  (45° either side of the way they face), standing in front of them
+  (within 60° of the way they face, so not when chasing), squares up. They keep facing them
+  whichever way they move (turning as quickly as they turn anywhere), so
+  pokes and slides go their way. Backing off is slower (65% speed, 85%
+  across), and the stickman backpedals or side-shuffles. It holds until
+  they're over 6 m away, past 55° of the defender's facing, or the
+  defender's more than 65° round from their front; the ball changes hands, or the
+  defender sprints, slides or is knocked down. The lab's Stance scenario
+  draws the zone (lab only) and runs drills for each case.
 - Attributes are chosen before a match and sent once with the room, so they
   add nothing to the per-tick network traffic.
 - Not included yet: **passing accuracy** (kicks go exactly where you face, so

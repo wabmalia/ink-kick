@@ -97,7 +97,7 @@
 .lab-note { margin: 0; color: var(--soft); }
 
 /* Compact enough that the busiest scenario fits at 1280×720. */
-.lab-tabs { flex-wrap: nowrap; gap: 3px; }
+.lab-tabs { gap: 3px; }
 .lab-tabs .lab-btn { font-size: 16px; padding: 1px 7px; }
 .lab-choice { margin: 2px 0; }
 .lab-role h3 { margin: 4px 0 0; font-size: 20px; }

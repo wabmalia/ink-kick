@@ -155,6 +155,27 @@ export const CONFIG = {
     spinFade: 0.8,
   },
 
+  // The defensive stance: without the ball, with an opponent who has it
+  // enter metres or closer and inside the cone (degrees either side of the
+  // way the player faces), and standing in front of them (within front
+  // degrees of the way they face: not chasing them), a player squares up:
+  // turns to keep facing them (as quickly as turning anywhere) whichever
+  // way they move, so a poke or slide goes their way. Moving back is
+  // slower (backSpeed of the usual speed), across a little (sideSpeed).
+  // Held until they're more than leave metres away, outside coneLeave
+  // degrees, or the player's no longer within frontLeave degrees of their
+  // front; or the ball changes hands, or the defender sprints, slides or is
+  // knocked down. Two of each, so the edges don't flicker.
+  guard: {
+    enter: 4,
+    leave: 6,
+    cone: 45,
+    coneLeave: 55,
+    front: 60,
+    frontLeave: 65,
+    sideSpeed: 0.85,
+    backSpeed: 0.65,
+  },
   tackle: {
     // A tackle is a poke with the ball this close, edge to edge (or the
     // dribbler within pokeBodyReach); any further, it's a slide.

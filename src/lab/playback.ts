@@ -70,6 +70,7 @@ export class Playback {
       props: balls.slice(1),
       cones: this.run.cones,
       aim: this.run.aim,
+      zone: this.run.zone,
       score: { gold: 0, red: 0 },
     };
   }

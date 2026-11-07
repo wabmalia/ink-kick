@@ -53,6 +53,8 @@ export interface Run {
   cones?: { x: number; y: number; label?: string }[];
   // Kits to draw players in, where it isn't the team they play for.
   kits?: Record<string, Team>;
+  // The defensive stance's zone, drawn round the player on the ball.
+  zone?: { x: number; y: number; fx: number; fy: number; ax: number; ay: number; afx: number; afy: number; active: boolean };
   // A shot's spot and where it's aimed, drawn as a draggable arrow.
   aim?: { x: number; y: number; tx: number; ty: number };
   step(): SimEvent[];
@@ -358,6 +360,298 @@ function holdOdds(tackler: Match['players'][number], dribbler: Match['players'][
   return Math.min(1, holdBase * (tackler.stats.tackleFactor / (dribbler.stats.holdFactor * dribbler.stats.ballControl)) ** holdPower);
 }
 
+
+// --- Stance --------------------------------------------------------------
+// An attacker standing on the ball, and a defender squaring up to them: in,
+// a shuffle across and back between the cones, a step back, then in to
+// tackle. With the stance off, the same keys turn the defender each way
+// they go.
+
+const STANCE_ROLES: Role[] = [
+  { id: 'attacker', label: 'Attacker', team: 'gold' },
+  { id: 'defender', label: 'Defender', team: 'red' },
+];
+
+type StanceOutcome = 'won' | 'ridden' | 'penalized' | 'missed';
+
+const STANCE_OUTCOME: Record<StanceOutcome, string> = {
+  won: 'Tackle won',
+  ridden: 'Ridden',
+  penalized: 'Won, penalized',
+  missed: 'Missed',
+};
+
+// The defender's drills: legs to walk (or sprint), metres in front of the
+// attacker and to their left, from a start spot facing a way.
+interface Leg { label: string; d: number; l: number; sprint?: boolean }
+interface Drill {
+  label: string;
+  from: { d: number; l: number; fd: number; fl: number };
+  legs: Leg[];
+  // Whether it ends in a tackle (the Then option).
+  tackles: boolean;
+  cones?: { d: number; l: number; label: string }[];
+}
+const SQUARE = 3;
+const SHUFFLE = 1.5;
+const DRILLS: Record<string, Drill> = {
+  shuffle: {
+    label: 'Shuffle',
+    from: { d: 8, l: 0, fd: -1, fl: 0 },
+    legs: [
+      { label: 'In to 3m', d: SQUARE, l: 0 },
+      { label: 'Across 1.5m', d: SQUARE, l: SHUFFLE },
+      { label: 'Across 3m', d: SQUARE, l: -SHUFFLE },
+      { label: 'Across 1.5m', d: SQUARE, l: 0 },
+      { label: 'Back 1.5m', d: SQUARE + 1.5, l: 0 },
+    ],
+    tackles: true,
+    cones: [
+      { d: SQUARE, l: SHUFFLE + 0.6, label: '1' },
+      { d: SQUARE, l: -SHUFFLE - 0.6, label: '2' },
+      { d: SQUARE + 2.1, l: 0, label: '3' },
+    ],
+  },
+  out: {
+    label: 'Out sideways',
+    from: { d: 8, l: 0, fd: -1, fl: 0 },
+    legs: [
+      { label: 'In to 3m', d: SQUARE, l: 0 },
+      { label: 'Across 6m', d: SQUARE, l: 6 },
+      // Back in towards them, so they're ahead again: squares up at 4m.
+      { label: 'Back in', d: 2, l: 1.5 },
+      { label: 'Across 1.5m', d: SQUARE, l: 0 },
+    ],
+    tackles: false,
+  },
+  sprint: {
+    label: 'Sprint off',
+    from: { d: 8, l: 0, fd: -1, fl: 0 },
+    legs: [
+      { label: 'In to 3m', d: SQUARE, l: 0 },
+      { label: 'Across 1.5m', d: SQUARE, l: SHUFFLE },
+      { label: 'Sprint back', d: 11, l: SHUFFLE, sprint: true },
+    ],
+    tackles: false,
+  },
+  behind: {
+    label: 'From behind',
+    // Behind them and looking at them, in range: chasing, so no stance
+    // until round the side and in front.
+    from: { d: -3, l: 0.3, fd: 1, fl: 0 },
+    legs: [
+      { label: 'Round the side', d: -0.5, l: 4 },
+      { label: 'Into the front', d: 2.5, l: 3 },
+      { label: 'Turn in', d: 2.2, l: 0.8 },
+    ],
+    tackles: true,
+  },
+  turn: {
+    label: 'Turn in',
+    // From beside them, running round into the cone still looking past
+    // them, then turning in.
+    from: { d: 0.5, l: 6, fd: 1, fl: 0 },
+    legs: [
+      { label: 'Round the side', d: SQUARE, l: SHUFFLE },
+      { label: 'Turn in', d: SQUARE - 0.8, l: 0 },
+    ],
+    tackles: true,
+  },
+};
+
+const deg = (rad: number) => (rad * 180) / Math.PI;
+
+export const stance: Scenario = {
+  id: 'stance',
+  name: 'Stance',
+  roles: STANCE_ROLES,
+  choices: [
+    { key: 'drill', label: 'Drill', options: Object.entries(DRILLS).map(([value, d]) => ({ value, label: d.label })) },
+    { key: 'guard', label: 'Stance', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] },
+    {
+      key: 'kind', label: 'Then', options: [['poke', 'Poke'], ['slide', 'Slide'], ['none', 'No tackle']].map(([value, label]) => ({ value: value!, label: label! })),
+      enabled: o => DRILLS[o.drill!]!.tackles,
+    },
+  ],
+  hint: 'Squares up with the attacker in the blue wedge (4m, 45°) and standing in their gold cone (120°); lets go past the faint lines or on a sprint.',
+  defaults: { drill: 'shuffle', guard: 'on', kind: 'poke' },
+  start(attrs, opts, seed) {
+    const match = labMatch(STANCE_ROLES.map(role => ({ role, attrs: attrs[role.id]! })), seed);
+    const [att, def] = match.players as [Match['players'][number], Match['players'][number]];
+    const drill = DRILLS[opts.drill!] ?? DRILLS.shuffle!;
+    const ax = -width / 2 + 9;
+    Object.assign(att, { x: ax, y: 0, fx: 1, fy: 0 });
+    Object.assign(match.ball, { x: ax + CONFIG.dribble.distance, y: 0 });
+    match.owner = att.id;
+    // Where the attacker's facing (+x) puts each spot.
+    const spot = (d: number, l: number) => ({ x: ax + d, y: l });
+    Object.assign(def, { ...spot(drill.from.d, drill.from.l), fx: drill.from.fd, fy: drill.from.fl });
+    const on = opts.guard === 'on';
+    // Switched off, for the comparison.
+    match.noGuard = !on;
+    const kind = drill.tackles ? opts.kind : 'none';
+    const pressAt = kind === 'slide' ? 2.4 : 1.1;
+
+    let leg = 0;
+    let legFrom = 0;
+    const legs: { time: number; dist: number }[] = [];
+    let walked = 0;
+    let pressed = false;
+    let sprintHeld = false;
+    let outcome: StanceOutcome | null = null;
+    let at: number | null = null;
+    let tackleKind: string | null = null;
+    let squared: { dist: number; facing: number; at: number } | null = null;
+    let letGo: { why: string; dist: number; facing: number } | null = null;
+    let again: { dist: number; facing: number; at: number } | null = null;
+    let inStance = 0;
+    let worst = 0;
+    let facingAtPress: number | null = null;
+    // Degrees the defender looks away from the attacker; and round from the
+    // way the attacker faces, where the defender stands.
+    const roundAngle = () => Math.abs(deg(Math.atan2(att.fx * (def.y - att.y) - att.fy * (def.x - att.x), att.fx * (def.x - att.x) + att.fy * (def.y - att.y))));
+    const faceAngle = () => {
+      const dx = att.x - def.x;
+      const dy = att.y - def.y;
+      return deg(Math.acos(Math.max(-1, Math.min(1, (def.fx * dx + def.fy * dy) / (Math.hypot(dx, dy) || 1)))));
+    };
+    const gap = () => Math.hypot(att.x - def.x, att.y - def.y);
+
+    const run: Run = {
+      match, t: 0, done: false,
+      cones: drill.cones?.map(c => ({ ...spot(c.d, c.l), label: c.label })),
+      zone: { x: def.x, y: def.y, fx: def.fx, fy: def.fy, ax: att.x, ay: att.y, afx: att.fx, afy: att.fy, active: false },
+      step() {
+        const ball = match.ball;
+        const inputs: Record<string, Input> = {};
+        // The attacker stands on it; once it's gone, goes for it.
+        inputs.attacker = match.owner === att.id ? NO_INPUT : toward(att, ball.x, ball.y, true, 0);
+        if (leg < drill.legs.length) {
+          const to = drill.legs[leg]!;
+          const p = spot(to.d, to.l);
+          if (Math.hypot(p.x - def.x, p.y - def.y) < 0.15) {
+            legs.push({ time: run.t - legFrom, dist: walked });
+            leg++;
+            legFrom = run.t;
+            walked = 0;
+          }
+        }
+        if (leg < drill.legs.length) {
+          const to = drill.legs[leg]!;
+          const p = spot(to.d, to.l);
+          inputs.defender = toward(def, p.x, p.y, !!to.sprint, 0.1);
+        } else if (!pressed && kind !== 'none') {
+          const ballDist = Math.hypot(ball.x - def.x, ball.y - def.y);
+          const go = toward(def, ball.x, ball.y, false, 0);
+          if (ballDist < pressAt) {
+            pressed = true;
+            facingAtPress = faceAngle();
+            inputs.defender = { ...go, kick: true };
+          } else {
+            inputs.defender = go;
+          }
+        } else {
+          inputs.defender = at === null ? NO_INPUT : toward(def, ball.x, ball.y, true, 0);
+        }
+        sprintHeld = inputs.defender.sprint;
+
+        const was = def.guarding;
+        const owner = match.owner;
+        const bx = def.x;
+        const by = def.y;
+        const events = step(match, inputs);
+        run.t += CONFIG.tick;
+        walked += Math.hypot(def.x - bx, def.y - by);
+        if (def.guarding) {
+          inStance += CONFIG.tick;
+          if (!squared) squared = { dist: gap(), facing: faceAngle(), at: run.t };
+          else if (letGo && !again) again = { dist: gap(), facing: faceAngle(), at: run.t };
+          worst = Math.max(worst, faceAngle());
+        }
+        if (was && !def.guarding && !letGo) {
+          const g = CONFIG.guard;
+          const why = pressed ? 'tackled'
+            : match.owner !== owner ? 'the ball moved on'
+            : sprintHeld ? 'sprinting'
+              : def.action !== 'none' && def.action !== 'poke' ? `a ${def.action}`
+                : gap() > g.leave ? 'out of range'
+                  : faceAngle() > g.coneLeave ? 'out of the cone'
+                    : roundAngle() > g.frontLeave ? 'not in front' : 'let go';
+          letGo = { why, dist: gap(), facing: faceAngle() };
+        }
+        Object.assign(run.zone!, { x: def.x, y: def.y, fx: def.fx, fy: def.fy, ax: att.x, ay: att.y, afx: att.fx, afy: att.fy, active: !!def.guarding });
+        for (const e of events) {
+          if (e.type === 'poke' || e.type === 'slide') tackleKind = e.type;
+          if (outcome && outcome !== 'won') continue;
+          if (e.type === 'penalized') outcome = 'penalized';
+          else if (e.type === 'steal' && !outcome) outcome = 'won';
+          else if (e.type === 'shrug') outcome = 'ridden';
+          if (outcome && at === null) at = run.t;
+        }
+        if (pressed && at === null && tackleKind && def.action === 'none') {
+          outcome = 'missed';
+          at = run.t;
+        }
+        const down = match.players.some(p => p.action === 'stumble' || p.action === 'recover' || p.action === 'slide');
+        const finished = leg >= drill.legs.length && kind === 'none' && run.t - legFrom > 1;
+        if ((at !== null && run.t - at > 1.5 && !down) || finished || run.t > 15) run.done = true;
+        return events;
+      },
+      readout() {
+        const sections: Section[] = [
+          {
+            title: 'Stance', rows: [
+              row('Squared up', squared ? `at ${m(squared.dist)}, ${Math.round(squared.facing)}° off, ${s(squared.at)}` : on ? 'not yet' : 'off'),
+              row('Let go', letGo ? `${letGo.why}, ${m(letGo.dist)}, ${Math.round(letGo.facing)}° off` : def.guarding ? 'still in it' : '-'),
+              row('Squared again', again ? `at ${m(again.dist)}, ${Math.round(again.facing)}° off, ${s(again.at)}` : '-'),
+              row('Facing now', `${Math.round(faceAngle())}° off${squared ? `, at most ${Math.round(worst)}° in it` : ''}`),
+            ],
+          },
+          {
+            title: 'Moves', rows: drill.legs.map((l, i) => {
+              const done = legs[i];
+              return row(l.label, done ? `${s(done.time)}, ${(done.dist / done.time).toFixed(2)} m/s` : '-', 'pace');
+            }),
+          },
+        ];
+        if (drill.tackles) {
+          sections.push({
+            title: 'Challenge', rows: [
+              row('Tackle', tackleKind ?? (kind === 'none' ? 'none' : 'not yet')),
+              row('Facing at it', facingAtPress === null ? '-' : `${Math.round(facingAtPress)}° off`),
+              row('Result', outcome ? STANCE_OUTCOME[outcome] : '-', 'tackling', 'strength', 'dribbling'),
+              row('Win odds', `${Math.round(holdOdds(def, att) * 100)}% if it reaches`, 'tackling', 'strength', 'dribbling'),
+            ],
+          });
+        }
+        return sections;
+      },
+    };
+    return run;
+  },
+  repeat(attrs, opts, runs) {
+    if (!DRILLS[opts.drill!]?.tackles || opts.kind === 'none') return [{ title: `${runs} runs`, rows: [row('No tackle', 'nothing left to chance')] }];
+    const tally: Partial<Record<StanceOutcome, number>> = {};
+    for (let seed = 1; seed <= runs; seed++) {
+      const r = stance.start(attrs, opts, seed);
+      let outcome: StanceOutcome | null = null;
+      while (!r.done) {
+        for (const e of r.step()) {
+          if (e.type === 'penalized') outcome = 'penalized';
+          else if (e.type === 'shrug') outcome ??= 'ridden';
+          else if (e.type === 'steal') outcome ??= 'won';
+        }
+      }
+      outcome ??= 'missed';
+      tally[outcome] = (tally[outcome] ?? 0) + 1;
+    }
+    const pct = (n: number) => `${Math.round((n / runs) * 100)}%`;
+    return [{
+      title: `${runs} runs`,
+      rows: (Object.keys(STANCE_OUTCOME) as StanceOutcome[]).filter(k => tally[k]).map(k => row(STANCE_OUTCOME[k], pct(tally[k]!))),
+    }];
+  },
+};
 
 // --- Slalom --------------------------------------------------------------
 // Two dribblers side by side, each with their own ball (their own match, so
@@ -824,7 +1118,7 @@ export const range: Scenario = {
   },
 };
 
-export const SCENARIOS: Scenario[] = [track, arena, slalom, range];
+export const SCENARIOS: Scenario[] = [track, arena, stance, slalom, range];
 
 export const defaultAttrs = (scenario: Scenario): Record<string, Attributes> =>
   Object.fromEntries(scenario.roles.map(r => [r.id, evenAttributes()]));

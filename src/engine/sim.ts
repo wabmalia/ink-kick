@@ -77,6 +77,9 @@ export interface Player extends Disc {
   // With the ball: seconds running straight since the last cut, which is
   // how much of Pace's extra speed they've got into (dribble.paceRunIn).
   straight?: number;
+  // Squared up to this opponent with the ball (CONFIG.guard): facing them
+  // whichever way they move.
+  guarding?: string;
   // Whether the current poke or slide already touched the ball.
   struck: boolean;
   kickDown: boolean;
@@ -155,6 +158,8 @@ export interface Match {
   // Just after a keeper kicks it out: the other team can't touch the ball
   // for this many seconds more.
   guard: { team: Team; left: number } | null;
+  // No defensive stance (the lab, to compare with and without it).
+  noGuard?: boolean;
 }
 
 export type SimEvent =
@@ -534,6 +539,7 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
   drift.y += (p.vy - drift.y) * blend;
   // Before this tick's kick, which may let the ball go (dribbling, below, is after).
   const hasBall = match.owner === p.id;
+  guard(match, p, input);
 
   switch (p.action) {
     case 'none':
@@ -654,7 +660,26 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
 
   let mx = dx;
   let my = dy;
-  if (moving && p.action === 'charge') {
+  const marking = playerById(match, p.guarding ?? null);
+  if (marking) {
+    // Squared up: turned to face them, moving any way at all, slower going
+    // back than across, and no hard turns.
+    const g = CONFIG.guard;
+    endTurnBack(match, p);
+    // Turning to them as quickly as turning anywhere: quicker the slower
+    // you're going the way you face.
+    const slow = 1 - Math.min(1, Math.max(0, p.vx * p.fx + p.vy * p.fy) / p.stats.runSpeed);
+    const rate = pl.turnRate * (1 + (pl.pivotBoost - 1) * slow * slow);
+    const current = Math.atan2(p.fy, p.fx);
+    const turn = angleBetween(current, Math.atan2(marking.y - p.y, marking.x - p.x));
+    const a = current + Math.sign(turn) * Math.min(Math.abs(turn), rate * dt);
+    p.fx = Math.cos(a);
+    p.fy = Math.sin(a);
+    if (moving) {
+      const ahead = dx * p.fx + dy * p.fy;
+      speed *= ahead >= 0 ? g.sideSpeed + (1 - g.sideSpeed) * ahead : g.sideSpeed + (g.backSpeed - g.sideSpeed) * -ahead;
+    }
+  } else if (moving && p.action === 'charge') {
     // Powering up a kick, you can't turn: you go on the way you face, and
     // the keys are free to set up the curl.
     mx = p.fx;
@@ -749,6 +774,31 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
   const k = Math.min(1, pl.response * grip * (1 + (p.stats.agility - 1) * t) * dt);
   p.vx += (tx - p.vx) * k;
   p.vy += (ty - p.vy) * k;
+}
+
+// Squaring up to the opponent on the ball, or letting them go. Two ranges,
+// so hovering at the edge doesn't flick it on and off.
+function guard(match: Match, p: Player, input: Input) {
+  const g = CONFIG.guard;
+  const q = playerById(match, match.owner);
+  const sprinting = input.sprint && (input.x !== 0 || input.y !== 0);
+  const able = !match.noGuard && !p.keeper && !!q && q.team !== p.team && !sprinting
+    && (p.action === 'none' || p.action === 'poke');
+  if (!able) {
+    p.guarding = undefined;
+    return;
+  }
+  const dist = Math.hypot(q.x - p.x, q.y - p.y);
+  const cos = (v: number) => Math.cos((v * Math.PI) / 180);
+  // How near straight ahead they are: 1 dead ahead.
+  const ahead = (p.fx * (q.x - p.x) + p.fy * (q.y - p.y)) / (dist || 1);
+  // And how near in front of them the player is: not chasing them.
+  const front = (q.fx * (p.x - q.x) + q.fy * (p.y - q.y)) / (dist || 1);
+  if (p.guarding === q.id) {
+    if (dist > g.leave || ahead < cos(g.coneLeave) || front < cos(g.frontLeave)) p.guarding = undefined;
+    return;
+  }
+  if (p.action === 'none' && dist <= g.enter && ahead >= cos(g.cone) && front >= cos(g.front)) p.guarding = q.id;
 }
 
 // How far ahead of a dribbler the ball is held: further when sprinting,

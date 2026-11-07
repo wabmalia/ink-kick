@@ -99,6 +99,7 @@ export class GameView {
   private aimArrow: { group: THREE.Group; shaft: THREE.Mesh; head: THREE.Mesh; spot: THREE.Mesh } | null = null;
   private ray = new THREE.Raycaster();
   private ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  private zone: { def: THREE.Group; att: THREE.Group; fill: THREE.MeshBasicMaterial } | null = null;
   private reachRing: { ring: THREE.Mesh; label: THREE.Mesh } | null = null;
 
   constructor(host: HTMLElement) {
@@ -306,6 +307,81 @@ export class GameView {
     shaft.scale.x = Math.max(0.01, len - 0.55);
   }
 
+  // The lab: the stance's zones. Ahead of the defender, a wedge of their
+  // cone out to the enter range, its edge solid, and the wider cone out to
+  // the leave range, fainter; brighter while they're squared up. In front
+  // of the attacker, the cone the defender has to be in, gold, out to the
+  // leave range.
+  private drawZone(zone?: ViewState['zone']) {
+    if (!zone) {
+      if (this.zone) this.zone.def.visible = this.zone.att.visible = false;
+      return;
+    }
+    if (!this.zone) {
+      const g = CONFIG.guard;
+      const rad = (d: number) => (d * Math.PI) / 180;
+      const mat = (color: number, opacity: number) =>
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide });
+      // Geometry drawn in its own x-y plane, laid flat, pointing along +x.
+      const wedge = () => {
+        const flat = new THREE.Group();
+        flat.rotation.x = -Math.PI / 2;
+        const group = new THREE.Group();
+        group.add(flat);
+        group.position.y = 0.025;
+        this.scene.add(group);
+        return { group, flat };
+      };
+      const arc = (flat: THREE.Group, r0: number, r1: number, half: number, m: THREE.Material) =>
+        flat.add(new THREE.Mesh(new THREE.RingGeometry(r0, r1, 48, 1, -rad(half), 2 * rad(half)), m));
+      // A straight edge out from r0 to r1 at angle a.
+      const edge = (flat: THREE.Group, r0: number, r1: number, a: number, m: THREE.Material) => {
+        const geo = new THREE.PlaneGeometry(r1 - r0, 0.06);
+        geo.translate(r0 + (r1 - r0) / 2, 0, 0);
+        const mesh = new THREE.Mesh(geo, m);
+        mesh.rotation.z = rad(a);
+        flat.add(mesh);
+      };
+      // Clear of their feet.
+      const inner = 0.6;
+
+      const def = wedge();
+      const fill = mat(0x5fd4ff, 0.12);
+      const line = mat(0x5fd4ff, 0.9);
+      const faint = mat(0x5fd4ff, 0.45);
+      arc(def.flat, inner, g.enter, g.cone, fill);
+      arc(def.flat, g.enter - 0.06, g.enter, g.cone, line);
+      arc(def.flat, g.leave - 0.05, g.leave, g.coneLeave, faint);
+      for (const side of [1, -1]) {
+        edge(def.flat, inner, g.enter, side * g.cone, line);
+        edge(def.flat, inner, g.leave, side * g.coneLeave, faint);
+      }
+
+      const att = wedge();
+      const gold = mat(0xffc23a, 0.06);
+      const goldLine = mat(0xffc23a, 0.8);
+      const goldFaint = mat(0xffc23a, 0.4);
+      arc(att.flat, inner, g.leave, g.front, gold);
+      for (const side of [1, -1]) {
+        edge(att.flat, inner, g.leave, side * g.front, goldLine);
+        edge(att.flat, inner, g.leave, side * g.frontLeave, goldFaint);
+      }
+
+      for (const w of [def, att]) for (const m of w.flat.children) m.renderOrder = 2;
+      this.zone = { def: def.group, att: att.group, fill };
+    }
+    const place = (group: THREE.Group, x: number, y: number, fx: number, fy: number) => {
+      group.visible = true;
+      group.position.x = x;
+      group.position.z = y;
+      // Turned to point the way they face (sim y is world z).
+      group.rotation.y = -Math.atan2(fy, fx);
+    };
+    place(this.zone.def, zone.x, zone.y, zone.fx, zone.fy);
+    place(this.zone.att, zone.ax, zone.ay, zone.afx, zone.afy);
+    this.zone.fill.opacity = zone.active ? 0.3 : 0.12;
+  }
+
   private drawCones(cones: { x: number; y: number; label?: string }[] = []) {
     while (this.cones.length < cones.length) {
       const cone = buildCone();
@@ -400,6 +476,7 @@ export class GameView {
     this.drawProps(state.props);
     this.drawCones(state.cones);
     this.drawAim(state.aim);
+    this.drawZone(state.zone);
     this.drawReach(state.reach);
 
     const mine = state.players.find(p => p.id === me);

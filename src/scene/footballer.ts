@@ -66,6 +66,9 @@ const SKID_SPEED_FULL = 4.5;
 // How quickly (per second) the planted leg swaps from in front to behind as
 // you turn round.
 const SKID_SWAP = 12;
+// How quickly (per second) the gait eases between running, backpedalling
+// and shuffling.
+const GAIT_EASE = 10;
 
 
 // Piecewise keyframes: [time 0..1, value], eased between each pair.
@@ -103,6 +106,9 @@ export class Footballer {
   private skidW = 0;
   private skidDir = 1;
   private tiltS = 0;
+  // Eased weights for backing off and moving across, 0..1.
+  private backW = 0;
+  private sideW = 0;
   private lastV: { x: number; z: number } | null = null;
 
   /** 0..1, how hard this player is skidding, for the scuff marks. */
@@ -167,32 +173,53 @@ export class Footballer {
     const { tackle } = CONFIG;
 
     const s = Math.min(1, pose.speed / RUN_SPEED);
-    this.phase += (pose.speed * dt * Math.PI * 2) / STRIDE;
     const moving = Math.min(1, s * 3);
-    const swing = Math.sin(this.phase) * (0.25 + 0.65 * s) * moving;
+    const vx = pose.vx ?? 0;
+    const vz = pose.vz ?? 0;
+    const fx = Math.sin(pose.heading);
+    const fz = Math.cos(pose.heading);
+    // Which way they're going against the way they face, eased: backing
+    // off (backpedalling, short quick steps, leaning back) and moving
+    // across (a side shuffle, legs opening and closing) look different from
+    // running.
+    const v = Math.hypot(vx, vz);
+    const gait = pose.action === 'none' || pose.action === 'poke' ? 1 : 0;
+    const wantBack = v > 0.5 ? gait * Math.max(0, -(vx * fx + vz * fz) / v) : 0;
+    const wantSide = v > 0.5 ? gait * Math.abs(vx * fz - vz * fx) / v : 0;
+    const ease = Math.min(1, dt * GAIT_EASE);
+    this.backW += (wantBack - this.backW) * ease;
+    this.sideW += (wantSide - this.sideW) * ease;
+    const bw = this.backW * moving;
+    const sideW = this.sideW * moving;
+    // Backwards the cycle runs the other way, in shorter, quicker steps.
+    this.phase += ((pose.speed * dt * Math.PI * 2) / STRIDE) * (1 - 2 * this.backW) * (1 + 0.5 * this.backW + 0.4 * this.sideW);
+    const swing = Math.sin(this.phase) * (0.25 + 0.65 * s) * moving * (1 - 0.45 * this.backW - 0.75 * this.sideW);
 
     // Run cycle. Negative x rotation swings a limb forward.
     let hipL = -swing;
     let hipR = swing;
-    let kneeL = moving * (0.2 + 1.1 * s * Math.max(0, Math.cos(this.phase)));
-    let kneeR = moving * (0.2 + 1.1 * s * Math.max(0, -Math.cos(this.phase)));
+    const lift = 1 - 0.55 * this.backW - 0.6 * this.sideW;
+    let kneeL = moving * (0.2 + 1.1 * s * lift * Math.max(0, Math.cos(this.phase)));
+    let kneeR = moving * (0.2 + 1.1 * s * lift * Math.max(0, -Math.cos(this.phase)));
     let shoulderL = swing * 0.9;
     let shoulderR = -swing * 0.9;
     let elbow = -(0.25 + 1.05 * s);
-    let lean = 0.16 * s;
+    // Leaning into a run; back on the heels backing off, and low, knees
+    // bent, either way.
+    let lean = 0.16 * s * (1 - this.backW - this.sideW * 0.8) - 0.2 * bw;
     let bob = 0.06 * s * Math.abs(Math.cos(this.phase));
-    let drop = 0;
+    let drop = -0.07 * Math.max(bw, sideW);
+    kneeL += 0.3 * Math.max(bw, sideW);
+    kneeR += 0.3 * Math.max(bw, sideW);
     let back = 0;
-    let spread = 0.12;
+    let spread = 0.12 + 0.25 * sideW;
+    // The shuffle: legs open and close sideways.
+    let open = sideW * (0.14 + 0.16 * Math.sin(this.phase));
 
     // Skid: braking hard, one leg planted towards the way you're still
     // sliding, the other bent under, leaning the way you want to go: the
     // front leg as the turn starts, the trailing one once round. And a lean
     // into a turn.
-    const vx = pose.vx ?? 0;
-    const vz = pose.vz ?? 0;
-    const fx = Math.sin(pose.heading);
-    const fz = Math.cos(pose.heading);
     if (this.lastV && dt > 0) {
       const v0 = Math.hypot(this.lastV.x, this.lastV.z);
       let brake = v0 > 1.5 ? -((vx - this.lastV.x) * this.lastV.x + (vz - this.lastV.z) * this.lastV.z) / v0 / dt : 0;
@@ -215,7 +242,7 @@ export class Footballer {
     // Sideways speed relative to facing: positive is to the player's left.
     const across = vx * fz - vz * fx;
     // Eased, so it doesn't twitch with every change of speed.
-    const turnLean = Math.max(-0.22, Math.min(0.22, across * 0.05));
+    const turnLean = Math.max(-0.22, Math.min(0.22, across * 0.05)) * (1 - 0.7 * this.sideW);
     this.tiltS += (turnLean - this.tiltS) * Math.min(1, dt * 8);
     let tilt = this.tiltS;
 
@@ -256,6 +283,7 @@ export class Footballer {
       drop = mix(drop, -0.14, kw);
       back = mix(back, -0.14 * d, kw);
       tilt = mix(tilt, 0, kw);
+      open = mix(open, 0, kw);
     }
 
     if (pose.action === 'charge') {
@@ -316,6 +344,7 @@ export class Footballer {
       drop = mix(drop, -0.52, sw);
       // Leaning back swings the hips behind the feet; shift them forward.
       back = mix(back, 0.6, sw);
+      open = mix(open, 0, sw);
     }
 
     if (pose.action === 'stumble') {
@@ -328,6 +357,8 @@ export class Footballer {
     }
 
     this.hipL.rotation.x = hipL;
+    this.hipL.rotation.z = open;
+    this.hipR.rotation.z = -open;
     this.hipR.rotation.x = hipR;
     this.kneeL.rotation.x = kneeL;
     this.kneeR.rotation.x = kneeR;
