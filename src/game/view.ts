@@ -9,11 +9,12 @@ import { BRIGHT, GRASS_DROPS, PAINTS, Splashes, TURF_DROPS } from '../scene/spla
 import { Billboard } from '../scene/billboard';
 import { InfoBoards } from '../scene/info-boards';
 import { buildStadium } from '../scene/stadium';
-import { buildReachRing, buildTraining } from '../scene/training';
+import { buildCone, buildReachRing, buildTraining } from '../scene/training';
 import { Watercolor } from '../scene/watercolor';
 import type { PlayerView, ViewState } from './state';
 import { DUMMY_ID } from './training';
 import { lerp, smooth } from '../math';
+import { paintNow } from '../ui/wash';
 
 // The painted stadium and everyone in it. Draws a ViewState each frame,
 // whoever is running the match, and plays the events that come with it.
@@ -35,6 +36,10 @@ const TRAIL_GAP = 0.4;
 // Ground covered per footstep splash, in metres, running and sprinting.
 const STEP = 0.85;
 const SPRINT_STEP = 0.6;
+// How long a "Penalized" splash stays over a slider's head, in seconds (its
+// CSS animation runs as long).
+const TAG_TIME = 1.8;
+const TAG_PAINT = [0xb08cff, 0x9068f5, 0xe6dbff];
 
 // The coin toss, in seconds from the coin going up: the camera holds on the
 // centre circle, then pulls back to the broadcast view while the captains
@@ -77,6 +82,8 @@ export class GameView {
   private kicks = new Map<string, number>();
   // Tackles won this frame, by who won them.
   private steals = new Set<string>();
+  // "Penalized" splashes over sliders' heads, and how long each has been up.
+  private tags = new Map<string, { el: HTMLElement; t: number }>();
   // A hard kick's ink trail behind the ball: whose, for how much longer, and
   // the distance since the last spot.
   private trail: { team: Team; left: number; dist: number; power: number } | null = null;
@@ -87,6 +94,10 @@ export class GameView {
   // the spare balls drawn there.
   private training: THREE.Group | null = null;
   private props: THREE.Mesh[] = [];
+  private cones: THREE.Mesh[] = [];
+  private aimArrow: { group: THREE.Group; shaft: THREE.Mesh; head: THREE.Mesh; spot: THREE.Mesh } | null = null;
+  private ray = new THREE.Raycaster();
+  private ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private reachRing: { ring: THREE.Mesh; label: THREE.Mesh } | null = null;
 
   constructor(host: HTMLElement) {
@@ -189,6 +200,8 @@ export class GameView {
         this.kicks.set(e.player, e.power);
         const team = this.footballers.get(e.player)?.team;
         this.trail = team && e.power > TRAIL_FROM ? { team, left: 0.5 + e.power * 0.7, dist: 0, power: e.power } : null;
+      } else if (e.type === 'penalized') {
+        this.penalize(e.player, e.extra);
       } else if (e.type === 'steal') {
         this.steals.add(e.player);
       } else if (e.type === 'goal') {
@@ -244,6 +257,64 @@ export class GameView {
       const p = props[i];
       ball.visible = !!p;
       if (p) ball.position.set(p.x, CONFIG.ball.radius, p.y);
+    });
+  }
+
+  /** Where on the pitch a point on the screen is, in sim coordinates. */
+  pickGround(clientX: number, clientY: number) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    this.ray.setFromCamera(ndc, this.camera);
+    const hit = new THREE.Vector3();
+    return this.ray.ray.intersectPlane(this.ground, hit) ? { x: hit.x, y: hit.z } : null;
+  }
+
+  // The lab's shot: a ring on the spot and an arrow to where it's aimed,
+  // its head a ring too, both for dragging.
+  private drawAim(aim?: { x: number; y: number; tx: number; ty: number }) {
+    if (!aim) {
+      if (this.aimArrow) this.aimArrow.group.visible = false;
+      return;
+    }
+    if (!this.aimArrow) {
+      const mat = new THREE.MeshBasicMaterial({ color: 0xff4fd8, transparent: true, opacity: 0.9, depthWrite: false });
+      const flat = (m: THREE.Mesh) => {
+        m.rotation.x = -Math.PI / 2;
+        m.renderOrder = 2;
+        return m;
+      };
+      const shaftGeo = new THREE.PlaneGeometry(1, 0.08);
+      shaftGeo.translate(0.5, 0, 0);
+      const shaft = flat(new THREE.Mesh(shaftGeo, mat));
+      const head = flat(new THREE.Mesh(new THREE.RingGeometry(0.42, 0.55, 40), mat));
+      const spot = flat(new THREE.Mesh(new THREE.RingGeometry(0.75, 0.88, 48), mat));
+      const group = new THREE.Group();
+      group.add(shaft, head, spot);
+      group.position.y = 0.03;
+      this.scene.add(group);
+      this.aimArrow = { group, shaft, head, spot };
+    }
+    const { group, shaft, head, spot } = this.aimArrow;
+    group.visible = true;
+    const len = Math.hypot(aim.tx - aim.x, aim.ty - aim.y);
+    spot.position.set(aim.x, 0, aim.y);
+    head.position.set(aim.tx, 0, aim.ty);
+    shaft.position.set(aim.x, 0, aim.y);
+    // Flat on the ground, turned to point along the aim.
+    shaft.rotation.set(-Math.PI / 2, 0, -Math.atan2(aim.ty - aim.y, aim.tx - aim.x));
+    shaft.scale.x = Math.max(0.01, len - 0.55);
+  }
+
+  private drawCones(cones: { x: number; y: number }[] = []) {
+    while (this.cones.length < cones.length) {
+      const cone = buildCone();
+      this.scene.add(cone);
+      this.cones.push(cone);
+    }
+    this.cones.forEach((cone, i) => {
+      const c = cones[i];
+      cone.visible = !!c;
+      if (c) cone.position.set(c.x, 0.25, c.y);
     });
   }
 
@@ -314,6 +385,8 @@ export class GameView {
     rollBall(this.ball, state.ballX - this.ball.position.x, state.ballY - this.ball.position.z);
     this.ball.position.set(state.ballX, CONFIG.ball.radius, state.ballY);
     this.drawProps(state.props);
+    this.drawCones(state.cones);
+    this.drawAim(state.aim);
     this.drawReach(state.reach);
 
     const mine = state.players.find(p => p.id === me);
@@ -328,6 +401,7 @@ export class GameView {
     this.billboard.setScore(state.score);
     this.infoBoards.set(state.info);
     this.drawLabels(state, names);
+    this.drawTags(dt);
     this.watercolor.render(this.scene, this.camera, now / 1000);
   }
 
@@ -619,6 +693,57 @@ export class GameView {
     }
   }
 
+  // A slide through someone's back: "Penalized" splashed in paint over the
+  // slider's head, and a blot of the same paint at their feet.
+  private penalize(id: string, extra: number) {
+    let tag = this.tags.get(id);
+    if (!tag) {
+      const el = document.createElement('span');
+      el.className = 'penalty-tag';
+      el.dataset.wash = 'purple';
+      const word = document.createElement('span');
+      word.textContent = 'Penalized';
+      const cost = document.createElement('small');
+      el.append(word, cost);
+      this.labelLayer.append(el);
+      tag = { el, t: 0 };
+      this.tags.set(id, tag);
+    }
+    // What it cost: the extra time on the ground.
+    const cost = tag.el.querySelector('small')!;
+    const text = `+${extra.toFixed(1)}s to get up`;
+    if (cost.textContent !== text) {
+      cost.textContent = text;
+      paintNow(tag.el);
+    }
+    tag.t = 0;
+    // Restart its animation if it was already up.
+    tag.el.classList.remove('show');
+    void tag.el.offsetWidth;
+    tag.el.classList.add('show');
+    const at = this.last.get(id);
+    if (at) {
+      this.splashes.burst({ x: at.x, z: at.y, dx: 0, dz: 1, count: 1, speed: 0, size: 0.6, colors: TAG_PAINT, spread: 0, life: 2.5, alpha: 0.55, stain: true });
+      this.splashes.burst({ x: at.x, z: at.y, dx: 0, dz: 1, count: 14, speed: 3, size: 0.12, colors: TAG_PAINT, spread: Math.PI, life: 0.7, alpha: 0.9 });
+    }
+  }
+
+  private drawTags(dt: number) {
+    for (const [id, tag] of this.tags) {
+      tag.t += dt;
+      const at = this.last.get(id);
+      if (tag.t > TAG_TIME || !at) {
+        tag.el.remove();
+        this.tags.delete(id);
+        continue;
+      }
+      this.projected.set(at.x, 2.5, at.y).project(this.camera);
+      const x = (this.projected.x + 1) * 50;
+      const y = (1 - this.projected.y) * 50;
+      tag.el.style.translate = `${x}vw ${y}vh`;
+    }
+  }
+
   // Spins the coin and lands it on the team that kicks off. Restarting the
   // element restarts its animations.
   private tossCoin(team: Team) {
@@ -645,6 +770,8 @@ export class GameView {
     this.splashes.clear();
     this.kicks.clear();
     this.steals.clear();
+    for (const { el } of this.tags.values()) el.remove();
+    this.tags.clear();
     this.trail = null;
   }
 }

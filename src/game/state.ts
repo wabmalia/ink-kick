@@ -34,6 +34,10 @@ export interface ViewState {
   score: Record<Team, number>;
   // Spare balls lying about the training ground.
   props?: { x: number; y: number }[];
+  // Cones set out by the lab (the training ground's are part of its markings).
+  cones?: { x: number; y: number }[];
+  // The lab's shot: its spot and where it's aimed, drawn as an arrow.
+  aim?: { x: number; y: number; tx: number; ty: number };
   // On the training ground: the ring around you showing your poke range.
   reach?: { x: number; y: number; r: number };
   // Seconds of play, for the clock on the scoreboard.

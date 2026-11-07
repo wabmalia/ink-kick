@@ -68,6 +68,12 @@ export interface Player extends Disc {
   drift?: { x: number; y: number };
   // Can't trap the ball until this reaches 0.
   cooldown: number;
+  // Slid through a dribbler's back: getting up from this slide takes
+  // tackle.rearRecover times as long.
+  penalized?: boolean;
+  // Riding a slide: hopping over this slider, so the two don't collide
+  // until it's over or the slider's behind them.
+  hurdling?: string;
   // Whether the current poke or slide already touched the ball.
   struck: boolean;
   kickDown: boolean;
@@ -157,6 +163,9 @@ export type SimEvent =
   | { type: 'feint'; player: string }
   // A dribbler riding a tackle that reached them.
   | { type: 'shrug'; player: string; from: string }
+  // A slide through a dribbler's back: it wins the ball, but the slider is
+  // slow to get up: this many seconds longer than usual.
+  | { type: 'penalized'; player: string; extra: number }
   | { type: 'goal'; team: Team; scorer: string | null; own: boolean; at: number }
   // The match is won: who by, and every goal, for the scoreboard.
   | { type: 'end'; winner: Team | null; score: Record<Team, number>; goals: GoalRecord[] }
@@ -353,8 +362,19 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
   const flight = { vx: ball.vx, vy: ball.vy };
 
   const players = match.players;
+  for (const p of players) {
+    if (!p.hurdling) continue;
+    const q = byId(p.hurdling);
+    // Over once the slider's up, or left behind and clear.
+    const behind = q && (q.x - p.x) * p.fx + (q.y - p.y) * p.fy < 0 && Math.hypot(q.x - p.x, q.y - p.y) > p.r + q.r + 0.1;
+    if (!q || (q.action !== 'slide' && q.action !== 'recover') || behind) p.hurdling = undefined;
+  }
   for (let i = 0; i < players.length; i++) {
-    for (let j = i + 1; j < players.length; j++) collide(players[i]!, players[j]!);
+    for (let j = i + 1; j < players.length; j++) {
+      const a = players[i]!;
+      const b = players[j]!;
+      if (a.hurdling !== b.id && b.hurdling !== a.id) collide(a, b);
+    }
     for (const post of match.posts) collide(players[i]!, post);
     // The dribbler's own body doesn't get in the ball's way; anyone else's
     // deadens it.
@@ -362,7 +382,8 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
     // moment after its kick out, does the other team. A hard shot comes
     // off a keeper rather than dying at its feet.
     const q = players[i]!;
-    const guarded = match.guard && q.team !== match.guard.team;
+    // A dribbler hopping a slide takes the ball over it too.
+    const guarded = (match.guard && q.team !== match.guard.team) || (owner?.hurdling === q.id);
     const parry = q.keeper && Math.hypot(ball.vx, ball.vy) > CONFIG.keeper.catchSpeed;
     if (q !== owner && !owner?.keeper && !guarded) {
       const before = ball.vx;
@@ -480,6 +501,9 @@ export function setAction(p: Player, action: Action) {
   p.action = action;
   p.actionT = 0;
   p.struck = false;
+  // Kept from the slide that went through someone's back to the end of
+  // getting up from it.
+  if (action !== 'recover') p.penalized = false;
 }
 
 function loseBall(match: Match, p: Player, cooldown: number) {
@@ -560,7 +584,7 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
       if (p.actionT >= tackle.slideTime) setAction(p, 'recover');
       break;
     case 'recover':
-      if (p.actionT >= tackle.recoverTime * (p.tired > 0 ? tackle.tiredRecover : 1)) setAction(p, 'none');
+      if (p.actionT >= p.stats.recoverTime * (p.tired > 0 ? tackle.tiredRecover : 1) * (p.penalized ? tackle.rearRecover : 1)) setAction(p, 'none');
       break;
     case 'stumble':
       if (p.actionT >= p.stats.stumbleTime) setAction(p, 'none');
@@ -692,7 +716,8 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
 
   // A change of direction or a stop at speed skids a little: grip falls
   // to skidGrip for an about turn or letting go of the keys at a run (none
-  // of it lost speeding up straight on, or from a standstill). Agility
+  // of it lost speeding up straight on, or from a standstill), and lower
+  // still faster than that. Agility
   // (from Dribbling) quickens it.
   const tx = mx * speed;
   const ty = my * speed;
@@ -704,7 +729,10 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
   const tb = p.turnBack;
   const grip = tb
     ? 1 - (1 - (dribbling ? CONFIG.dribble.turnBackGrip : pl.turnBackGrip)) * Math.min(1, v / ((1 - pl.turnBackSlip) * tb.from))
-    : 1 - (1 - (dribbling ? CONFIG.dribble.skidGrip : pl.skidGrip)) * t * Math.min(1, v / pl.runSpeed);
+    : (1 - (1 - (dribbling ? CONFIG.dribble.skidGrip : pl.skidGrip)) * t * Math.min(1, v / pl.runSpeed))
+      // Faster than a run, a turn or stop grips less again, so a sprint
+      // (the more so a quick player's) carries on further.
+      / (1 + pl.skidSpeed * t * Math.max(0, v / pl.runSpeed - 1));
   const k = Math.min(1, pl.response * grip * (1 + (p.stats.agility - 1) * t) * dt);
   p.vx += (tx - p.vx) * k;
   p.vy += (ty - p.vy) * k;
@@ -746,6 +774,9 @@ function rearSlide(match: Match, p: Player, q: Player, events: SimEvent[]) {
   match.ball.vy = q.fy * t.rearKnock + q.vy * 0.3;
   p.cooldown = Math.max(p.cooldown, t.rearSlideCooldown);
   p.struck = true;
+  p.penalized = true;
+  const extra = p.stats.recoverTime * (p.tired > 0 ? t.tiredRecover : 1) * (t.rearRecover - 1);
+  events.push({ type: 'penalized', player: p.id, extra: Math.round(extra * 10) / 10 });
   knockDown(p, q);
 }
 
@@ -759,17 +790,23 @@ function knockDown(p: Player, q: Player) {
 }
 
 // A tackle that reaches a dribbler can be ridden: it wins with chance
-// holdBase × (tackling / strength) to the holdPower, as attribute
-// multipliers, capped at 1 (docs/attributes.md has what that comes to).
+// holdBase × (tackling / (strength × dribbling)) to the holdPower, as
+// attribute multipliers, capped at 1 (docs/attributes.md has what that comes to).
 function beatsHold(match: Match, p: Player, victim: Player) {
   const { holdBase, holdPower } = CONFIG.tackle;
-  const chance = Math.min(1, holdBase * (p.stats.tackleFactor / victim.stats.holdFactor) ** holdPower);
+  const chance = Math.min(1, holdBase * (p.stats.tackleFactor / (victim.stats.holdFactor * victim.stats.ballControl)) ** holdPower);
   return chance >= 1 || random(match) < chance;
 }
 
 // The dribbler rides the challenge: the tackle is spent, the ball kept.
 function shrug(p: Player, victim: Player, events: SimEvent[]) {
   p.struck = true;
+  // Over a slide rather than through it, and slowed by the hop.
+  if (p.action === 'slide') {
+    victim.hurdling = p.id;
+    victim.vx *= CONFIG.tackle.hurdleKeep;
+    victim.vy *= CONFIG.tackle.hurdleKeep;
+  }
   events.push({ type: 'shrug', player: victim.id, from: p.id });
 }
 

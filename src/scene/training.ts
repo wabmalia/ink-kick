@@ -99,6 +99,16 @@ export function buildReachRing() {
   return { ring, label };
 }
 
+const coneGeo = new THREE.ConeGeometry(CONE_RADIUS * 1.6, 0.5, 18);
+const coneMat = new THREE.MeshStandardMaterial({ color: 0xff7a2a, roughness: 0.6 });
+
+/** An orange training cone, its base at y = 0.25 below its middle. */
+export function buildCone() {
+  const cone = new THREE.Mesh(coneGeo, coneMat);
+  cone.castShadow = true;
+  return cone;
+}
+
 export function buildTraining() {
   const group = new THREE.Group();
   lane(group, SPRINT);
@@ -106,12 +116,9 @@ export function buildTraining() {
   box(group, DUEL, 'Duel');
   box(group, TACKLE, 'Tackle');
 
-  const coneGeo = new THREE.ConeGeometry(CONE_RADIUS * 1.6, 0.5, 18);
-  const coneMat = new THREE.MeshStandardMaterial({ color: 0xff7a2a, roughness: 0.6 });
   for (const c of CONE_SPOTS) {
-    const cone = new THREE.Mesh(coneGeo, coneMat);
+    const cone = buildCone();
     cone.position.set(c.x, 0.25, c.y);
-    cone.castShadow = true;
     group.add(cone);
   }
   return group;

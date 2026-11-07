@@ -1,3 +1,5 @@
+// #/lab goes to the hidden lab before anything else starts.
+import './lab/redirect';
 // First, so the old saved settings are in place before anything reads them.
 import './rename';
 import { CONFIG } from './config';

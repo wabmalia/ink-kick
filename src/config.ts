@@ -27,7 +27,11 @@ export const CONFIG = {
     // Turning back on yourself, or stopping, at a run: only this much of
     // that grip, less the slower you're going, so you skid a little first
     // (dribble.skidGrip with the ball, which slows you on a turn already).
-    skidGrip: 0.2,
+    skidGrip: 0.14,
+    // Faster than runSpeed, that grip is divided again, by 1 + skidSpeed for
+    // each runSpeed over it: a sprint, the more so a quick player's, slides
+    // further into a turn or stop.
+    skidSpeed: 0.5,
     // A hard turn: pressing more than turnBackAngle degrees round from the
     // way you're going, while still going that way faster than
     // turnBackFrom times your running speed. You turn round at
@@ -94,12 +98,12 @@ export const CONFIG = {
     // Speed kept while turning 90 degrees with the ball; less sharp turns
     // lose less, and sharper ones more, down to reverseKeep for an about
     // turn: you stop, turn with the ball and go.
-    turnSlowdown: 0.65,
+    turnSlowdown: 0.58,
     reverseKeep: 0.08,
     // Turning with the ball is this many times quicker standing still than
     // at a run, so a reversal is a pivot rather than a loop.
     pivotBoost: 4,
-    skidGrip: 0.45,
+    skidGrip: 0.35,
     // A hard turn with the ball: a longer slide than without, the ball left
     // to stop (losing turnBackStop of its speed a second) while you slide
     // past it, then turnBackGather seconds to bring it back to your feet.
@@ -175,16 +179,22 @@ export const CONFIG = {
     stumbleTime: 0.5,
     slideShove: 3,
     // A tackle that reaches a dribbler wins with chance holdBase times
-    // (tackling / strength) to the holdPower, as attribute multipliers,
+    // (tackling / (strength × dribbling)) to the holdPower, as attribute multipliers,
     // capped at 1: level players win holdBase of them.
     holdBase: 0.85,
     holdPower: 3,
     // A player robbed of the ball can't trap it for this long.
     stealCooldown: 0.6,
+    // Riding a slide, the dribbler hops over the slider, keeping this much
+    // of their speed.
+    hurdleKeep: 0.7,
     // A slide through a dribbler's back knocks the ball on ahead of them at
     // this speed, and the slider can't trap it for this long.
     rearKnock: 2.5,
     rearSlideCooldown: 0.9,
+    // And takes this many times as long to get up after it: no fouls, but
+    // a slide from behind leaves its slider out of the game a while.
+    rearRecover: 2,
     // Stamina, as fractions of a full bar. A poke or slide costs its
     // tackler this, less the better a tackler they are (more than they have
     // empties the bar and tires them);

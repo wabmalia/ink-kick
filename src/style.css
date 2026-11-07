@@ -124,6 +124,50 @@ html, body {
 .label[data-team='gold'] { color: #ffd36b; }
 .label[data-team='red'] { color: #ff8a73; }
 
+/* "Penalized": a painted tag that splashes in over the head of a player who
+   slid through someone's back, then fades. Positioned with `translate`, so
+   the animation can use `transform`. */
+.penalty-tag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1px 9px 3px;
+  font-family: 'Caveat Brush', cursive;
+  font-size: 19px;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--ink);
+  opacity: 0;
+  transform: translate(-50%, -100%) scale(0.2) rotate(-12deg);
+}
+.penalty-tag small {
+  font-family: 'Caveat', cursive;
+  font-weight: 700;
+  font-size: 13px;
+}
+.penalty-tag::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: calc(var(--wash-pad, 0px) * -1);
+  background: var(--wash, none) center / 100% 100% no-repeat;
+}
+.penalty-tag.show { animation: penalty 1.8s forwards; }
+@keyframes penalty {
+  0% { opacity: 0; transform: translate(-50%, -100%) scale(0.2) rotate(-12deg); animation-timing-function: cubic-bezier(0.2, 1.7, 0.4, 1); }
+  18% { opacity: 1; transform: translate(-50%, -100%) scale(1) rotate(-4deg); }
+  75% { opacity: 1; transform: translate(-50%, -110%) scale(1) rotate(-4deg); animation-timing-function: ease-in; }
+  100% { opacity: 0; transform: translate(-50%, -125%) scale(0.92) rotate(-4deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .penalty-tag.show { animation-duration: 1.8s; animation-name: penalty-still; }
+  @keyframes penalty-still { 0%, 80% { opacity: 1; transform: translate(-50%, -100%); } 100% { opacity: 0; transform: translate(-50%, -100%); } }
+}
+
 /* --- Painted pieces ------------------------------------------------------ */
 
 /* Cards, buttons and the title sit on watercolour painted to their size

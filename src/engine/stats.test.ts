@@ -30,8 +30,12 @@ describe('stats from attributes', () => {
     expect(1 / statsFor(build('stamina', 10)).drain).toBeCloseTo(3.6, 2);
     expect(statsFor(build('power', 10)).shotSpeed).toBeCloseTo(39.6, 2);
     expect(statsFor(build('tackling', 1)).pokeRange).toBeCloseTo(0.408, 3);
-    expect(statsFor(build('strength', 10)).loseDistance).toBeCloseTo(0.6, 3);
-    expect(statsFor(build('dribbling', 1)).turnSlowdown).toBeCloseTo(0.583, 3);
+    expect(statsFor(build('strength', 10)).loseDistance).toBeCloseTo(0.65, 3);
+    expect(statsFor(build('strength', 1)).recoverTime).toBeCloseTo(1.167, 3);
+    expect(statsFor(build('strength', 10)).recoverTime).toBeCloseTo(0.467, 3);
+    expect(statsFor(build('dribbling', 1)).turnSlowdown).toBeCloseTo(0.5, 3);
+    expect(statsFor(build('dribbling', 1)).dribbleSpeed).toBeCloseTo(0.864, 3);
+    expect(statsFor(build('dribbling', 10)).dribbleSpeed).toBeCloseTo(0.99, 3);
     expect(statsFor(build('dribbling', 10)).agility).toBeCloseTo(1.4, 3);
     expect(statsFor(build('dribbling', 1)).agility).toBeCloseTo(0.68, 3);
     expect(statsFor(build('pace', 10)).sprintTouch).toBeCloseTo(0.35, 3);
@@ -46,6 +50,9 @@ describe('stats from attributes', () => {
     const run = (dribbling: number) => {
       const match = createMatch([createPlayer('me', 'gold', build('dribbling', dribbling))]);
       match.kickoffHeld = false;
+      // Without the ball: that's what Dribbling's speed with it is for.
+      match.owner = null;
+      Object.assign(match.ball, { x: 10, y: -5 });
       const me = match.players[0]!;
       Object.assign(me, { x: -14, y: 5, vx: 0, vy: 0, fx: 1, fy: 0 });
       let start = 0;
@@ -104,13 +111,13 @@ describe('stats from attributes', () => {
 
   it('dribblers ride some tackles, more the stronger they are', () => {
     // Pokes from up close, side on, over many seeded matches: the share won.
-    const winRate = (tackling: number, strength: number) => {
+    const winRate = (tackling: number, strength: number, dribbling = 5) => {
       let won = 0;
       const tries = 60;
       for (let seed = 1; seed <= tries; seed++) {
         const match = createMatch([
           createPlayer('me', 'gold', { ...evenAttributes(), tackling }),
-          createPlayer('them', 'red', { ...evenAttributes(), strength }),
+          createPlayer('them', 'red', { ...evenAttributes(), strength, dribbling }),
         ], { seed });
         const [me, them] = match.players;
         const by = CONFIG.dribble.distance;
@@ -128,9 +135,12 @@ describe('stats from attributes', () => {
     expect(winRate(5, 5)).toBeGreaterThan(0.7);
     expect(winRate(5, 5)).toBeLessThan(0.97);
     expect(winRate(5, 1)).toBe(1);
-    // 0.85 × (1 / 1.2)³: about 49%.
+    // 0.85 × (1 / 1.3)³: about 39%.
     expect(winRate(5, 10)).toBeGreaterThan(0.3);
     expect(winRate(5, 10)).toBeLessThan(0.68);
     expect(winRate(10, 5)).toBe(1);
+    // Dribbling counts the same as Strength.
+    expect(winRate(5, 5, 1)).toBe(1);
+    expect(winRate(5, 5, 10)).toBeLessThan(0.68);
   });
 });

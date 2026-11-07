@@ -202,6 +202,26 @@ describe('sim', () => {
     expect(match.ball.x).toBeGreaterThan(them.x);
   });
 
+  it('penalizes a slide from behind: the slider is slow to get up', () => {
+    const { match, me, them } = setup();
+    moveTo(them, 0, 0, 1, 0);
+    giveBall(match, them);
+    moveTo(me, -(me.r + them.r + 0.3), 0, 1, 0);
+    const events = run(match, ticks(0.4), { me: { kick: true } });
+    // Strength 3 here: 0.7 s / 0.8 to get up, and as long again.
+    expect(events).toContainEqual({ type: 'penalized', player: 'me', extra: 0.9 });
+    // Up after rearRecover times the usual time, not before.
+    const recover = me.stats.recoverTime * CONFIG.tackle.rearRecover;
+    let t = 0;
+    while (me.action !== 'none' && t < 600) {
+      run(match, 1);
+      t++;
+    }
+    expect(t * CONFIG.tick).toBeGreaterThan(recover - 0.4);
+    // The next slide, clean, isn't.
+    expect(me.penalized).toBe(false);
+  });
+
   it('pokes when the ball is close, whatever the press', () => {
     const { match, me } = setup();
     moveTo(me, -1.2, 0);

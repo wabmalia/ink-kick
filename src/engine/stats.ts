@@ -29,14 +29,19 @@ export interface Stats {
   slideReach: number;
   slideControlCos: number;
   loseDistance: number;
-  // How long this player is off balance after being slid into.
+  // How long this player is off balance after being slid into, and how long
+  // they take to get up after a slide of their own.
   stumbleTime: number;
+  recoverTime: number;
   // How hard this player's slide shoves others aside.
   shove: number;
   // In a challenge for the ball, the tackler's reach is scaled by their
   // tackle factor over the dribbler's hold factor.
   tackleFactor: number;
   holdFactor: number;
+  // Close control (from Dribbling): in a challenge, the dribbler's hold
+  // factor is multiplied by this too.
+  ballControl: number;
 }
 
 export const STEP = 0.04;
@@ -48,17 +53,30 @@ export const CURL_STEP = 0.08;
 // Pace over 5 burns stamina faster, 6% a point: a quick player needs
 // Stamina to keep it up.
 export const PACE_DRAIN_STEP = 0.06;
-// Strength cuts the time off balance after being slid into 10% a point:
-// a strong player is back on their feet noticeably sooner.
+// Strength cuts the time off balance after being slid into, and the time
+// getting up after a slide, 10% a point: a strong player is back on their
+// feet noticeably sooner, and a weak one pays for a slide that misses.
 export const STUMBLE_STEP = 0.1;
+// Strength's other values move 6% a point, wider than most, so a strong
+// player is plainly hard to knock off the ball and a weak one easy.
+export const STRENGTH_STEP = 0.06;
 // Agility moves 8% a point, so a change of direction feels different.
 export const AGILITY_STEP = 0.08;
+// Speed with the ball moves 1.4 points of a percent a point of Dribbling,
+// from 86% at 1 to 99% at 10: a Pace player who can't dribble is caught.
+export const DRIBBLE_SPEED_STEP = 0.014;
+// The controlled-slide angle narrows 8% a point below Tackling 5 (4% above):
+// a poor tackler only keeps the ball sliding dead-on to it, and otherwise
+// knocks it on.
+export const SLIDE_CONTROL_STEP_BELOW = 0.08;
 // Shot speed loses only half as much per point below 5: a weak shooter
 // still hits the ball hard enough to score.
 export const SHOT_STEP_BELOW = 0.02;
 
 export function statsFor(attrs: Attributes = evenAttributes()): Stats {
   const m = (k: keyof Attributes) => multiplier(attrs[k]);
+  const strength = multiplier(attrs.strength, STRENGTH_STEP);
+  const upSooner = multiplier(attrs.strength, STUMBLE_STEP);
   const { player, stamina, dribble, kick, tackle } = CONFIG;
   // A fraction that can't pass 1: it's the loss that shrinks.
   const keep = (f: number, by: number) => 1 - (1 - f) / by;
@@ -72,17 +90,19 @@ export function statsFor(attrs: Attributes = evenAttributes()): Stats {
     agility: multiplier(attrs.dribbling, AGILITY_STEP),
     turnRateWithBall: player.turnRateWithBall * m('dribbling'),
     turnSlowdown: keep(dribble.turnSlowdown, m('dribbling')),
-    dribbleSpeed: keep(dribble.speedFactor, m('dribbling')),
+    dribbleSpeed: Math.min(1, dribble.speedFactor + DRIBBLE_SPEED_STEP * (attrs.dribbling - 5)),
     shotSpeed: kick.shotSpeed * (attrs.power < 5 ? multiplier(attrs.power, SHOT_STEP_BELOW) : m('power')),
     chargeTime: kick.chargeTime / m('power'),
     curl: kick.curl * multiplier(attrs.power, CURL_STEP),
     pokeRange: tackle.pokeRange * multiplier(attrs.tackling, POKE_STEP),
     slideReach: tackle.slideReach * m('tackling'),
-    slideControlCos: Math.cos(Math.acos(tackle.slideControlCos) * m('tackling')),
-    loseDistance: dribble.loseDistance * m('strength'),
-    stumbleTime: tackle.stumbleTime / multiplier(attrs.strength, STUMBLE_STEP),
-    shove: tackle.slideShove * m('strength'),
+    slideControlCos: Math.cos(Math.acos(tackle.slideControlCos) * (attrs.tackling < 5 ? multiplier(attrs.tackling, SLIDE_CONTROL_STEP_BELOW) : m('tackling'))),
+    loseDistance: dribble.loseDistance * strength,
+    stumbleTime: tackle.stumbleTime / upSooner,
+    recoverTime: tackle.recoverTime / upSooner,
+    shove: tackle.slideShove * strength,
     tackleFactor: m('tackling'),
-    holdFactor: m('strength'),
+    holdFactor: strength,
+    ballControl: m('dribbling'),
   };
 }
