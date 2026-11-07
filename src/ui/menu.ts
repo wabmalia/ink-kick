@@ -123,6 +123,8 @@ function memberItem(m: MemberView) {
 export function render() {
   const playing = inMatch();
   $('ingame').hidden = !playing;
+  // What's new is for the menus, not mid-match.
+  $('notes-open').hidden = playing;
 
   if (playing) {
     show(null);

@@ -12,6 +12,7 @@ import { session } from './net/session';
 import type { RoomView } from './net/protocol';
 import { iceServers } from './net/relay';
 import { onHelp } from './ui/help';
+import './ui/notes';
 import { dialogOpen } from './ui/dom';
 import { inMatch, offerInvite, render } from './ui/menu';
 import { paintMenu } from './ui/wash';

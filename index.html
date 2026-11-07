@@ -49,9 +49,26 @@
     <button class="ink-btn" id="end-match" type="button" hidden>Back to lobby</button>
     <span class="room-tag" id="room-tag"></span>
   </nav>
-  <button class="ink-btn help-btn" id="help-open" type="button" aria-haspopup="dialog">
-    <span class="key small" aria-hidden="true">H</span> How to play
-  </button>
+  <div class="top-buttons">
+    <button class="ink-btn" id="notes-open" type="button" aria-haspopup="dialog">Release notes</button>
+    <button class="ink-btn help-btn" id="help-open" type="button" aria-haspopup="dialog">
+      <span class="key small" aria-hidden="true">H</span> How to play
+    </button>
+  </div>
+
+  <dialog class="help card notes" id="notes" aria-labelledby="notes-title" tabindex="-1">
+    <h2 id="notes-title">Release notes</h2>
+    <div class="notes-nav">
+      <button class="ink-btn" id="notes-older" type="button" aria-label="Older">&larr; Older</button>
+      <h3 id="notes-day" aria-live="polite"></h3>
+      <button class="ink-btn" id="notes-newer" type="button" aria-label="Newer">Newer &rarr;</button>
+    </div>
+    <div class="notes-scroll" id="notes-scroll">
+      <ul class="notes-list" id="notes-list"></ul>
+      <span class="notes-more" aria-hidden="true">&darr;</span>
+    </div>
+    <button class="brush gold" id="notes-close" type="button">Got it</button>
+  </dialog>
 
   <dialog class="help card" id="help" aria-labelledby="help-title" tabindex="-1">
     <h2 id="help-title">How to play</h2>
@@ -68,7 +85,7 @@
       <dd><b>Run.</b> You turn slower with the ball.</dd>
 
       <dt><span class="key wide">Shift</span></dt>
-      <dd><b>Sprint</b> until your stamina runs out.</dd>
+      <dd><b>Sprint</b> until your stamina runs out. Drops your defensive stance.</dd>
 
       <dt><span class="key space">Space</span><span class="hold">hold</span></dt>
       <dd><b>Kick.</b> Hold to power up (you can't turn meanwhile), let go to strike. Hold a direction just after to curl it.</dd>
