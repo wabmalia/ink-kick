@@ -26,9 +26,9 @@ own values when a match starts. The global `CONFIG` values are what a 5 gives.
 
 | Attribute | In short | `CONFIG` values it scales |
 |---|---|---|
-| Pace | Top speed and take-off, at the cost of a heavier touch with the ball and a faster stamina drain | `player.runSpeed`, `player.sprintSpeed`, `dribble.sprintTouch`, `stamina.drain` (6% a point above 5) |
+| Pace | Top speed and take-off, at the cost of a heavier touch with the ball and a faster stamina drain (a slow player tires less) | `player.runSpeed`, `player.sprintSpeed`, `dribble.sprintTouch`, `stamina.drain` (5% a point, less below 5) |
 | Stamina | Sprint longer, recover sooner | `stamina.drain`, `stamina.regen`, `stamina.tiredTime` |
-| Dribbling | Close control: faster with the ball, ride tackles (like Strength), tighter turns with it (cornering with it is Dribbling's: what Pace adds over a 5's speed is mostly lost in a sharp cut, `dribble.cornerPower`, and only builds up again over a second of running straight, `dribble.paceRunIn`), and quicker changes of direction and stops with or without it | `dribble.speedFactor` (1.4 points of a percent a point), the hold chance, `player.turnRateWithBall`, `dribble.turnSlowdown`, `player.response` on a turn or stop (8% a point) |
+| Dribbling | Close control: faster with the ball, ride tackles (like Strength), tighter turns with it (cornering with it is Dribbling's: what Pace adds over a 5's speed is mostly lost in a sharp cut, `dribble.cornerPower`, and only builds up again over a second of running straight, `dribble.paceRunIn`), and quicker changes of direction and stops with or without it | `dribble.speedFactor` (`dribble.speedStep`, 1 point of a percent a point), the hold chance, `player.turnRateWithBall`, `dribble.turnSlowdown`, `player.response` on a turn or stop (8% a point) |
 | Power | Harder shots, charged sooner, more curl | `kick.shotSpeed`, `kick.chargeTime`, `kick.curl` (8% a point) |
 | Tackling | Pokes and slides that reach and keep the ball, for less stamina | `tackle.pokeRange`, `tackle.slideReach`, `tackle.slideControlCos`, `tackle.pokeCost`, `tackle.slideCost` |
 | Strength | Ride tackles, hold off bumps, get up sooner after being slid into or sliding (10% a point), shove harder and get shoved less, lose less stamina when robbed (6% a point) | the hold chance, `dribble.loseDistance`, `tackle.stumbleTime`, `tackle.recoverTime`, `tackle.slideShove`, `tackle.robbedCost` |
@@ -43,13 +43,13 @@ screen and to tune one at a time.
 | Pace | Run speed | 4.28 m/s | 5.10 m/s | 6.12 m/s |
 | Pace | Sprint speed | 6.30 m/s | 7.50 m/s | 9.00 m/s |
 | Pace | Ball further ahead when sprinting with it | 0 m | 0 m | 0.35 m |
-| Pace | Sprint before tiring, from full (Stamina 5) | 3.00 s | 3.00 s | 2.31 s |
+| Pace | Sprint before tiring, from full (Stamina 5) | 3.75 s | 3.00 s | 2.40 s |
 | Stamina | Sprint before tiring, from full | 2.52 s | 3.00 s | 3.60 s |
 | Stamina | Refill, empty to full | 5.95 s | 5.00 s | 4.17 s |
 | Stamina | Tired spell | 2.98 s | 2.50 s | 2.08 s |
 | Dribbling | Turn rate with the ball | 2.69 rad/s | 3.20 rad/s | 3.84 rad/s |
 | Dribbling | Speed kept on a sharp turn | 50% | 58% | 65% |
-| Dribbling | Speed with the ball, vs without | 86% | 92% | 99% |
+| Dribbling | Speed with the ball, vs without | 88% | 92% | 97% |
 | Dribbling | Tackles ridden from a Tackling 5 | 0% | 15% | 51% |
 | Power | Full-power shot (2% a point below 5, 4% above) | 30.4 m/s | 33.0 m/s | 39.6 m/s |
 | Power | Time to full power | 0.83 s | 0.70 s | 0.58 s |

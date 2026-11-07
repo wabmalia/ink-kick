@@ -50,9 +50,9 @@ export const multiplier = (value: number, step = STEP) => 1 + step * (value - 5)
 export const POKE_STEP = 0.08;
 // And curl, so Power's effect on it is plain to see.
 export const CURL_STEP = 0.08;
-// Pace over 5 burns stamina faster, 6% a point: a quick player needs
-// Stamina to keep it up.
-export const PACE_DRAIN_STEP = 0.06;
+// Pace burns stamina 5% a point faster above 5, and slower below it: a
+// quick player needs Stamina to keep it up, a slow one rarely tires.
+export const PACE_DRAIN_STEP = 0.05;
 // Strength cuts the time off balance after being slid into, and the time
 // getting up after a slide, 10% a point: a strong player is back on their
 // feet noticeably sooner, and a weak one pays for a slide that misses.
@@ -62,9 +62,6 @@ export const STUMBLE_STEP = 0.1;
 export const STRENGTH_STEP = 0.06;
 // Agility moves 8% a point, so a change of direction feels different.
 export const AGILITY_STEP = 0.08;
-// Speed with the ball moves 1.4 points of a percent a point of Dribbling,
-// from 86% at 1 to 99% at 10: a Pace player who can't dribble is caught.
-export const DRIBBLE_SPEED_STEP = 0.014;
 // The controlled-slide angle narrows 8% a point below Tackling 5 (4% above):
 // a poor tackler only keeps the ball sliding dead-on to it, and otherwise
 // knocks it on.
@@ -84,13 +81,13 @@ export function statsFor(attrs: Attributes = evenAttributes()): Stats {
     runSpeed: player.runSpeed * m('pace'),
     sprintSpeed: player.sprintSpeed * m('pace'),
     sprintTouch: dribble.sprintTouch * Math.max(0, attrs.pace - 5),
-    drain: (stamina.drain * multiplier(Math.max(5, attrs.pace), PACE_DRAIN_STEP)) / m('stamina'),
+    drain: (stamina.drain * multiplier(attrs.pace, PACE_DRAIN_STEP)) / m('stamina'),
     regen: stamina.regen * m('stamina'),
     tiredTime: stamina.tiredTime / m('stamina'),
     agility: multiplier(attrs.dribbling, AGILITY_STEP),
     turnRateWithBall: player.turnRateWithBall * m('dribbling'),
     turnSlowdown: keep(dribble.turnSlowdown, m('dribbling')),
-    dribbleSpeed: Math.min(1, dribble.speedFactor + DRIBBLE_SPEED_STEP * (attrs.dribbling - 5)),
+    dribbleSpeed: Math.min(1, dribble.speedFactor + dribble.speedStep * (attrs.dribbling - 5)),
     shotSpeed: kick.shotSpeed * (attrs.power < 5 ? multiplier(attrs.power, SHOT_STEP_BELOW) : m('power')),
     chargeTime: kick.chargeTime / m('power'),
     curl: kick.curl * multiplier(attrs.power, CURL_STEP),

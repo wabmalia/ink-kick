@@ -95,6 +95,8 @@ export const CONFIG = {
     // Knocked further than this from that spot, the ball is loose.
     loseDistance: 0.5,
     speedFactor: 0.92,
+    // Each point of Dribbling moves that this much (88% at 1, 97% at 10).
+    speedStep: 0.01,
     // Speed kept while turning 90 degrees with the ball; less sharp turns
     // lose less, and sharper ones more, down to reverseKeep for an about
     // turn: you stop, turn with the ball and go.

@@ -34,13 +34,13 @@ describe('stats from attributes', () => {
     expect(statsFor(build('strength', 1)).recoverTime).toBeCloseTo(1.167, 3);
     expect(statsFor(build('strength', 10)).recoverTime).toBeCloseTo(0.467, 3);
     expect(statsFor(build('dribbling', 1)).turnSlowdown).toBeCloseTo(0.5, 3);
-    expect(statsFor(build('dribbling', 1)).dribbleSpeed).toBeCloseTo(0.864, 3);
-    expect(statsFor(build('dribbling', 10)).dribbleSpeed).toBeCloseTo(0.99, 3);
+    expect(statsFor(build('dribbling', 1)).dribbleSpeed).toBeCloseTo(0.88, 3);
+    expect(statsFor(build('dribbling', 10)).dribbleSpeed).toBeCloseTo(0.97, 3);
     expect(statsFor(build('dribbling', 10)).agility).toBeCloseTo(1.4, 3);
     expect(statsFor(build('dribbling', 1)).agility).toBeCloseTo(0.68, 3);
     expect(statsFor(build('pace', 10)).sprintTouch).toBeCloseTo(0.35, 3);
-    expect(1 / statsFor(build('pace', 10)).drain).toBeCloseTo(2.31, 2);
-    expect(1 / statsFor(build('pace', 1)).drain).toBeCloseTo(3, 2);
+    expect(1 / statsFor(build('pace', 10)).drain).toBeCloseTo(2.4, 2);
+    expect(1 / statsFor(build('pace', 1)).drain).toBeCloseTo(3.75, 2);
     expect(statsFor(build('pace', 5)).sprintTouch).toBe(0);
   });
 

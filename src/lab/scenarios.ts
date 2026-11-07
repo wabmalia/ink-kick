@@ -430,6 +430,19 @@ function coneCourse(y: number, spacing: number): Course {
   };
 }
 
+// A straight run between two pins, for speed with and without the ball.
+const STRAIGHT_START = -10;
+const STRAIGHT_END = 10;
+function straightCourse(y: number): Course {
+  return {
+    start: { x: STRAIGHT_START, y },
+    route: [{ x: STRAIGHT_END, y }],
+    cones: [],
+    inTurns: () => false,
+    markers: [{ x: STRAIGHT_START - 0.8, y }, { x: STRAIGHT_END + 0.8, y }],
+  };
+}
+
 function zCourse(band: number, degrees: number): Course {
   const top = band - Z_HALF;
   const bottom = band + Z_HALF;
@@ -477,7 +490,7 @@ export const slalom: Scenario = {
   choices: [
     {
       key: 'course', label: 'Course',
-      options: [{ value: 'cones', label: 'Cone weave' }, { value: 'z', label: 'Z, 110° corners' }, { value: 'z-sharp', label: 'Z, 145° corners' }],
+      options: [{ value: 'straight', label: 'Straight' }, { value: 'cones', label: 'Cone weave' }, { value: 'z', label: 'Z, 110° corners' }, { value: 'z-sharp', label: 'Z, 145° corners' }],
     },
     {
       key: 'spacing', label: 'Cone gaps', enabled: o => o.course === 'cones',
@@ -492,7 +505,9 @@ export const slalom: Scenario = {
     const sprint = opts.pace === 'sprint';
     const withBall = opts.ball === 'with';
     const z = opts.course?.startsWith('z');
-    const first = z ? zCourse(MIRROR_Y - Z_OFF, opts.course === 'z-sharp' ? 145 : 110) : coneCourse(MIRROR_Y - LANE_OFF, spacing);
+    const straight = opts.course === 'straight';
+    const first = z ? zCourse(MIRROR_Y - Z_OFF, opts.course === 'z-sharp' ? 145 : 110)
+      : straight ? straightCourse(MIRROR_Y - LANE_OFF) : coneCourse(MIRROR_Y - LANE_OFF, spacing);
     const courses = [first, mirrored(first)];
     // Numbered in the order they're passed; the markers aren't.
     const cones = courses.flatMap(c => [...c.cones.map((p, k) => ({ ...p, label: String(k + 1) })), ...(c.markers ?? [])]);
@@ -586,8 +601,9 @@ export const slalom: Scenario = {
         const lead = !both ? '-' : lanes[0] === lanes[1] ? 'level' : `${who(lanes[0]! < lanes[1]!)} by ${s(Math.abs(lanes[0]! - lanes[1]!))}`;
         const turns = stat.map(st => st.turnsTime);
         const turnsLead = !both ? '-' : Math.abs(turns[0]! - turns[1]!) < 0.005 ? 'level' : `${who(turns[0]! < turns[1]!)} by ${s(Math.abs(turns[0]! - turns[1]!))}`;
-        const what = z ? `Z, ${opts.course === 'z-sharp' ? 145 : 110}°` : `${courses[0]!.cones.length} cones, ${spacing} m`;
-        const sections: Section[] = [{ title: 'Slalom', rows: [row('Course', what), row('Quicker', lead), row(z ? 'Round the corners' : 'Through the cones', turnsLead)] }];
+        const what = z ? `Z, ${opts.course === 'z-sharp' ? 145 : 110}°` : straight ? `straight, ${STRAIGHT_END - STRAIGHT_START} m` : `${courses[0]!.cones.length} cones, ${spacing} m`;
+        const turnsLabel = z ? 'Round the corners' : 'Through the cones';
+        const sections: Section[] = [{ title: 'Slalom', rows: [row('Course', what), row('Quicker', lead), ...(straight ? [] : [row(turnsLabel, turnsLead)])] }];
         SLALOMERS.forEach((role, i) => {
           const st = stat[i]!;
           const p = matches[i]!.players[0]!;
@@ -596,9 +612,11 @@ export const slalom: Scenario = {
             title: role.label, team: role.team, rows: [
               row('Speed', `${Math.hypot(p.vx, p.vy).toFixed(2)} m/s`, ...ballAttrs),
               row('Lane', st.laneTime === null ? '-' : `${s(st.laneTime)}, avg ${(st.lanePath! / Math.max(st.laneTime, 0.01)).toFixed(2)} m/s`, ...ballAttrs),
-              row(z ? 'Round the corners' : 'Through the cones', st.laneTime === null ? '-' : s(st.turnsTime), 'dribbling'),
-              row('Slowest cut', st.minSpeed === Infinity ? '-' : `${st.minSpeed.toFixed(2)} m/s`, 'dribbling'),
-              z ? row('Overran a corner', `by ${m(st.widest)}`, 'dribbling', 'pace') : row('Widest swing', `${m(st.widest)} off the line`, 'dribbling'),
+              ...(straight ? [] : [
+                row(turnsLabel, st.laneTime === null ? '-' : s(st.turnsTime), 'dribbling'),
+                row('Slowest cut', st.minSpeed === Infinity ? '-' : `${st.minSpeed.toFixed(2)} m/s`, 'dribbling'),
+                z ? row('Overran a corner', `by ${m(st.widest)}`, 'dribbling', 'pace') : row('Widest swing', `${m(st.widest)} off the line`, 'dribbling'),
+              ]),
               row('Turn back', st.turnTime === null ? '-' : s(st.turnTime), 'dribbling'),
               ...(withBall ? [row('Lost the ball', `${st.losses}×`, 'dribbling', 'pace')] : []),
             ],
