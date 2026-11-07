@@ -194,7 +194,7 @@ export const CONFIG = {
     rearSlideCooldown: 0.9,
     // And takes this many times as long to get up after it: no fouls, but
     // a slide from behind leaves its slider out of the game a while.
-    rearRecover: 2,
+    rearRecover: 1.5,
     // Stamina, as fractions of a full bar. A poke or slide costs its
     // tackler this, less the better a tackler they are (more than they have
     // empties the bar and tires them);

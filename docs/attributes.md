@@ -81,7 +81,7 @@ screen and to tune one at a time.
   two stack: a Pace build that gave up both loses every tackle that reaches it. It works both ways: low Strength loses the ball
   more, not just high Strength keeping it. (Shrinking the tackler's reach
   instead was tried first and did nothing: pokes connect well inside their
-  reach.) A ridden slide is hopped: the dribbler keeps the ball and passes over the slider at `tackle.hurdleKeep` (70%) of their speed. Rear slides aren't contested: they always win the ball, but the slider takes `tackle.rearRecover` (2×) as long to get up, and "Penalized" splashes over their head. There are no fouls.
+  reach.) A ridden slide is hopped: the dribbler keeps the ball and passes over the slider at `tackle.hurdleKeep` (70%) of their speed. Rear slides aren't contested: they always win the ball, but the slider takes `tackle.rearRecover` (1.5×) as long to get up, and "Penalized" splashes over their head. There are no fouls.
 - Attributes are chosen before a match and sent once with the room, so they
   add nothing to the per-tick network traffic.
 - Not included yet: **passing accuracy** (kicks go exactly where you face, so

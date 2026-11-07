@@ -208,8 +208,8 @@ describe('sim', () => {
     giveBall(match, them);
     moveTo(me, -(me.r + them.r + 0.3), 0, 1, 0);
     const events = run(match, ticks(0.4), { me: { kick: true } });
-    // Strength 3 here: 0.7 s / 0.8 to get up, and as long again.
-    expect(events).toContainEqual({ type: 'penalized', player: 'me', extra: 0.9 });
+    // Strength 3 here: 0.7 s / 0.8 to get up, and half as long again.
+    expect(events).toContainEqual({ type: 'penalized', player: 'me', extra: 0.4 });
     // Up after rearRecover times the usual time, not before.
     const recover = me.stats.recoverTime * CONFIG.tackle.rearRecover;
     let t = 0;
