@@ -145,11 +145,14 @@ const nameOf: NameOf = id => {
 const EMPTY: ViewState = { players: [], ballX: 0, ballY: 0, score: { gold: 0, red: 0 } };
 let last = performance.now();
 let inputClock = 0;
-// Frames drawn less often when nobody needs 60 a second: the menu, with the
-// bots playing on behind it, at 30; and anything at 5 while the window isn't
-// focused (in another app, say). The game itself still runs every frame.
+// Frames drawn at most 60 a second, even on a 120 Hz screen: the painted
+// look is heavy, and twice the frames is twice the heat for little gain.
+// Fewer when nobody needs 60: the menu, with the bots playing on behind it,
+// at 30; and anything at 5 while the window isn't focused (in another app,
+// say). The game itself still runs every frame.
 // A hidden tab draws nothing at all: the browser stops animation frames,
 // and a host's clock then steps the match from a worker timer instead.
+const MATCH_FRAME = 1 / 60;
 const MENU_FRAME = 1 / 30;
 const UNFOCUSED_FRAME = 1 / 5;
 let undrawn = 0;
@@ -205,7 +208,7 @@ function frame(now: number) {
   if (session.room && mode.kind !== 'solo' && mode.kind !== 'attract') names = namesIn(session.room);
 
   undrawn += dt;
-  const every = !document.hasFocus() ? UNFOCUSED_FRAME : mode.kind === 'attract' ? MENU_FRAME : 0;
+  const every = !document.hasFocus() ? UNFOCUSED_FRAME : mode.kind === 'attract' ? MENU_FRAME : MATCH_FRAME;
   // A little slack, so 30 a second on a 60 Hz screen is every other frame.
   if (undrawn >= every - 0.004) {
     view.render(state, Math.min(0.25, undrawn), now, me, names);

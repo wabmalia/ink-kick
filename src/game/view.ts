@@ -53,7 +53,9 @@ const REF_EXIT = { x: 0, y: -(CONFIG.pitch.height / 2 + 2) };
 
 
 export class GameView {
-  private renderer = new THREE.WebGLRenderer({ antialias: true });
+  // No antialiasing on the canvas: all it ever draws is the watercolour
+  // pass's one full-screen quad. The scene itself is multisampled there.
+  private renderer = new THREE.WebGLRenderer({ antialias: false });
   private watercolor: Watercolor;
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(38, 1, 1, 300);

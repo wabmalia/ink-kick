@@ -7,6 +7,11 @@ import * as THREE from 'three';
 //   - colour as layered washes: softly posterised, bleeding a little, with
 //     pigment pooling darker where washes meet;
 //   - paper grain, granulation and a slight wobble so no line is ruled.
+//
+// The wobble, grain and paper depend only on where a pixel is on screen, so
+// they're worked out once per window size into a texture (see Watercolor.
+// noise) rather than every frame: that was most of this pass's arithmetic.
+// Stored at 8 bits, they're still well under one step of the final colour.
 
 // How many times a second the ink lines are redrawn; 0 holds them still.
 const BOIL_FPS = 2;
@@ -19,18 +24,7 @@ const vertexShader = /* glsl */ `
   }
 `;
 
-const fragmentShader = /* glsl */ `
-  uniform sampler2D tColor;
-  uniform sampler2D tDepth;
-  uniform vec2 resolution;
-  uniform float pixelRatio;
-  uniform float boil;
-  uniform float near;
-  uniform float far;
-  varying vec2 vUv;
-
-  const vec3 INK = vec3(0.06, 0.07, 0.14);
-
+const noiseGlsl = /* glsl */ `
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float noise(vec2 p) {
     vec2 i = floor(p);
@@ -48,6 +42,42 @@ const fragmentShader = /* glsl */ `
     }
     return v;
   }
+`;
+
+// Pixel coordinates in CSS pixels, so the texture scale doesn't change with
+// the screen's density.
+const cssPixel = /* glsl */ `
+  uniform vec2 resolution;
+  uniform float pixelRatio;
+  varying vec2 vUv;
+  vec2 cssPixel() { return vUv * resolution / pixelRatio; }
+`;
+
+// The static layers, once per size: r, g the wash's wobble; b the grain; a
+// the paper's tooth. Each fbm() is in [0, 1).
+const noiseShader = /* glsl */ `
+  ${cssPixel}
+  ${noiseGlsl}
+  void main() {
+    vec2 p = cssPixel();
+    gl_FragColor = vec4(
+      fbm(p * 0.015), fbm(p * 0.015 + 9.1),
+      fbm(p * 0.16),
+      fbm(p * 0.05) * 0.7 + fbm(p * 0.5) * 0.3);
+  }
+`;
+
+const fragmentShader = /* glsl */ `
+  uniform sampler2D tColor;
+  uniform sampler2D tDepth;
+  uniform sampler2D tNoise;
+  uniform float boil;
+  uniform float near;
+  uniform float far;
+  ${cssPixel}
+  ${noiseGlsl}
+
+  const vec3 INK = vec3(0.06, 0.07, 0.14);
 
   float viewDepth(vec2 uv) {
     float z = texture2D(tDepth, uv).x * 2.0 - 1.0;
@@ -64,13 +94,12 @@ const fragmentShader = /* glsl */ `
 
   void main() {
     vec2 px = 1.0 / resolution;
-    // Pixel coordinates in CSS pixels, so the texture scale doesn't change
-    // with the screen's density.
-    vec2 p = vUv * resolution / pixelRatio;
+    vec2 p = cssPixel();
     vec2 step1 = px * pixelRatio;
+    vec4 still = texture2D(tNoise, vUv);
 
     // The wash sits slightly off the lines, as if painted by hand.
-    vec2 wobble = (vec2(fbm(p * 0.015), fbm(p * 0.015 + 9.1)) - 0.5) * step1 * 2.5;
+    vec2 wobble = (still.rg - 0.5) * step1 * 2.5;
     vec2 uv = vUv + wobble;
 
     vec3 col = paint(uv);
@@ -98,8 +127,8 @@ const fragmentShader = /* glsl */ `
     col *= 1.0 - wet * 0.08;
 
     // Granulation and paper tooth, strongest in the mid tones.
-    float grain = fbm(p * 0.16);
-    float paper = fbm(p * 0.05) * 0.7 + fbm(p * 0.5) * 0.3;
+    float grain = still.b;
+    float paper = still.a;
     float mid = 1.0 - abs(lum * 2.0 - 1.0);
     col *= 1.0 + (0.07 + 0.07 * mid) * (grain - 0.5) * 2.0;
     col *= 0.93 + 0.12 * paper;
@@ -136,7 +165,10 @@ const fragmentShader = /* glsl */ `
 
 export class Watercolor {
   private color: THREE.WebGLRenderTarget;
+  private noise: THREE.WebGLRenderTarget;
+  private noiseDirty = true;
   private quad: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
+  private noiseQuad: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   private quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
   constructor(private renderer: THREE.WebGLRenderer) {
@@ -145,24 +177,38 @@ export class Watercolor {
       samples: 4,
       depthTexture: new THREE.DepthTexture(1, 1),
     });
+    // One texel per screen pixel, read back exactly: no filtering.
+    this.noise = new THREE.WebGLRenderTarget(1, 1, {
+      minFilter: THREE.NearestFilter,
+      magFilter: THREE.NearestFilter,
+      generateMipmaps: false,
+      depthBuffer: false,
+    });
+    const size = {
+      resolution: { value: new THREE.Vector2(1, 1) },
+      pixelRatio: { value: 1 },
+    };
+    const material = (fragment: string, uniforms: Record<string, THREE.IUniform>) => new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader: fragment,
+      depthTest: false,
+      depthWrite: false,
+      uniforms: { ...size, ...uniforms },
+    });
     this.quad = new THREE.Mesh(
       new THREE.PlaneGeometry(2, 2),
-      new THREE.ShaderMaterial({
-        vertexShader,
-        fragmentShader,
-        depthTest: false,
-        depthWrite: false,
-        uniforms: {
-          tColor: { value: this.color.texture },
-          tDepth: { value: this.color.depthTexture },
-          resolution: { value: new THREE.Vector2(1, 1) },
-          pixelRatio: { value: 1 },
-          boil: { value: 0 },
-          near: { value: 1 },
-          far: { value: 300 },
-        },
+      material(fragmentShader, {
+        tColor: { value: this.color.texture },
+        tDepth: { value: this.color.depthTexture },
+        tNoise: { value: this.noise.texture },
+        boil: { value: 0 },
+        near: { value: 1 },
+        far: { value: 300 },
       }),
     );
+    this.noiseQuad = new THREE.Mesh(this.quad.geometry, material(noiseShader, {}));
+    // A lost and restored GPU loses the texture's contents too.
+    renderer.domElement.addEventListener('webglcontextrestored', () => { this.noiseDirty = true; });
   }
 
   setSize(width: number, height: number) {
@@ -170,9 +216,12 @@ export class Watercolor {
     const w = Math.floor(width * ratio);
     const h = Math.floor(height * ratio);
     this.color.setSize(w, h);
+    this.noise.setSize(w, h);
+    // Shared by both passes, so the noise lines up pixel for pixel.
     const u = this.quad.material.uniforms;
     u.resolution!.value.set(w, h);
     u.pixelRatio!.value = ratio;
+    this.noiseDirty = true;
   }
 
   render(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number) {
@@ -181,6 +230,12 @@ export class Watercolor {
     u.near!.value = camera.near;
     u.far!.value = camera.far;
     u.boil!.value = BOIL_FPS ? Math.floor(time * BOIL_FPS) % 64 : 0;
+
+    if (this.noiseDirty) {
+      renderer.setRenderTarget(this.noise);
+      renderer.render(this.noiseQuad, this.quadCamera);
+      this.noiseDirty = false;
+    }
 
     renderer.setRenderTarget(this.color);
     renderer.render(scene, camera);

@@ -27,6 +27,9 @@ stamina (left) when it isn't full and kick power (right) while charging.
   animated in code, the gauges, and `watercolor.ts`, the post-processing pass that
   paints the scene.
 
+Rendering load, the MacBook fan-noise report, and proposed profiling steps
+are recorded in [render performance notes](docs/render-performance.md).
+
 ## Icons
 
 `public/favicon.png` and `public/apple-touch-icon.png` are painted by
