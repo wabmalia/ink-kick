@@ -181,6 +181,28 @@ describe('guest connection recovery', () => {
     expect(state.sent).toContainEqual(expect.objectContaining({ t: 'ping' }));
   });
 
+  it('does not reconnect when the host stops a tick past its last snapshot', async () => {
+    const { peer, control, state } = await join();
+    state.emit('data', { t: 'snap', snap: snap(100) });
+    for (let i = 0; i < 20; i++) {
+      keepAlive(control, state, 101);
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(peer.destroyed).toBe(false);
+  });
+
+  it('passes a late snapshot on without counting it as fresh traffic', async () => {
+    const { state } = await join();
+    const received = vi.fn();
+    session.listen({ snap: received });
+    state.emit('data', { t: 'snap', snap: snap(4) });
+    await vi.advanceTimersByTimeAsync(500);
+    state.emit('data', { t: 'snap', snap: snap(2) });
+    expect(received).toHaveBeenLastCalledWith(snap(2));
+    const result = await session.diagnostics();
+    expect(result.snapshotAgeMs).toBeGreaterThanOrEqual(500);
+  });
+
   it('gives a match started after a long lobby time to receive its first snapshot', async () => {
     const { peer, control, state } = await join();
     control.emit('data', { t: 'room', room: { ...room, phase: 'lobby' } });

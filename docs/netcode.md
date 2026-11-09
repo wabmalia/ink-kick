@@ -18,12 +18,15 @@ forever once a room had already been joined.
 
 - Control carries identity, room changes and match events. State carries
   player inputs and snapshots. Both send a ping every second and answer
-  with the current host tick and the sender's timestamp. Replies confirm traffic in both directions;
-  incoming snapshots alone do not prove player inputs can reach the host.
+  with the current host tick and the sender's timestamp. Replies confirm
+  traffic in both directions; incoming snapshots alone do not prove player
+  inputs can reach the host.
 - Eight seconds without acknowledgements on either connection starts
   recovery. Missing snapshots also trigger recovery if heartbeat replies
-  show the host's simulation is ahead of the last snapshot. A host whose
-  simulation is paused but still answers pings does not trigger that check.
+  show the host's simulation has passed the point where another snapshot
+  was due (`snapshotEvery` ticks past the last one). A host whose
+  simulation is paused but still answers pings does not trigger that check,
+  even if it stopped a tick or so after its last snapshot.
 - A connection close, error or failed ICE transport starts recovery
   immediately. Transient ICE disconnections get the heartbeat grace period.
 - Recovery destroys the guest's old Peer and both connections, waits
@@ -58,9 +61,12 @@ if they missed the winning goal, or the goal banner if play is still paused.
 Ordinary snapshots remain small; historical goals are not sent 30 times a
 second. Inputs wait until a baseline for the current match has arrived.
 
-Only advancing snapshots update freshness diagnostics. The interpolation
-buffer never resynchronizes to an old arriving packet, rejects another
-match until reset, and retains at most 64 snapshots. Event queues are also
+Snapshots older than the latest baseline are dropped. Past it, only
+advancing snapshots count as fresh traffic (the stall check and the
+diagnostics), but a late one still goes to the interpolation buffer, which
+slots it in if it falls within what's being drawn. The buffer never
+resynchronizes to an old arriving packet, rejects another match until
+reset, and retains at most 64 snapshots. Event queues are also
 bounded while the tab is not drawing.
 
 Recovery logs begin with `[ink-kick] reconnecting` and include a reason,
@@ -79,14 +85,17 @@ The queue guard uses the browser's
 [`bufferedAmount`](https://developer.mozilla.org/en-US/docs/Web/API/RTCDataChannel/bufferedAmount).
 It limits new application sends; it cannot cancel already queued packets.
 
-The host now steps on a timer independent of animation frames and queues
-visual events until drawing resumes. Timer stalls catch up by at most six
-simulation steps per callback, avoiding a burst of stale inputs/updates.
-Browsers can still throttle timers or suspend the tab entirely. This
-improves background hosting but does not provide an always-on guarantee;
-a server would be needed for that. Guests still interpolate snapshots
-without local movement prediction. Neither prediction nor rendering quality
-has been changed in this pass.
+The host steps its match from animation frames while the tab is drawing,
+so its own view blends between ticks with current time. When frames stop
+for over 100 ms (a hidden or covered tab), `HostClock` steps it from a
+timer instead and queues visual events until drawing resumes. The timer
+runs in a dedicated worker: a background page's own timers are slowed to
+about once a second, and with each step capped at 0.1 s (six simulation
+steps, to avoid a burst of stale inputs/updates) that would play the match
+at a tenth of its speed. Without workers it falls back to the page timer.
+Browsers can still freeze a tab entirely, so this improves background
+hosting but is not an always-on guarantee; a server would be needed for
+that. Guests still interpolate snapshots without local movement prediction.
 
 ## Diagnostics
 
@@ -115,12 +124,9 @@ callbacks, queue pressure, player reclamation and leaving during recovery.
 `src/net/room.test.ts` covers expired input, match restarts and recovery of
 missed results. `src/game/state.test.ts` covers old packets and buffer reset.
 `src/net/host-clock.test.ts` verifies that hosting delivers snapshots without
-animation frames. `src/ui/match-ui.test.ts` checks scoreboard/banner recovery
-with a minimal DOM substitute.
-
-A browser smoke check was attempted in this environment, but listening on
-the local Vite port was blocked (`EPERM`) and headless Chrome could not
-launch. Actual ICE, TURN and browser suspension behavior remain live checks.
+animation frames, and that frames and the timer never both step the match.
+`src/ui/match-ui.test.ts` checks scoreboard/banner recovery with a minimal
+DOM substitute.
 
 For a live check, reload the host and all guests onto the same build before
 starting a new room. Disconnect a guest's network for over eight seconds,

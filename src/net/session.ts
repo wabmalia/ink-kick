@@ -351,6 +351,8 @@ export class Session {
   private hostTick = -1;
   private stateReady = false;
   private syncedMatchId: string | null = null;
+  /** The tick of the latest sync; nothing older can help the match. */
+  private baselineTick = -1;
   private eventTick = -1;
   private reconnectCount = 0;
   private reconnectReason: string | null = null;
@@ -398,15 +400,20 @@ export class Session {
 
   private snapshot(snap: Snapshot) {
     if (!snap || !Number.isSafeInteger(snap.tick) || snap.tick < 0) return;
-    if (snap.matchId !== this.room?.matchId || snap.matchId !== this.syncedMatchId || snap.tick <= this.snapshotTick) return;
-    const at = performance.now();
-    if (this.previousSnapshot) {
-      const variation = Math.abs((at - this.previousSnapshot.at) - (snap.tick - this.previousSnapshot.tick) * CONFIG.tick * 1000);
-      this.jitterMs += (variation - this.jitterMs) / 16;
+    if (snap.matchId !== this.room?.matchId || snap.matchId !== this.syncedMatchId || snap.tick <= this.baselineTick) return;
+    // Only a newer snapshot shows the host is still getting through; a late
+    // one (state is unordered) still goes to the match, which slots it in
+    // if it helps the blend.
+    if (snap.tick > this.snapshotTick) {
+      const at = performance.now();
+      if (this.previousSnapshot) {
+        const variation = Math.abs((at - this.previousSnapshot.at) - (snap.tick - this.previousSnapshot.tick) * CONFIG.tick * 1000);
+        this.jitterMs += (variation - this.jitterMs) / 16;
+      }
+      this.previousSnapshot = { tick: snap.tick, at };
+      this.lastSnapshotAt = at;
+      this.snapshotTick = snap.tick;
     }
-    this.previousSnapshot = { tick: snap.tick, at };
-    this.lastSnapshotAt = at;
-    this.snapshotTick = snap.tick;
     this.emit('snap', snap);
   }
 
@@ -434,8 +441,11 @@ export class Session {
       if (now - this.lastControlAt >= SILENCE_MS) return this.scheduleReconnect('control-timeout');
       if (now - this.lastStateAt >= SILENCE_MS) return this.scheduleReconnect('state-timeout');
       // A backgrounded host may stop simulating, but still answer pings.
-      // Only call snapshots stalled when its simulation is advancing.
-      if (this.room.phase === 'match' && this.hostTick > this.snapshotTick && now - this.lastSnapshotAt >= SILENCE_MS) {
+      // Only call snapshots stalled when its simulation has passed the point
+      // where another one was due: a host stopped between two snapshots is
+      // a tick or so ahead of the last one, and that's no stall.
+      if (this.room.phase === 'match' && this.hostTick - this.snapshotTick >= CONFIG.net.snapshotEvery
+        && now - this.lastSnapshotAt >= SILENCE_MS) {
         return this.scheduleReconnect('snapshot-timeout');
       }
       send(this.control, { t: 'ping', sentAt: performance.now() });
@@ -556,7 +566,7 @@ export class Session {
       case 'sync':
         if (msg.sync.snap.matchId !== this.room?.matchId) return;
         this.syncedMatchId = msg.sync.snap.matchId;
-        this.snapshotTick = this.eventTick = msg.sync.snap.tick;
+        this.snapshotTick = this.eventTick = this.baselineTick = msg.sync.snap.tick;
         this.lastSnapshotAt = performance.now();
         this.previousSnapshot = { tick: msg.sync.snap.tick, at: this.lastSnapshotAt };
         this.emit('sync', msg.sync);

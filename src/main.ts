@@ -147,10 +147,9 @@ let last = performance.now();
 let inputClock = 0;
 // Frames drawn less often when nobody needs 60 a second: the menu, with the
 // bots playing on behind it, at 30; and anything at 5 while the window isn't
-// focused (in another app, say). Solo and menu simulation run per frame;
-// hosting uses its own clock. A hidden tab draws nothing at all: the
-// browser stops animation frames; the separate host clock keeps stepping
-// while the browser allows its timer to run.
+// focused (in another app, say). The game itself still runs every frame.
+// A hidden tab draws nothing at all: the browser stops animation frames,
+// and a host's clock then steps the match from a worker timer instead.
 const MENU_FRAME = 1 / 30;
 const UNFOCUSED_FRAME = 1 / 5;
 let undrawn = 0;
@@ -181,6 +180,9 @@ function frame(now: number) {
     played = mode.remote.advance(dt);
     state = mode.remote.state() ?? EMPTY;
   } else if (mode.kind === 'host') {
+    // Step here while drawing, so the blend between ticks is current; the
+    // host clock's timer only steps when frames stop.
+    hostClock.frame();
     played = hostEvents.splice(0);
     state = mode.local.state();
   } else {
