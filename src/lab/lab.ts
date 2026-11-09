@@ -21,6 +21,8 @@ let scenario: Scenario = SCENARIOS[0]!;
 // Kept per scenario, so switching back finds the values where they were.
 const attrsFor = new Map<string, Record<string, Attributes>>();
 const optsFor = new Map<string, Options>();
+// A fresh seed every run, so chance (a keeper's misread, a tackle's
+// outcome) varies run to run; the roles in one run share it.
 let seed = 1;
 let speed = 1;
 let playing = true;
@@ -32,7 +34,7 @@ const attrs = () => attrsFor.get(scenario.id) ?? attrsFor.set(scenario.id, defau
 const opts = () => optsFor.get(scenario.id) ?? optsFor.set(scenario.id, { ...scenario.defaults }).get(scenario.id)!;
 
 function restart() {
-  run = scenario.start(attrs(), opts(), seed);
+  run = scenario.start(attrs(), opts(), seed++);
   local = new Playback(run);
   names = new Map(scenario.roles.map(r => [r.id, r.label]));
   view.clearEffects();

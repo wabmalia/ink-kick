@@ -11,6 +11,14 @@ export interface ReleaseDay {
 
 export const RELEASE_NOTES: ReleaseDay[] = [
   {
+    date: '2026-11-09',
+    notes: [
+      'Passes hit on the run go faster, and further still on the sprint.',
+      'Keepers stand better, cover their near post and dive further: a corner curler is no longer a sure goal.',
+      'Keepers dive with their hands out instead of sliding.',
+    ],
+  },
+  {
     date: '2026-11-07',
     notes: [
       'Defensive stance: face up to the player on the ball to keep them in front of you. Sprint to drop it.',

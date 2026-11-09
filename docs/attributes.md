@@ -67,9 +67,11 @@ screen and to tune one at a time.
 
 ## Things to watch when this goes in
 
-- **Pace 10 sprint (9 m/s)** is faster than the ball's slower passes (8.5 m/s).
-  A sprinter could outrun their own short pass; that may be fine, or Pace may
-  need a smaller step.
+- **Pace 10 sprint (9 m/s)** is faster than a standing pass (8.5 m/s), but a
+  pass carries `kick.carry` (60%) of the kicker's forward speed, 1.5× that on
+  the sprint (`kick.sprintCarry`), fading to none at full power. A tap on the
+  sprint goes off at about 14 m/s; the ball's drag still lets a sprinter who
+  keeps sprinting catch it after about 1.4 s, a knock-on into space.
 - **Power 10 shots (39.6 m/s)** cross the 30 m pitch in under a second. Worth
   pairing with kick inaccuracy at full power if shots get too strong.
 - **Tackling and Strength meet in a duel.** A poke or slide that reaches a

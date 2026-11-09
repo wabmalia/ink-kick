@@ -571,7 +571,12 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
         setAction(p, 'none');
         events.push({ type: 'feint', player: p.id });
       } else if (released) {
-        const speed = kick.passSpeed + (p.stats.shotSpeed - kick.passSpeed) * p.charge;
+        // On the run, a pass carries some of the kicker's speed (forward
+        // only, so backing off doesn't weaken it), more on the sprint; a
+        // shot doesn't.
+        const run = Math.max(0, p.vx * p.fx + p.vy * p.fy);
+        const carry = kick.carry * (p.sprinting ? kick.sprintCarry : 1);
+        const speed = kick.passSpeed + (p.stats.shotSpeed - kick.passSpeed) * p.charge + carry * run * (1 - p.charge);
         match.ball.vx = p.fx * speed;
         match.ball.vy = p.fy * speed;
         match.owner = null;

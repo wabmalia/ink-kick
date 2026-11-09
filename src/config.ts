@@ -136,6 +136,11 @@ export const CONFIG = {
     chargeTime: 0.7,
     passSpeed: 8.5,
     shotSpeed: 33,
+    // A pass hit on the run carries the run: this share of the kicker's speed
+    // the way they kick it is added on a tap, fading to none at full power,
+    // times sprintCarry when they're sprinting (a knock-on into space).
+    carry: 0.6,
+    sprintCarry: 1.5,
     // Movement while charging.
     moveFactor: 0.3,
     // The kicker can't trap their own kick for this long.
@@ -266,13 +271,19 @@ export const CONFIG = {
     comeOutFrom: 16,
     comeOutOver: 12,
     // A ball heading for goal faster than this is a shot. The keeper moves
-    // for it reaction seconds after a ball that fast comes into its half,
-    // to where it guessed it would cross, off by up to error metres (more
-    // for harder shots). It reads curlRead of the curl and looks again
-    // every reread seconds.
+    // for it after a ball that fast comes into its half: reaction seconds,
+    // plus up to reactionSpread more (it varies shot to shot, so a save
+    // can come a beat late). Struck from within closeFrom metres of it
+    // it's set and on its toes: reactionClose plus up to spreadClose,
+    // easing to the usual by farFrom. It reads where it'll cross, but only
+    // curlRead of the curl, and looks again every reread seconds.
     shotSpeed: 6,
-    reaction: 0.22,
-    error: 1.8,
+    reaction: 0.275,
+    reactionSpread: 0.2,
+    reactionClose: 0.05,
+    spreadClose: 0.1,
+    closeFrom: 4,
+    farFrom: 10,
     curlRead: 0.6,
     reread: 0.2,
     // A loose ball in its box slower than this, it goes and gets.
@@ -285,10 +296,14 @@ export const CONFIG = {
     pokeChance: 0.04,
     // Diving: for a shot crossing further than diveFrom from it that it
     // can't reach on foot, arriving within diveWithin seconds.
-    diveFrom: 0.7,
+    diveFrom: 0.4,
     diveWithin: 0.45,
+    // How far it thinks it'll get on its feet, as a share of sprinting
+    // flat out until the ball arrives (it has to get going first).
+    footReach: 0.6,
+    // A dive's speed, and how far round its hands it reaches the ball.
     diveSpeed: 6,
-    diveReach: 0.4,
+    diveReach: 0.7,
     // Faster than this, a shot comes off the keeper (bouncing back this
     // much) rather than being caught; slower than gatherSpeed it picks the
     // ball up from a little way off, like anyone.
@@ -305,8 +320,8 @@ export const CONFIG = {
     // narrowFrom of the goal, up to narrowBy further out than usual, keeping
     // narrowGap from the ball.
     narrowFrom: 16,
-    narrowBy: 2.2,
-    narrowGap: 2.5,
+    narrowBy: 1.2,
+    narrowGap: 4.5,
   },
 
   // Pause after a goal before the kickoff.

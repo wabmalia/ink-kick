@@ -923,6 +923,114 @@ export const slalom: Scenario = {
   },
 };
 
+// --- Pass ----------------------------------------------------------------
+// Two passers side by side, each standing, running or sprinting up with the
+// ball, then tapping it on and keeping going: how fast the pass goes off and
+// how far it gets away from them.
+
+const PASSERS: Role[] = [
+  { id: 'a', label: 'Passer A', team: 'gold' },
+  { id: 'b', label: 'Passer B', team: 'red' },
+];
+const PASS_START = -13;
+const PASS_LANE = 5;
+// Seconds of run-up before the kick, and of following it after.
+const RUN_UP = 1.2;
+const FOLLOW = 1.5;
+
+interface PassStat {
+  phase: 'up' | 'charge' | 'follow' | 'done';
+  t: number;
+  ran: number | null;
+  pass: number | null;
+  ahead: number | null;
+  caught: number | null;
+}
+
+export const pass: Scenario = {
+  id: 'pass',
+  name: 'Pass',
+  roles: PASSERS,
+  choices: [
+    { key: 'move', label: 'Run up', options: [{ value: 'stand', label: 'Standing' }, { value: 'run', label: 'Running' }, { value: 'sprint', label: 'Sprinting' }] },
+    { key: 'charge', label: 'Kick', options: [{ value: 'tap', label: 'Tap' }, { value: 'half', label: 'Half power' }] },
+  ],
+  hint: 'They keep going after the kick: does the pass get away from them?',
+  defaults: { move: 'sprint', charge: 'tap' },
+  start(attrs, opts) {
+    const moving = opts.move !== 'stand';
+    const sprint = opts.move === 'sprint';
+    const matches = PASSERS.map((role, i) => {
+      const m = labMatch([{ role, attrs: attrs[role.id]! }], 1);
+      const p = m.players[0]!;
+      const y = i ? PASS_LANE : -PASS_LANE;
+      Object.assign(p, { x: PASS_START, y, fx: 1, fy: 0 });
+      Object.assign(m.ball, { x: PASS_START + CONFIG.dribble.distance, y });
+      m.owner = p.id;
+      return m;
+    });
+    const stat: PassStat[] = PASSERS.map(() => ({ phase: 'up', t: 0, ran: null, pass: null, ahead: null, caught: null }));
+    const cones = [-1, 1].map(k => ({ x: PASS_START - 0.8, y: k * PASS_LANE }));
+
+    const run: Run = {
+      match: matches[0]!, extra: matches.slice(1), cones, t: 0, done: false,
+      step() {
+        const events: SimEvent[] = [];
+        matches.forEach((m, i) => {
+          const p = m.players[0]!;
+          const st = stat[i]!;
+          const go = moving ? { x: 1, y: 0, sprint } : { x: 0, y: 0, sprint: false };
+          let input: Input = { ...go, kick: false };
+          if (st.phase === 'up' && run.t >= RUN_UP) {
+            st.phase = 'charge';
+            st.ran = Math.hypot(p.vx, p.vy);
+          }
+          if (st.phase === 'charge') {
+            // A tap is a few frames; half power is held to half the charge.
+            const hold = opts.charge === 'half' ? 0.5 : 0.05;
+            input = { ...go, kick: !(p.action === 'charge' && p.charge >= hold) };
+          }
+          const out = step(m, { [p.id]: input });
+          events.push(...out);
+          if (st.phase === 'charge' && out.some(e => e.type === 'kick' && e.player === p.id)) {
+            st.phase = 'follow';
+            st.pass = Math.hypot(m.ball.vx, m.ball.vy);
+          } else if (st.phase === 'follow') {
+            st.t += CONFIG.tick;
+            if (st.caught === null && m.owner === p.id) st.caught = st.t;
+            if (st.ahead === null && st.caught === null && st.t >= 1) st.ahead = m.ball.x - p.x;
+            if (st.t >= FOLLOW) st.phase = 'done';
+          }
+        });
+        run.t += CONFIG.tick;
+        if (stat.every(st => st.phase === 'done') || run.t > 10) run.done = true;
+        return events;
+      },
+      readout() {
+        const sections: Section[] = [{
+          title: 'Pass', rows: [
+            row('Run up', `${opts.move}, ${moving ? s(RUN_UP) : 'still'}`),
+            row('Kick', opts.charge === 'half' ? 'half power' : 'tap'),
+          ],
+        }];
+        PASSERS.forEach((role, i) => {
+          const st = stat[i]!;
+          sections.push({
+            title: role.label, team: role.team, rows: [
+              row('Speed at the kick', st.ran === null ? '-' : `${st.ran.toFixed(2)} m/s`, 'pace'),
+              row('Pass speed', st.pass === null ? '-' : `${st.pass.toFixed(1)} m/s`, 'pace', 'power'),
+              row('Ahead after 1 s', st.ahead !== null ? m(st.ahead) : st.caught !== null && st.caught < 1 ? 'caught by then' : '-', 'pace'),
+              row('Caught it up', st.caught === null ? (st.phase === 'done' ? 'no' : '-') : `after ${s(st.caught)}`, 'pace'),
+            ],
+          });
+        });
+        return sections;
+      },
+    };
+    return run;
+  },
+};
+
 // --- Shooting range ------------------------------------------------------
 // Shooter A, then shooter B, from the same spot and aim, which you place by
 // dragging on the pitch, at the right goal and its keeper if you like. Both
@@ -940,6 +1048,8 @@ interface Shot {
   speed: number | null;
   toLine: number | null;
   bend: number;
+  // The shooter's speed as they started the kick.
+  ran: number | null;
 }
 
 interface ShotPlan {
@@ -950,7 +1060,14 @@ interface ShotPlan {
   // How long the curl's held across the shot, seconds.
   curlHold: number;
   keeper: boolean;
+  // Coming onto the spot from RUN_IN metres back, running or sprinting, or
+  // standing on it.
+  runUp: 'stand' | 'run' | 'sprint';
 }
+
+const RUN_IN = 6;
+// Seconds a shot plays on once it's decided.
+const SHOT_AFTER = Math.min(1.6, CONFIG.restartDelay - 0.1);
 
 const point = (v: string | undefined, fallback: { x: number; y: number }) => {
   const [x, y] = (v ?? '').split(',').map(Number);
@@ -968,6 +1085,7 @@ const plan = (opts: Options): ShotPlan => ({
   curl: opts.curl!.startsWith('left') ? -1 : opts.curl!.startsWith('right') ? 1 : 0,
   curlHold: opts.curl!.endsWith('-full') ? CONFIG.kick.aftertouch : 0.15,
   keeper: opts.keeper === 'on',
+  runUp: opts.runUp === 'run' || opts.runUp === 'sprint' ? opts.runUp : 'stand',
 });
 
 // One shot, stepped a tick at a time: settle, charge, release, aftertouch,
@@ -980,6 +1098,11 @@ function shotRun(role: Role, attrs: Attributes, pl: ShotPlan, seed: number) {
   Object.assign(p, { ...pl.spot, vx: 0, vy: 0 });
   const dl = Math.hypot(pl.target.x - p.x, pl.target.y - p.y) || 1;
   Object.assign(p, { fx: (pl.target.x - p.x) / dl, fy: (pl.target.y - p.y) / dl });
+  // A run-up starts back along the line of the shot.
+  const moving = pl.runUp !== 'stand';
+  const sprint = pl.runUp === 'sprint';
+  if (moving) Object.assign(p, { x: p.x - p.fx * RUN_IN, y: p.y - p.fy * RUN_IN });
+  const aim = { x: p.fx, y: p.fy };
   Object.assign(match.ball, { x: p.x + p.fx * CONFIG.dribble.distance, y: p.y + p.fy * CONFIG.dribble.distance, vx: 0, vy: 0 });
   match.owner = p.id;
   // Only the right goal's keeper.
@@ -987,19 +1110,27 @@ function shotRun(role: Role, attrs: Attributes, pl: ShotPlan, seed: number) {
   const other = match.players.find(q => q.keeper && q.id !== keeperId);
   if (other) match.players.splice(match.players.indexOf(other), 1);
 
-  const shot: Shot = { result: null, speed: null, toLine: null, bend: 0 };
+  const shot: Shot = { result: null, speed: null, toLine: null, bend: 0, ran: null };
   let t = 0;
-  let phase: 'settle' | 'charge' | 'flight' = 'settle';
+  let phase: 'settle' | 'run' | 'charge' | 'flight' = 'settle';
   let flightT = 0;
   const from = { x: 0, y: 0, dx: 0, dy: 0 };
   return {
     match, shot,
     get done() { return shot.result !== null; },
     step(): SimEvent[] {
+      // Decided: play on untouched, to see the save or the ball in the net.
+      if (shot.result) return step(match, { [p.id]: NO_INPUT });
       let input: Input = NO_INPUT;
-      if (phase === 'settle' && t > 0.25) phase = 'charge';
-      if (phase === 'charge') {
-        input = { x: 0, y: 0, kick: !(p.action === 'charge' && p.charge >= pl.charge), sprint: false };
+      if (phase === 'settle' && t > 0.25) phase = moving ? 'run' : 'charge';
+      // Onto the spot: the kick starts there.
+      if (phase === 'run' && (p.x - pl.spot.x) * aim.x + (p.y - pl.spot.y) * aim.y >= 0) phase = 'charge';
+      if (phase === 'charge' && shot.ran === null) shot.ran = Math.hypot(p.vx, p.vy);
+      const go = moving ? { x: aim.x, y: aim.y, sprint } : { x: 0, y: 0, sprint: false };
+      if (phase === 'run') {
+        input = { ...go, kick: false };
+      } else if (phase === 'charge') {
+        input = { ...go, kick: !(p.action === 'charge' && p.charge >= pl.charge) };
       } else if (phase === 'flight' && flightT < pl.curlHold && pl.curl) {
         // Held across the shot's path.
         input = { x: -from.dy * pl.curl, y: from.dx * pl.curl, kick: false, sprint: false };
@@ -1042,10 +1173,11 @@ export const range: Scenario = {
       key: 'curl', label: 'Curl',
       options: [['none', 'None'], ['left', 'Left, light'], ['left-full', 'Left, full'], ['right', 'Right, light'], ['right-full', 'Right, full']].map(([value, label]) => ({ value: value!, label: label! })),
     },
+    { key: 'runUp', label: 'Run up', options: [{ value: 'stand', label: 'Standing' }, { value: 'run', label: 'Running' }, { value: 'sprint', label: 'Sprinting' }] },
     { key: 'keeper', label: 'Keeper', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] },
   ],
   hint: 'Drag the ring to move the shot, the end of the arrow to aim it.',
-  defaults: { spot: `${SHOT_SPOT.x},${SHOT_SPOT.y}`, target: `${SHOT_TARGET.x},${SHOT_TARGET.y}`, charge: 'full', curl: 'none', keeper: 'on' },
+  defaults: { spot: `${SHOT_SPOT.x},${SHOT_SPOT.y}`, target: `${SHOT_TARGET.x},${SHOT_TARGET.y}`, charge: 'full', curl: 'none', runUp: 'stand', keeper: 'on' },
   start(attrs, opts, seed) {
     const pl = plan(opts);
     const shots = SHOOTERS.map(role => shotRun(role, attrs[role.id]!, pl, seed));
@@ -1057,12 +1189,14 @@ export const range: Scenario = {
       aim: { x: pl.spot.x, y: pl.spot.y, tx: pl.target.x, ty: pl.target.y },
       step() {
         const r = shots[k]!;
-        const events = r.done ? [] : r.step();
+        const decided = r.done;
+        const events = r.step();
         run.t += CONFIG.tick;
-        if (r.done) {
-          // A moment to see where it went, then the next shooter.
+        if (decided) {
+          // Played on for a while to see where it went (short of the
+          // restart after a goal), then the next shooter.
           pause += CONFIG.tick;
-          if (pause > 0.8) {
+          if (pause > SHOT_AFTER) {
             pause = 0;
             if (k + 1 < shots.length) run.match = shots[++k]!.match;
             else run.done = true;
@@ -1079,6 +1213,7 @@ export const range: Scenario = {
             row('From', `${m(dist)} from goal`),
             row('Aim', `${angle.toFixed(0)}° off straight`),
             row('Charge', opts.charge!),
+            row('Run up', pl.runUp === 'stand' ? 'standing' : `${pl.runUp === 'run' ? 'running' : 'sprinting'}, ${RUN_IN} m`),
             row('Curl', pl.curl ? `${pl.curl > 0 ? 'right' : 'left'}, held ${s(pl.curlHold)}` : 'none', 'power'),
           ],
         }];
@@ -1089,6 +1224,7 @@ export const range: Scenario = {
             title: role.label, team: role.team, rows: [
               row('Result', shot.result ? RESULT[shot.result] : i > k ? 'waiting' : '-', 'power'),
               row('Full power in', s(p.stats.chargeTime), 'power'),
+              row('Speed at the kick', shot.ran === null ? '-' : `${shot.ran.toFixed(2)} m/s`, 'pace'),
               row('Shot speed', shot.speed === null ? '-' : `${shot.speed.toFixed(1)} m/s`, 'power'),
               row('To the line', shot.toLine === null ? '-' : s(shot.toLine), 'power'),
               row('Bend', m(shot.bend), 'power'),
@@ -1118,7 +1254,7 @@ export const range: Scenario = {
   },
 };
 
-export const SCENARIOS: Scenario[] = [track, arena, stance, slalom, range];
+export const SCENARIOS: Scenario[] = [track, arena, stance, slalom, pass, range];
 
 export const defaultAttrs = (scenario: Scenario): Record<string, Attributes> =>
   Object.fromEntries(scenario.roles.map(r => [r.id, evenAttributes()]));

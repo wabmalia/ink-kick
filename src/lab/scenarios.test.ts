@@ -58,7 +58,9 @@ describe('lab scenarios', () => {
 
   it('Shooting: every shot gets a result, and Power 10 scores more from range', () => {
     const attrs = { a: { ...evenAttributes(), power: 10 }, b: { ...evenAttributes(), power: 1 } };
-    const opts = { ...range.defaults, spot: '-5,0' };
+    // From 14 m, placed inside a post (straight at the keeper is always
+    // saved, and from much further everything is).
+    const opts = { ...range.defaults, spot: '1,0', target: '15,1.9' };
     const run = finish(range.start(attrs, opts, 1));
     for (const section of run.readout().slice(1)) expect(section.rows[0]!.value).not.toMatch(/^(-|waiting)$/);
     const goals = range.repeat!(attrs, opts, 20).map(sec => Number(sec.rows.find(r => r.label === 'Goal')?.value.replace('%', '') ?? 0));

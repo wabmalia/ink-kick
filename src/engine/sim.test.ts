@@ -142,6 +142,40 @@ describe('sim', () => {
     expect(shot).toBeGreaterThan(CONFIG.kick.shotSpeed * 0.9);
   });
 
+  it('a pass on the run carries the run; a full-power shot and backing off do not', () => {
+    const launch = (hold: number, vx: number) => {
+      const { match, me } = setup();
+      giveBall(match, me);
+      me.vx = vx;
+      run(match, ticks(hold), { me: { kick: true } });
+      run(match, 1);
+      expect(match.owner).toBeNull();
+      return match.ball.vx;
+    };
+    const run6 = 6;
+    const standing = launch(0.05, 0);
+    const moving = launch(0.05, run6);
+    expect(moving - standing).toBeGreaterThan(CONFIG.kick.carry * run6 * 0.6);
+    expect(launch(0.05, -run6)).toBeCloseTo(standing, 5);
+    expect(launch(CONFIG.kick.chargeTime, run6)).toBeCloseTo(launch(CONFIG.kick.chargeTime, 0), 5);
+  });
+
+  it('a pass on the sprint carries more of the run than one on the run', () => {
+    const launch = (sprint: boolean) => {
+      const { match, me } = setup();
+      giveBall(match, me);
+      me.vx = 6;
+      // Held sprint from the start, so pressing it isn't a dummy.
+      run(match, 1, { me: { x: 1, sprint } });
+      me.vx = 6;
+      run(match, 3, { me: { x: 1, sprint, kick: true } });
+      run(match, 1, { me: { x: 1, sprint } });
+      expect(match.owner).toBeNull();
+      return match.ball.vx;
+    };
+    expect(launch(true)).toBeGreaterThan(launch(false) + 1);
+  });
+
   it('calls a charged kick off with a tap of sprint, keeping the ball', () => {
     const { match, me } = setup();
     giveBall(match, me);

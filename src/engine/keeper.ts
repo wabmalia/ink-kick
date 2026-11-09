@@ -6,10 +6,13 @@ import { homeSide, type Input, type Match, type Player } from './sim';
 // A goalkeeper: a bot kept to its own small box (see keepPlayerIn). It reads
 // the game from where it stands, playing through the same Input as anyone:
 // - Most of the time it stands between the ball and the middle of its goal,
-//   coming off its line as play gets closer.
+//   coming off its line as play gets closer, and from an angle shifted
+//   towards its near post.
 // - A shot at its goal it only reacts to a moment after a fast ball comes
-//   into its half, and it misjudges where the shot will cross a little,
-//   more for harder shots. It reads only part of a shot's curl, looking
+//   into its half (a little quicker or slower shot to shot), meeting it
+//   where it stands. It reads the shot straight, but only part of its curl,
+//   looking again every so often. One it can't reach on its feet, it dives
+//   for: always the same choice, a late reaction just a late dive. It reads only part of a shot's curl, looking
 //   again every so often as the ball comes, so a hard shot in the corner,
 //   or one curled late, can still beat it. One it can't reach on its feet
 //   in time, it dives for.
@@ -22,13 +25,16 @@ import { homeSide, type Input, type Match, type Player } from './sim';
 //   clears it into the emptiest space upfield, away from the other team.
 
 export interface KeeperState {
-  // Seconds a fast loose ball has been coming at its half (it reacts once
-  // this passes its reaction time); where it guessed the shot would cross,
-  // null with no shot on; how far off its read of this shot is, and seconds
-  // until it looks again.
+  // Seconds a fast loose ball has been coming at its half, and how long it
+  // takes to react to this shot (it varies a little shot to shot); where it
+  // reads the shot will cross, null with no shot on, and seconds until it
+  // looks again.
   watching: number;
+  delay: number;
   guess: number | null;
-  offset: number;
+  // How far upfield it stood when it saw the shot (never behind its usual
+  // spot off the line): it meets the shot there, rather than backing off.
+  at: number;
   readIn: number;
   shotSeen: boolean;
   dived: boolean;
@@ -50,7 +56,7 @@ export interface KeeperMove {
 
 
 export const newKeeperState = (): KeeperState => ({
-  watching: 0, guess: null, offset: 0, readIn: 0, shotSeen: false, dived: false, rushAt: null, rushing: false, holding: 0, target: null, charging: 0,
+  watching: 0, delay: 0, guess: null, at: 0, readIn: 0, shotSeen: false, dived: false, rushAt: null, rushing: false, holding: 0, target: null, charging: 0,
 });
 
 /** The keeper's own goal line, which way is upfield from it, its small box
@@ -69,6 +75,25 @@ export function keeperBox(p: Player) {
 function standOff(dist: number, depth: number) {
   const { lineOff, comeOutFrom, comeOutOver } = CONFIG.keeper;
   return lineOff + (depth - lineOff - 0.3) * Math.max(0, Math.min(1, (comeOutFrom - dist) / comeOutOver));
+}
+
+// The spot `depth` metres out from its goal line on the line splitting the
+// angle the goal makes from the ball (the posts are as far round either
+// side), and at least `gap` from the ball. From out wide that's near the
+// near post, where a line to the middle of the goal would leave it open.
+function onAngle(ball: { x: number; y: number }, line: number, side: number, depth: number, gap = 0) {
+  const half = CONFIG.pitch.goalWidth / 2;
+  const unit = (x: number, y: number) => {
+    const l = Math.hypot(x, y) || 1;
+    return { x: x / l, y: y / l };
+  };
+  const a = unit(line - ball.x, half - ball.y);
+  const b = unit(line - ball.x, -half - ball.y);
+  const dir = unit(a.x + b.x, a.y + b.y);
+  const tx = line - side * depth;
+  let t = Math.abs(dir.x) > 1e-3 ? (tx - ball.x) / dir.x : 0;
+  t = Math.max(t, gap);
+  return { x: ball.x + dir.x * t, y: ball.y + dir.y * t };
 }
 
 // How far the nearest opponent is from the ball's path out to (tx, ty).
@@ -192,18 +217,24 @@ export function keeperInput(match: Match, p: Player, random: () => number): Keep
     k.dived = false;
     k.guess = null;
     k.readIn = 0;
-    // Harder shots are harder to read.
-    k.offset = (random() * 2 - 1) * cfg.error * (0.4 + speed / CONFIG.kick.shotSpeed);
+    // Always the same decision; only how quickly it's made varies.
+    // Set and quicker for a shot from close; the usual from range.
+    const far = Math.max(0, Math.min(1, (Math.hypot(ball.x - p.x, ball.y - p.y) - cfg.closeFrom) / (cfg.farFrom - cfg.closeFrom)));
+    const base = cfg.reactionClose + (cfg.reaction - cfg.reactionClose) * far;
+    const spread = cfg.spreadClose + (cfg.reactionSpread - cfg.spreadClose) * far;
+    k.delay = base + random() * spread;
+    k.at = side > 0 ? Math.min(p.x, keeperX) : Math.max(p.x, keeperX);
   }
   if (!onTarget) {
     k.shotSeen = false;
     k.guess = null;
   }
   if (k.shotSeen) {
-    if (k.watching < cfg.reaction) return { input: NO_INPUT };
+    if (k.watching < k.delay) return { input: NO_INPUT };
     k.readIn -= dt;
     if (k.guess === null || k.readIn <= 0) {
-      k.guess = crossAt! + k.offset;
+      // Where it'll pass where the keeper stands, by its read of the curl.
+      k.guess = predictCross(match, k.at, cfg.curlRead) ?? crossAt!;
       k.readIn = cfg.reread;
     }
   }
@@ -211,9 +242,9 @@ export function keeperInput(match: Match, p: Player, random: () => number): Keep
     const to = Math.max(-half, Math.min(half, k.guess));
     // Too far to get there on its feet before the ball does: dive, towards
     // where it guessed and a touch forward, to meet it.
-    const arrive = ball.vx * side > 0 ? (keeperX - ball.x) / ball.vx : Infinity;
+    const arrive = ball.vx * side > 0 ? (k.at - ball.x) / ball.vx : Infinity;
     const gap = to - p.y;
-    const onFoot = p.stats.sprintSpeed * arrive * 0.6;
+    const onFoot = p.stats.sprintSpeed * arrive * cfg.footReach;
     if (!k.dived && Math.abs(gap) > cfg.diveFrom && Math.abs(gap) > onFoot && arrive < cfg.diveWithin) {
       k.dived = true;
       const fx = -side * 0.25;
@@ -221,7 +252,8 @@ export function keeperInput(match: Match, p: Player, random: () => number): Keep
       const l = Math.hypot(fx, fy);
       return { input: NO_INPUT, dive: { x: fx / l, y: fy / l } };
     }
-    return { input: toward(p, keeperX, to, true, 0.05) };
+    // Flat out only while it's well off its spot, so it doesn't overrun it.
+    return { input: toward(p, k.at, to, Math.abs(gap) > 0.6, 0.05) };
   }
 
   const inside = (x: number, y: number, d: number, h: number, slack: number) =>
@@ -264,32 +296,36 @@ export function keeperInput(match: Match, p: Player, random: () => number): Keep
     if (random() < cfg.pokeChance) return { input: { ...toward(p, ball.x, ball.y), kick: true } };
   }
 
-  // An attacker winding up a shot in range: it walks out along the line
-  // from the middle of its goal to the ball, further the longer the
-  // wind-up, to narrow the angle; never right up to the ball, and never out
-  // of its big box. Once the shot's struck, the shot code above takes over.
+  // An attacker winding up a shot in range: it walks out on the angle,
+  // further the longer the wind-up, to narrow it; never within narrowGap of
+  // the ball, and never out of its big box. Once the shot's struck, the
+  // shot code above takes over.
   if (attacker && attacker.action === 'charge') {
     const gx = ball.x - line;
     const l = Math.hypot(gx, ball.y) || 1;
     if (l < cfg.narrowFrom) {
       const base = standOff(l, depth);
-      const out = Math.min(base + cfg.narrowBy * Math.min(1, attacker.charge * 1.5), l - cfg.narrowGap, areaDepth);
+      const out = Math.min(base + cfg.narrowBy * Math.min(1, attacker.charge * 1.5), areaDepth);
       if (out > base) {
-        const tx = line + (gx / l) * out;
-        const ty = Math.max(-areaHalf, Math.min(areaHalf, (ball.y / l) * out));
+        // Out from the line as far as `out` would take it along the line to
+        // the ball (so less from a tight angle).
+        const at = onAngle(ball, line, side, out * Math.abs(gx) / l, cfg.narrowGap);
+        const tx = side > 0 ? Math.min(line - cfg.lineOff * 0.5, Math.max(line - areaDepth, at.x)) : Math.max(line + cfg.lineOff * 0.5, Math.min(line + areaDepth, at.x));
+        const ty = Math.max(-areaHalf, Math.min(areaHalf, at.y));
         return { input: toward(p, tx, ty) };
       }
     }
   }
 
-  // Otherwise: between the ball and the middle of the goal, further off its
-  // line the closer the ball, inside its box.
+  // Otherwise: on the angle, further off its line the closer the ball,
+  // inside its box.
   const dx = ball.x - line;
   const dy = ball.y;
   const dist = Math.hypot(dx, dy) || 1;
   const off = standOff(dist, depth);
-  let tx = line + (dx / dist) * off;
-  let ty = (dy / dist) * off * 2.2;
+  const at = onAngle(ball, line, side, off * Math.abs(dx) / dist);
+  let tx = at.x;
+  let ty = at.y;
   tx = side > 0 ? Math.min(line - cfg.lineOff * 0.5, Math.max(line - depth, tx)) : Math.max(line + cfg.lineOff * 0.5, Math.min(line + depth, tx));
   ty = Math.max(-CONFIG.pitch.goalWidth / 2, Math.min(CONFIG.pitch.goalWidth / 2, ty));
   return { input: toward(p, tx, ty) };

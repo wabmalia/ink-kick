@@ -50,6 +50,8 @@ export interface Pose {
   // Ground velocity, world x and z, for skids and leaning into turns.
   vx?: number;
   vz?: number;
+  // A keeper's dive, instead of a slide: to its left (1) or right (-1).
+  dive?: number;
 }
 
 // Braking harder than this (m/s²) starts a skid pose, full at SKID_FULL more;
@@ -212,6 +214,8 @@ export class Footballer {
     kneeL += 0.3 * Math.max(bw, sideW);
     kneeR += 0.3 * Math.max(bw, sideW);
     let back = 0;
+    // Sideways shift of the body (a keeper's dive), to its left.
+    let side = 0;
     let spread = 0.12 + 0.25 * sideW;
     // The shuffle: legs open and close sideways.
     let open = sideW * (0.14 + 0.16 * Math.sin(this.phase));
@@ -331,7 +335,31 @@ export class Footballer {
     const target = sliding ? 1 : pose.action === 'recover' ? Math.max(0, 1 - pose.actionT / (tackle.recoverTime * 0.7)) : 0;
     this.slideW = sliding ? Math.min(1, this.slideW + dt / 0.07) : Math.min(this.slideW, target);
     const sw = smooth(this.slideW);
-    if (sw > 0) {
+    if (sw > 0 && pose.dive) {
+      // A keeper's dive: thrown sideways, chest to the shooter, both arms
+      // stretched out past its head towards the ball, legs trailing. Up in an
+      // arc through the dive, then down on its side for the get-up.
+      const d = pose.dive;
+      const flight = sliding ? Math.min(1, pose.actionT / tackle.slideTime) : 1;
+      const air = Math.sin(Math.PI * flight);
+      shoulderL = mix(shoulderL, -2.95, sw);
+      shoulderR = mix(shoulderR, -2.95, sw);
+      spread = mix(spread, 0.15, sw);
+      elbow = mix(elbow, -0.12, sw);
+      hipL = mix(hipL, 0.15, sw);
+      hipR = mix(hipR, -0.1, sw);
+      kneeL = mix(kneeL, 0.45, sw);
+      kneeR = mix(kneeR, 0.25, sw);
+      open = mix(open, 0.12, sw);
+      lean = mix(lean, 0.1, sw);
+      // Rolled over onto its side (positive z tips the head to its right).
+      tilt = mix(tilt, -d * 1.3, sw);
+      // Lying from the feet out: shifted back under where it is, and lifted
+      // off the ground in the air.
+      side = mix(0, -d * 0.75, sw);
+      drop = mix(drop, 0.1 + 0.35 * air, sw);
+      bob *= 1 - sw;
+    } else if (sw > 0) {
       hipR = mix(hipR, -0.85, sw);
       kneeR = mix(kneeR, 0.05, sw);
       hipL = mix(hipL, 0.1, sw);
@@ -371,7 +399,7 @@ export class Footballer {
     this.elbowR.rotation.x = elbow;
     this.body.rotation.x = lean;
     this.body.rotation.z = tilt;
-    this.body.position.set(0, bob + drop, back);
+    this.body.position.set(side, bob + drop, back);
     // Counter-twist the shoulders against the hips while running.
     this.torso.rotation.y = -swing * 0.25 * (1 - kw);
   }

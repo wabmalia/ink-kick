@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config';
-import { KEEPER_IDS, TEAM_NAME, type SimEvent, type Team } from '../engine/sim';
+import { homeSide, KEEPER_IDS, TEAM_NAME, type SimEvent, type Team } from '../engine/sim';
 import { createBall, rollBall } from '../scene/ball';
 import { Footballer } from '../scene/footballer';
 import { StickmanBatch } from '../scene/stickmen';
@@ -432,6 +432,14 @@ export class GameView {
       let { x, y } = p;
       let heading = Math.atan2(p.fx, p.fy);
       let speed = Math.hypot(p.vx, p.vy);
+      // A keeper's dive (a slide in the sim, facing the way it goes) is drawn
+      // facing upfield at the shooter, thrown to its left (1) or right (-1).
+      let dive: number | undefined;
+      if (p.id in KEEPER_KIT && (p.action === 'slide' || p.action === 'recover')) {
+        const up = -homeSide(p.team);
+        dive = -p.fy * up >= 0 ? 1 : -1;
+        heading = Math.atan2(up, 0);
+      }
       const captain = toss?.captains?.get(p.id);
       if (captain) {
         // From facing the referee to their kickoff place, jogging there.
@@ -459,6 +467,7 @@ export class GameView {
         charge: p.charge,
         tired: p.tired > 0,
         stumble: p.stumble,
+        dive,
       });
     }
     this.drawReferee(dt, out);
