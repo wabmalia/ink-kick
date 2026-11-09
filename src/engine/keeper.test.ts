@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../config';
 import { evenAttributes } from '../game/attributes';
 import { createMatch, createPlayer, KEEPER_IDS, step, type Input, type Match } from './sim';
+import { keeperInput } from './keeper';
 
 const idle: Input = { x: 0, y: 0, kick: false, sprint: false };
 const ticks = (s: number) => Math.round(s / CONFIG.tick);
@@ -262,5 +263,76 @@ describe('goalkeepers', () => {
     expect(after).toBeLessThanOrEqual(CONFIG.keeper.areaDepth + 0.01);
     // Still between the ball and the goal.
     expect(gk.y).toBeGreaterThan(0);
+  });
+
+  describe('reach', () => {
+    // Red's keeper and Gold's dribbler facing it, the ball `gap` metres in
+    // front of the keeper's centre, inside its big box.
+    function faceUp(gap: number) {
+      const match = keeperMatch(3);
+      match.kickoffHeld = false;
+      const gk = match.players.find(p => p.id === KEEPER_IDS.red)!;
+      const me = match.players.find(p => p.id === 'me')!;
+      const x = W - 2.5;
+      Object.assign(gk, { x, y: 0, fx: -1, fy: 0, vx: 0, vy: 0 });
+      Object.assign(match.ball, { x: x - gap, y: 0, vx: 0, vy: 0 });
+      Object.assign(me, { x: x - gap - 0.6, y: 0, fx: 1, fy: 0, vx: 0, vy: 0 });
+      match.owner = 'me';
+      return { match, defender: gk };
+    }
+
+    it('only pokes at a dribbler once right up close', () => {
+      // How often, in 400 ticks of deciding, it pokes with the ball this far
+      // from its centre.
+      const pokes = (gap: number) => {
+        const { match, defender } = faceUp(gap);
+        const draw = rng(7);
+        let n = 0;
+        for (let i = 0; i < 400; i++) if (keeperInput(match, defender, draw).input.kick) n++;
+        return n;
+      };
+      expect(pokes(CONFIG.keeper.pokeAt + 0.05)).toBe(0);
+      expect(pokes(CONFIG.keeper.pokeAt - 0.1)).toBeGreaterThan(0);
+    });
+
+    it('pokes rather than diving at a dribbler', () => {
+      const { match, defender } = faceUp(CONFIG.keeper.pokeAt - 0.01);
+      step(match, { me: idle, [defender.id]: { ...idle, kick: true } });
+      expect(defender.action).toBe('poke');
+    });
+
+    it("can't take a loose ball outside its big box, even at its feet", () => {
+      const take = (ballDepth: number) => {
+        const match = keeperMatch(1);
+        match.kickoffHeld = false;
+        match.owner = null;
+        const gk = match.players.find(p => p.id === KEEPER_IDS.red)!;
+        const me = match.players.find(p => p.id === 'me')!;
+        Object.assign(me, { x: -12, y: 0 });
+        Object.assign(gk, { x: W - ballDepth + 0.5, y: 0, fx: -1, fy: 0, vx: 0, vy: 0 });
+        Object.assign(match.ball, { x: W - ballDepth, y: 0, vx: 0, vy: 0 });
+        for (let i = 0; i < ticks(0.3); i++) step(match, { me: idle, [gk.id]: idle });
+        return match.owner === gk.id;
+      };
+      expect(take(CONFIG.keeper.areaDepth - 0.3)).toBe(true);
+      expect(take(CONFIG.keeper.areaDepth + 0.2)).toBe(false);
+    });
+
+    it("can't poke a ball away outside its big box", () => {
+      const match = createMatch([createPlayer('me', 'gold', evenAttributes())], { keepers: true, seed: 3 });
+      match.kickoffHeld = false;
+      const gk = match.players.find(p => p.id === KEEPER_IDS.red)!;
+      const me = match.players.find(p => p.id === 'me')!;
+      // The keeper at the front of its box, the ball just beyond it.
+      const edge = W - CONFIG.keeper.areaDepth;
+      Object.assign(gk, { x: edge + 0.45, y: 0, fx: -1, fy: 0, vx: 0, vy: 0 });
+      Object.assign(match.ball, { x: edge - 0.3, y: 0, vx: 0, vy: 0 });
+      Object.assign(me, { x: edge - 0.9, y: 0, fx: 1, fy: 0, vx: 0, vy: 0 });
+      match.owner = 'me';
+      const events = [...step(match, { me: idle, [gk.id]: { ...idle, kick: true } })];
+      for (let i = 0; i < ticks(0.3); i++) events.push(...step(match, { me: idle, [gk.id]: idle }));
+      expect(events.some(e => e.type === 'steal' || e.type === 'shrug')).toBe(false);
+      expect(match.owner).toBe('me');
+    });
   });
 });

@@ -637,8 +637,9 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
       } else if (inPokeRange(match, p)) {
         setAction(p, 'poke');
         spend(p, tackle.pokeCost / p.stats.tackleFactor);
-        p.vx += p.fx * tackle.pokeLunge;
-        p.vy += p.fy * tackle.pokeLunge;
+        const lunge = p.keeper ? CONFIG.keeper.pokeLunge : tackle.pokeLunge;
+        p.vx += p.fx * lunge;
+        p.vy += p.fy * lunge;
         events.push({ type: 'poke', player: p.id });
       } else {
         // Tired, it's a sluggish slide, slower to get up from.
@@ -980,6 +981,14 @@ function isBehind(dribbler: Player, p: Player) {
   return (dribbler.fx * dx + dribbler.fy * dy) / dist < CONFIG.tackle.shieldCos;
 }
 
+// Whether the ball's centre is in this keeper's big box: the only place it
+// may use its hands.
+function inKeeperArea(p: Player, ball: Disc) {
+  const { side, line, areaDepth, areaHalf } = keeperBox(p);
+  const depth = (line - ball.x) * side;
+  return depth >= -ball.r && depth <= areaDepth && Math.abs(ball.y) <= areaHalf;
+}
+
 // Pokes and slides reaching the ball, and slides taking players out.
 function tackle(match: Match, p: Player, events: SimEvent[]) {
   const { tackle: t } = CONFIG;
@@ -995,8 +1004,13 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
   const victim = playerById(match, match.owner);
   // A keeper holding the ball can't be tackled.
   if (victim?.keeper && victim !== p) return;
-  // A keeper's dive reaches less far than a slide tackle.
-  const reach = ball.r + (poking ? t.pokeReach * p.stats.tackleFactor : p.keeper ? CONFIG.keeper.diveReach : p.stats.slideReach);
+  // A keeper can't poke it away outside its big box (its dives, for
+  // shots, are left as they are).
+  if (p.keeper && poking && !inKeeperArea(p, ball)) return;
+  // A keeper's poke and dive reach less far than an outfielder's.
+  const k = CONFIG.keeper;
+  const pokeReach = p.keeper ? k.pokeReach : t.pokeReach * p.stats.tackleFactor;
+  const reach = ball.r + (poking ? pokeReach : p.keeper ? k.diveReach : p.stats.slideReach);
   let ballHit = Math.hypot(ball.x - footX, ball.y - footY) < reach;
   // A poke also gets round the dribbler's body to a ball out of reach, as
   // long as the poker is facing them. Neither works from behind: a dribbler
@@ -1008,7 +1022,7 @@ function tackle(match: Match, p: Player, events: SimEvent[]) {
     const dist = Math.hypot(dx, dy) || 1;
     const behind = isBehind(victim, p);
     bodyHit = !behind
-      && dist < p.r + victim.r + t.pokeBodyReach * p.stats.tackleFactor
+      && dist < p.r + victim.r + (p.keeper ? k.pokeBodyReach : t.pokeBodyReach * p.stats.tackleFactor)
       && p.fx * -dx + p.fy * -dy > 0;
     if (behind) ballHit = false;
   }
@@ -1085,6 +1099,8 @@ function trap(match: Match, events: SimEvent[]) {
     // A keeper catches only what reaches its body, and nothing too hot to
     // hold; a slow ball it gathers from a little way off like anyone.
     if (p.keeper && (speed > k.catchSpeed || (speed > k.gatherSpeed && gap > 0.05))) continue;
+    // And no hands outside its big box: it can't pick up a ball out there.
+    if (p.keeper && !inKeeperArea(p, ball)) continue;
     // Anyone else only takes one in front of them: one at their side or
     // back hits them and drops (their hands make a keeper the exception).
     // Taken from further round, the pull onto the foot would fling it.

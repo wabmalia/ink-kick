@@ -304,10 +304,17 @@ export const CONFIG = {
     collectSpeed: 7,
     // Holding the ball this long before kicking it out.
     holdTime: 0.9,
-    // An attacker on the ball this close, it pokes at now and then (the
-    // chance a tick).
-    pokeAt: 1.3,
+    // An attacker on the ball this close (centre to ball), it pokes at now
+    // and then (the chance a tick).
+    pokeAt: 0.95,
     pokeChance: 0.04,
+    // Its poke is shorter than an outfielder's (tackle.pokeReach,
+    // pokeBodyReach and pokeLunge, not scaled by Tackling): it has to get
+    // close to win the ball. It can't poke at or pick up a ball outside its
+    // big box. None of this touches its saves (dives, catches, parries).
+    pokeReach: 0.35,
+    pokeBodyReach: 0.25,
+    pokeLunge: 1.2,
     // Diving: for a shot crossing further than diveFrom from it that it
     // can't reach on foot, arriving within diveWithin seconds.
     diveFrom: 0.4,
