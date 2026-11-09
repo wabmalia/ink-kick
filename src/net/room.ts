@@ -27,6 +27,7 @@ interface Member extends MemberView {
   attrs: Attributes;
   link: Link | null;
   input: WireInput | null;
+  inputTick: number;
 }
 
 
@@ -39,7 +40,7 @@ export class HostRoom {
   tick = 0;
 
   constructor(readonly code: string, readonly hostId: string, hostName: string, private listener: RoomListener, hostAttrs?: Attributes) {
-    this.members.push({ id: hostId, name: cleanName(hostName), attrs: cleanAttributes(hostAttrs), team: 'gold', connected: true, link: null, input: null });
+    this.members.push({ id: hostId, name: cleanName(hostName), attrs: cleanAttributes(hostAttrs), team: 'gold', connected: true, link: null, input: null, inputTick: 0 });
   }
 
   view(): RoomView {
@@ -72,7 +73,7 @@ export class HostRoom {
     } else {
       const gold = this.members.filter(x => x.team === 'gold').length;
       const red = this.members.length - gold;
-      m = { id, name: cleanName(name), attrs: cleanAttributes(attrs), team: red < gold ? 'red' : 'gold', connected: true, link, input: null };
+      m = { id, name: cleanName(name), attrs: cleanAttributes(attrs), team: red < gold ? 'red' : 'gold', connected: true, link, input: null, inputTick: this.tick };
       this.members.push(m);
     }
     if (this.match && !this.match.players.some(p => p.id === id)) addPlayer(this.match, createPlayer(id, m.team, m.attrs));
@@ -116,7 +117,10 @@ export class HostRoom {
 
   input(id: string, input: WireInput) {
     const m = this.member(id);
-    if (m && (!m.input || input.seq > m.input.seq)) m.input = input;
+    if (m?.connected && (!m.input || input.seq > m.input.seq)) {
+      m.input = input;
+      m.inputTick = this.tick;
+    }
   }
 
   start() {
@@ -125,6 +129,7 @@ export class HostRoom {
     this.members = this.members.filter(m => m.connected);
     this.phase = 'match';
     this.tick = 0;
+    for (const m of this.members) m.inputTick = -Infinity;
     const kickoff = Math.random() < 0.5 ? 'gold' : 'red';
     this.match = createMatch(this.members.map(m => createPlayer(m.id, m.team, m.attrs)), { kickoff, coin: true, rules: this.rules, keepers: this.keepers });
     this.changed();
@@ -143,7 +148,10 @@ export class HostRoom {
     const match = this.match;
     if (!match) return [];
     const inputs: Record<string, Input> = {};
-    for (const m of this.members) inputs[m.id] = m.id === this.hostId ? hostInput : m.input ?? NO_INPUT;
+    // A silent connection must not leave a player sprinting or charging
+    // forever. Keep the sequence number so delayed packets stay rejected.
+    for (const m of this.members) inputs[m.id] = m.id === this.hostId ? hostInput
+      : (this.tick - m.inputTick) * CONFIG.tick < 0.5 ? m.input ?? NO_INPUT : NO_INPUT;
     const events = step(match, inputs);
     this.tick++;
     if (events.length) {

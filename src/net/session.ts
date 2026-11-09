@@ -34,6 +34,22 @@ function tabId(): string {
 
 /** How long a guest waits for the direct connection before giving up. */
 const JOIN_TIMEOUT_MS = 15_000;
+const HEARTBEAT_MS = 1000;
+const SILENCE_MS = 8000;
+const RETRY_MS = 2500;
+// Stop feeding obsolete inputs/snapshots into a congested browser queue.
+const STATE_BUFFER_BYTES = 16 * 1024;
+
+function send(conn: DataConnection | null | undefined, msg: ToHost | ToClient, realtime = false) {
+  if (!conn?.open) return;
+  if (realtime && conn.dataChannel.bufferedAmount > STATE_BUFFER_BYTES) return;
+  try {
+    conn.send(msg);
+  } catch (error) {
+    console.warn('[ink-kick] send failed', conn.label, error);
+    conn.close();
+  }
+}
 
 // Relay servers when the turn-relay Worker answers, else PeerJS's defaults.
 async function peerOptions(): Promise<PeerOptions> {
@@ -43,7 +59,7 @@ async function peerOptions(): Promise<PeerOptions> {
 
 // The room a tab was hosting, so a refresh reopens it under the same code.
 
-class Session {
+export class Session {
   status: Status = 'home';
   message = '';
   role: 'host' | 'client' | null = null;
@@ -61,6 +77,7 @@ class Session {
   private state: DataConnection | null = null;
   private seq = 0;
   private retry: ReturnType<typeof setTimeout> | undefined;
+  private monitor: ReturnType<typeof setInterval> | undefined;
   /** Bumped on teardown, so a peer still being set up knows it's stale. */
   private gen = 0;
 
@@ -130,12 +147,16 @@ class Session {
     const peer = new Peer(PEER_PREFIX + code, options);
     this.peer = peer;
     peer.on('open', () => {
+      if (this.peer !== peer) return;
       this.set({ status: 'room' });
       location.hash = `#/host/${code}`;
     });
-    peer.on('connection', conn => this.acceptGuest(conn));
+    peer.on('connection', conn => {
+      if (this.peer === peer) this.acceptGuest(conn);
+      else conn.close();
+    });
     peer.on('disconnected', () => {
-      if (!peer.destroyed) peer.reconnect();
+      if (this.peer === peer && !peer.destroyed) peer.reconnect();
     });
     peer.on('error', err => {
       if (this.peer !== peer) return;
@@ -158,42 +179,84 @@ class Session {
   // A guest's control connection says who they are; their state connection
   // carries that id in its metadata.
   private states = new Map<string, DataConnection>();
+  private controls = new Map<string, DataConnection>();
 
   private acceptGuest(conn: DataConnection) {
     const host = this.host!;
     if (conn.label === 'state') {
-      const id = String((conn.metadata as { id?: unknown } | undefined)?.id ?? '');
+      const metadata = conn.metadata as { id?: unknown; controlId?: unknown } | undefined;
+      const id = typeof metadata?.id === 'string' ? metadata.id : '';
+      const paired = () => {
+        const control = this.controls.get(id);
+        return control?.peer === conn.peer && control.connectionId === metadata?.controlId;
+      };
       if (!id) return conn.close();
-      conn.on('open', () => this.states.set(id, conn));
+      conn.on('open', () => {
+        if (this.host !== host) return conn.close();
+        // State channels from a replaced connection cannot steal the stream.
+        if (!paired()) return conn.close();
+        const old = this.states.get(id);
+        this.states.set(id, conn);
+        old?.close();
+      });
       conn.on('data', d => {
+        if (this.host !== host || this.states.get(id) !== conn || !paired()) return;
         const msg = d as ToHost;
+        if (msg?.t === 'ping') return send(conn, { t: 'pong', tick: host.tick }, true);
         if (msg?.t !== 'input') return;
         const input = cleanInput(msg.input);
         if (input) host.input(id, input);
       });
-      conn.on('close', () => this.states.get(id) === conn && this.states.delete(id));
+      const closed = () => {
+        if (this.states.get(id) !== conn) return;
+        this.states.delete(id);
+        if (paired()) this.controls.get(id)?.close();
+        if (conn.open) conn.close();
+      };
+      conn.on('close', closed);
+      conn.on('error', closed);
       return;
     }
+    if (conn.label !== 'control') return conn.close();
     let id: string | null = null;
     const link: Link = {
-      send: m => conn.open && conn.send(m),
+      send: m => send(conn, m),
       sendState: m => {
-        const state = id ? this.states.get(id) : undefined;
-        if (state?.open) state.send(m);
+        const state = id && this.controls.get(id) === conn ? this.states.get(id) : undefined;
+        send(state, m, true);
       },
     };
     conn.on('data', d => {
+      if (this.host !== host) return;
       const msg = d as ToHost;
       if (msg?.t === 'hello' && !id && typeof msg.id === 'string' && msg.id && msg.id !== this.me) {
         id = msg.id;
+        const oldControl = this.controls.get(id);
+        const oldState = this.states.get(id);
+        this.controls.set(id, conn);
+        this.states.delete(id);
         host.join(id, cleanName(msg.name), link, msg.attrs);
+        oldState?.close();
+        oldControl?.close();
+      } else if (id && this.controls.get(id) !== conn) {
+        return;
+      } else if (msg?.t === 'ping' && id) {
+        send(conn, { t: 'pong', tick: host.tick });
       } else if (msg?.t === 'team' && id && validTeam(msg.team)) {
         host.setTeam(id, msg.team);
       } else if (msg?.t === 'attrs' && id) {
         host.setAttributes(id, msg.attrs);
       }
     });
-    const closed = () => id && host.disconnect(id, link);
+    const closed = () => {
+      if (!id || this.controls.get(id) !== conn) return;
+      this.controls.delete(id);
+      const state = this.states.get(id);
+      this.states.delete(id);
+      state?.close();
+      host.disconnect(id, link);
+      if (conn.open) conn.close();
+    };
     conn.on('close', closed);
     conn.on('error', closed);
   }
@@ -244,7 +307,7 @@ class Session {
     this.teardown();
     this.role = 'client';
     this.code = code;
-    this.set({ status: 'connecting', message: `Looking for room ${code}…` });
+    this.set({ status: 'connecting', message: `Looking for room ${code}…`, linked: false });
     store.set(sessionStorage, KEYS.joined, code);
     void this.openGuestPeer(code);
   }
@@ -255,19 +318,61 @@ class Session {
     if (gen !== this.gen) return;
     const peer = new Peer(options);
     this.peer = peer;
-    peer.on('open', () => this.connectToHost());
+    this.watchGuest(peer);
+    peer.on('open', () => {
+      if (this.peer === peer && !this.control) this.connectToHost();
+    });
     peer.on('disconnected', () => {
-      if (!peer.destroyed) peer.reconnect();
+      if (this.peer === peer && !peer.destroyed) peer.reconnect();
     });
     peer.on('error', err => {
       if (this.peer !== peer) return;
+      if (this.room) return this.scheduleReconnect(`peer-${err.type}`);
       if (err.type === 'peer-unavailable') {
-        if (this.room) return this.scheduleReconnect();
         return this.fail(`Couldn't find room ${code}. Check the code, and that the host still has the page open.`);
       }
-      if (this.room) return this.scheduleReconnect();
       this.fail(`Connection failed (${err.type}).`);
     });
+  }
+
+  private lastControlAt = 0;
+  private lastStateAt = 0;
+  private lastSnapshotAt = 0;
+  private snapshotTick = -1;
+  private hostTick = -1;
+  private stateReady = false;
+
+  // Watch application traffic, not just WebRTC's open flag. A transport
+  // can silently stop delivering while its sibling connection stays open.
+  private watchGuest(peer: Peer) {
+    clearInterval(this.monitor);
+    const started = Date.now();
+    this.lastControlAt = this.lastStateAt = this.lastSnapshotAt = started;
+    this.snapshotTick = this.hostTick = -1;
+    this.stateReady = false;
+    this.monitor = setInterval(() => {
+      if (this.peer !== peer) return;
+      const now = Date.now();
+      if (!this.control?.open || !this.state?.open || !this.room) {
+        if (now - started < JOIN_TIMEOUT_MS) return;
+        if (this.room) this.scheduleReconnect('connection-timeout');
+        else this.fail(`Found room ${this.code} but couldn't connect to it. Check your connection and try another browser if WebRTC is blocked.`);
+        return;
+      }
+      if (now - this.lastControlAt >= SILENCE_MS) return this.scheduleReconnect('control-timeout');
+      if (now - this.lastStateAt >= SILENCE_MS) return this.scheduleReconnect('state-timeout');
+      // A backgrounded host may stop simulating, but still answer pings.
+      // Only call snapshots stalled when its simulation is advancing.
+      if (this.room.phase === 'match' && this.hostTick > this.snapshotTick && now - this.lastSnapshotAt >= SILENCE_MS) {
+        return this.scheduleReconnect('snapshot-timeout');
+      }
+      send(this.control, { t: 'ping' });
+      send(this.state, { t: 'ping' }, true);
+    }, HEARTBEAT_MS);
+  }
+
+  private markLinked() {
+    if (!this.linked && this.room && this.control?.open && this.state?.open && this.stateReady) this.set({ linked: true });
   }
 
   private connectToHost() {
@@ -275,49 +380,100 @@ class Session {
     const target = PEER_PREFIX + this.code;
     const conn = this.peer.connect(target, { label: 'control', reliable: true, serialization: 'json' });
     this.control = conn;
-    // The room was found but the browsers can't reach each other directly.
-    const stuck = () => {
-      if (this.control !== conn || conn.open || this.room) return;
-      this.fail(
-        `Found room ${this.code} but couldn't connect to it. A browser privacy setting may be blocking WebRTC ` +
-          `(Brave Shields, or WebRTC options in Firefox-based browsers). Try another browser or turn those off for this site.`,
-      );
-    };
-    const timer = setTimeout(stuck, JOIN_TIMEOUT_MS);
-    conn.peerConnection?.addEventListener('iceconnectionstatechange', () => {
-      const state = conn.peerConnection?.iceConnectionState;
-      console.info('[ink-kick] connection', state);
-      if (state === 'failed') stuck();
+    const current = () => this.control === conn;
+    this.watchConnection(conn, () => {
+      if (current()) this.scheduleReconnect('control-closed');
     });
     conn.on('open', () => {
-      clearTimeout(timer);
-      this.set({ linked: true });
+      if (!current()) return;
+      this.lastControlAt = Date.now();
       this.sendControl({ t: 'hello', id: this.me, name: this.name || 'Player', attrs: loadAttributes() });
-      // Unordered: a lost snapshot is replaced by the next one anyway.
-      const state = this.peer!.connect(target, { label: 'state', reliable: false, serialization: 'json', metadata: { id: this.me } });
-      this.state = state;
-      state.on('data', d => {
-        const msg = d as ToClient;
-        if (msg?.t === 'snap') this.emit('snap', msg.snap);
-      });
     });
-    conn.on('data', d => this.receive(d as ToClient));
-    conn.on('close', () => {
-      if (this.control !== conn) return;
-      this.scheduleReconnect();
+    conn.on('data', d => {
+      if (!current()) return;
+      const msg = d as ToClient;
+      if (!msg || typeof msg !== 'object') return;
+      if (msg.t === 'room' || msg.t === 'pong') this.lastControlAt = Date.now();
+      this.receive(msg);
+      // Wait for the hello acknowledgement before opening state, so the
+      // host can bind both connections to the same player and attempt.
+      if (msg.t === 'room' && current() && !this.state) {
+        const state = this.peer!.connect(target, {
+          label: 'state', reliable: false, serialization: 'json',
+          metadata: { id: this.me, controlId: conn.connectionId },
+        });
+        this.state = state;
+        this.lastStateAt = this.lastSnapshotAt = Date.now();
+        this.watchConnection(state, () => {
+          if (this.state === state) this.scheduleReconnect('state-closed');
+        });
+        state.on('open', () => {
+          if (this.state !== state) return;
+          this.lastStateAt = this.lastSnapshotAt = Date.now();
+          send(state, { t: 'ping' }, true);
+        });
+        state.on('data', d => {
+          if (this.state !== state) return;
+          const msg = d as ToClient;
+          if (msg?.t === 'pong') {
+            this.lastStateAt = Date.now();
+            this.hostTick = msg.tick;
+          } else if (msg?.t === 'snap') {
+            this.lastSnapshotAt = Date.now();
+            this.snapshotTick = Math.max(this.snapshotTick, msg.snap.tick);
+            this.emit('snap', msg.snap);
+          } else return;
+          this.stateReady = true;
+          this.markLinked();
+        });
+      }
+      this.markLinked();
     });
   }
 
-  private scheduleReconnect() {
-    this.state?.close();
+  private watchConnection(conn: DataConnection, lost: () => void) {
+    conn.on('close', lost);
+    conn.on('error', lost);
+    conn.peerConnection?.addEventListener('iceconnectionstatechange', () => {
+      const state = conn.peerConnection?.iceConnectionState;
+      console.info('[ink-kick] connection', conn.label, state);
+      // Give a transient disconnection time to recover; failed is final.
+      if (state === 'failed') lost();
+    });
+  }
+
+  private scheduleReconnect(reason: string) {
+    if (this.role !== 'client' || this.retry !== undefined) return;
+    console.warn('[ink-kick] reconnecting', {
+      reason, snapshotTick: this.snapshotTick, hostTick: this.hostTick,
+      controlSilenceMs: Date.now() - this.lastControlAt,
+      stateSilenceMs: Date.now() - this.lastStateAt,
+    });
+    clearInterval(this.monitor);
+    // Detach before closing: late callbacks must not affect the new pair.
+    this.gen++;
+    const peer = this.peer;
+    this.peer = null;
+    this.control = this.state = null;
+    peer?.destroy();
     this.set({ linked: false });
-    clearTimeout(this.retry);
-    this.retry = setTimeout(() => this.connectToHost(), 2500);
+    // A fresh Peer also rebuilds ICE and refreshes relay credentials.
+    this.retry = setTimeout(() => {
+      this.retry = undefined;
+      void this.openGuestPeer(this.code);
+    }, RETRY_MS);
   }
 
   private receive(msg: ToClient) {
     switch (msg.t) {
+      case 'pong':
+        this.hostTick = msg.tick;
+        break;
       case 'room':
+        if (msg.room.phase === 'match' && this.room?.phase !== 'match') {
+          this.lastSnapshotAt = Date.now();
+          this.snapshotTick = this.hostTick = -1;
+        }
         this.set({ room: msg.room, status: 'room' });
         location.hash = `#/join/${this.code}`;
         break;
@@ -332,12 +488,12 @@ class Session {
   }
 
   private sendControl(msg: ToHost) {
-    if (this.control?.open) this.control.send(msg);
+    send(this.control, msg);
   }
 
   /** A guest's input for this tick. */
   sendInput(input: Input) {
-    if (this.state?.open) this.state.send({ t: 'input', input: { ...input, seq: ++this.seq } } satisfies ToHost);
+    send(this.state, { t: 'input', input: { ...input, seq: ++this.seq } }, true);
   }
 
   // Shared ----------------------------------------------------------------
@@ -354,10 +510,13 @@ class Session {
   private teardown() {
     this.gen++;
     clearTimeout(this.retry);
+    this.retry = undefined;
+    clearInterval(this.monitor);
     this.host = null;
     this.control = null;
     this.state = null;
     this.states.clear();
+    this.controls.clear();
     this.peer?.destroy();
     this.peer = null;
     this.room = null;

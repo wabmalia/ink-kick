@@ -77,6 +77,55 @@ describe('host room', () => {
     expect(r.match!.players[1]!.vy).toBeGreaterThan(1);
   });
 
+  it('stops a silent guest, ignores delayed input, and resumes on fresh input', () => {
+    const r = room();
+    const a = link();
+    r.join('a', 'Ana', a.l);
+    r.start();
+    skipCoin(r);
+    // Stay clear of the ball and kickoff positions, which depend on the
+    // coin toss and change how quickly a dribbler slows down.
+    const player = r.match!.players.find(p => p.id === 'a')!;
+    Object.assign(player, { x: 0, y: -5, vx: 0, vy: 0 });
+    Object.assign(r.match!.ball, { x: -10, y: -8 });
+    r.match!.owner = null;
+    r.input('a', { seq: 20, ...idle, y: 1, sprint: true });
+    for (let i = 0; i < 120; i++) r.step(idle);
+    expect(Math.abs(player.vy)).toBeLessThan(0.01);
+    expect(player.sprinting).toBe(false);
+    r.input('a', { seq: 19, ...idle, y: -1 });
+    for (let i = 0; i < 10; i++) r.step(idle);
+    expect(Math.abs(player.vy)).toBeLessThan(0.01);
+    r.input('a', { seq: 21, ...idle, y: -1 });
+    for (let i = 0; i < 10; i++) r.step(idle);
+    expect(player.vy).toBeLessThan(-1);
+    r.disconnect('a', a.l);
+    r.input('a', { seq: 999, ...idle, y: 1 });
+    for (let i = 0; i < 120; i++) r.step(idle);
+    expect(Math.abs(player.vy)).toBeLessThan(0.01);
+  });
+
+  it('does not carry a previous match input over when the tick counter resets', () => {
+    const r = room();
+    r.join('a', 'Ana', link().l);
+    r.start();
+    skipCoin(r);
+    for (let i = 0; i < 120; i++) r.step(idle);
+    r.input('a', { seq: 10, ...idle, y: 1 });
+    r.end();
+    r.start();
+    skipCoin(r);
+    for (let i = 0; i < 10; i++) r.step(idle);
+    const player = r.match!.players.find(p => p.id === 'a')!;
+    expect(player.vy).toBe(0);
+    r.input('a', { seq: 9, ...idle, y: 1 });
+    r.step(idle);
+    expect(player.vy).toBe(0);
+    r.input('a', { seq: 11, ...idle, y: 1 });
+    for (let i = 0; i < 10; i++) r.step(idle);
+    expect(player.vy).toBeGreaterThan(1);
+  });
+
   it('sends snapshots and events that a guest can draw', () => {
     const r = room();
     const a = link();

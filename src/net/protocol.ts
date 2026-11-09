@@ -3,8 +3,8 @@ import type { Attributes } from '../game/attributes';
 
 // Messages between the host and guests. Each guest holds two connections to
 // the host: 'control', reliable and ordered, for the room, events and team
-// choices; and 'state', unordered, for inputs and snapshots, so a lost
-// packet never holds up the ones behind it.
+// choices; and 'state', unordered, for inputs and snapshots. PeerJS's
+// reliable:false only disables ordering, not retransmissions.
 
 // Room codes are registered with the PeerJS broker under this prefix.
 export const PEER_PREFIX = 'inkkick-';
@@ -53,6 +53,7 @@ export interface WireInput extends Input {
 }
 
 export type ToHost =
+  | { t: 'ping' }
   | { t: 'hello'; id: string; name: string; attrs: Attributes }
   | { t: 'team'; team: Team }
   // Attributes changed in the lobby; used from the next kickoff.
@@ -60,6 +61,7 @@ export type ToHost =
   | { t: 'input'; input: WireInput };
 
 export type ToClient =
+  | { t: 'pong'; tick: number }
   | { t: 'room'; room: RoomView }
   // What happened on a tick, for the guest to play when it draws that tick.
   | { t: 'events'; tick: number; events: SimEvent[] }
