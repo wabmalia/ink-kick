@@ -8,6 +8,7 @@ import { createMatch, createPlayer, KEEPER_IDS, step } from './engine/sim';
 import { enableKeys, keyboardInput } from './game/input';
 import { LocalMatch, RemoteMatch, type ViewState } from './game/state';
 import { GameView } from './game/view';
+import { HostClock } from './net/host-clock';
 import { session } from './net/session';
 import type { RoomView } from './net/protocol';
 import { iceServers } from './net/relay';
@@ -19,7 +20,7 @@ import { paintMenu } from './ui/wash';
 import { currentAttributes, mountLocker, onAttributes } from './ui/locker';
 import { Training } from './game/training';
 import { showTimes } from './ui/training-hud';
-import { matchEvents, resetMatchUi, type NameOf } from './ui/match-ui';
+import { matchEvents, resetMatchUi, restoreMatchUi, type NameOf } from './ui/match-ui';
 import { rulesLine, rulesName } from './game/rules';
 import type { SimEvent } from './engine/sim';
 import './style.css';
@@ -38,7 +39,7 @@ type Mode =
   | { kind: 'solo'; local: LocalMatch; round: number }
   | { kind: 'training'; local: LocalMatch; training: Training }
   | { kind: 'host'; local: LocalMatch }
-  | { kind: 'guest'; remote: RemoteMatch };
+  | { kind: 'guest'; remote: RemoteMatch; matchId: string };
 
 // Two bots a side, playing on behind the menu.
 function attract(): Mode {
@@ -70,6 +71,14 @@ onAttributes(attrs => {
 });
 
 let mode: Mode = attract();
+const hostEvents: SimEvent[] = [];
+const hostClock = new HostClock(dt => {
+  if (mode.kind !== 'host') return;
+  hostEvents.push(...mode.local.advance(dt));
+  if (hostEvents.length > 512) hostEvents.splice(0, hostEvents.length - 512);
+});
+// Browser-console diagnostics, including on production builds.
+Object.assign(window, { inkKickNetwork: () => session.diagnostics() });
 
 function pickMode() {
   const before = mode;
@@ -84,11 +93,16 @@ function pickMode() {
       mode = { kind: 'host', local: new LocalMatch(match, () => host.step(keyboardInput())) };
     }
   } else if (inMatch()) {
-    if (mode.kind !== 'guest') mode = { kind: 'guest', remote: new RemoteMatch() };
+    if (mode.kind !== 'guest' || mode.matchId !== session.room!.matchId) {
+      mode = { kind: 'guest', remote: new RemoteMatch(), matchId: session.room!.matchId! };
+    }
   } else if (mode.kind !== 'attract') {
     mode = attract();
   }
+  if (mode.kind === 'host') hostClock.start();
+  else hostClock.stop();
   if (mode !== before) {
+    hostEvents.length = 0;
     view.clearEffects();
     resetMatchUi();
   }
@@ -105,6 +119,12 @@ session.listen({
   change() {
     render();
     pickMode();
+  },
+  sync(sync) {
+    if (mode.kind !== 'guest' || mode.matchId !== sync.snap.matchId) return;
+    mode.remote.reset(sync.snap);
+    view.clearEffects();
+    restoreMatchUi(sync, nameOf);
   },
   snap(snap) {
     if (mode.kind === 'guest') mode.remote.push(snap);
@@ -127,9 +147,10 @@ let last = performance.now();
 let inputClock = 0;
 // Frames drawn less often when nobody needs 60 a second: the menu, with the
 // bots playing on behind it, at 30; and anything at 5 while the window isn't
-// focused (in another app, say). The game itself still runs every frame, so
-// a host keeps the match going. A hidden tab draws nothing at all: the
-// browser stops animation frames.
+// focused (in another app, say). Solo and menu simulation run per frame;
+// hosting uses its own clock. A hidden tab draws nothing at all: the
+// browser stops animation frames; the separate host clock keeps stepping
+// while the browser allows its timer to run.
 const MENU_FRAME = 1 / 30;
 const UNFOCUSED_FRAME = 1 / 5;
 let undrawn = 0;
@@ -159,6 +180,9 @@ function frame(now: number) {
     }
     played = mode.remote.advance(dt);
     state = mode.remote.state() ?? EMPTY;
+  } else if (mode.kind === 'host') {
+    played = hostEvents.splice(0);
+    state = mode.local.state();
   } else {
     // A solo game waits while the help is open; anything with others can't.
     if (!((mode.kind === 'solo' || mode.kind === 'training') && dialogOpen())) played = mode.local.advance(dt);
@@ -190,7 +214,7 @@ function frame(now: number) {
 
 // Let go of the GPU when the page goes: leaving, closing, or reloading after
 // a change while developing.
-window.addEventListener('pagehide', () => view.dispose());
+window.addEventListener('pagehide', () => { hostClock.stop(); view.dispose(); });
 // Back from the browser's back-forward cache, the GPU's already gone: start
 // afresh.
 window.addEventListener('pageshow', e => {

@@ -103,6 +103,9 @@ describe('training ground', () => {
 
   it('counts shots at the keeper and goals past it, and the keeper rolls the ball back', () => {
     const t = new Training('me', { ...evenAttributes(), power: 10 });
+    // Keeper reactions vary by seed; this checks drill accounting, not a
+    // random scoring rate. Keep both saved and scored shots repeatable.
+    t.match.seed = 1;
     const keeper = t.match.players.find(p => p.keeper)!;
     const W = CONFIG.pitch.width / 2;
     let rolledBack = false;

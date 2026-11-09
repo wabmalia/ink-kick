@@ -52,9 +52,9 @@ export interface ViewState {
 
 const round = (v: number) => Math.round(v * 1000) / 1000;
 
-export function toSnapshot(match: Match, tick: number): Snapshot {
+export function toSnapshot(match: Match, tick: number, matchId = 'local'): Snapshot {
   return {
-    tick,
+    tick, matchId,
     ball: [round(match.ball.x), round(match.ball.y)],
     owner: match.owner,
     score: [match.score.gold, match.score.red],
@@ -95,8 +95,18 @@ export class RemoteMatch {
   // The host tick being drawn, fractional; null until the first snapshot.
   private renderTick: number | null = null;
 
+  reset(snap: Snapshot) {
+    this.snaps = [];
+    this.events = [];
+    this.renderTick = null;
+    this.push(snap);
+  }
+
   push(snap: Snapshot) {
     const newest = this.snaps[this.snaps.length - 1];
+    if (newest && snap.matchId !== newest.matchId) return;
+    // Nothing older than the displayed pair can improve interpolation.
+    if (this.snaps.length && snap.tick < this.snaps[0]!.tick) return;
     if (newest && snap.tick <= newest.tick) {
       // Unordered channel: a late one slots in, a duplicate is dropped.
       if (this.snaps.some(s => s.tick === snap.tick)) return;
@@ -105,12 +115,14 @@ export class RemoteMatch {
     } else {
       this.snaps.push(snap);
     }
-    const target = snap.tick - CONFIG.net.delayTicks;
+    if (this.snaps.length > 64) this.snaps.splice(0, this.snaps.length - 64);
+    const target = this.snaps[this.snaps.length - 1]!.tick - CONFIG.net.delayTicks;
     if (this.renderTick === null || Math.abs(target - this.renderTick) > CONFIG.net.resyncTicks) this.renderTick = target;
   }
 
   pushEvents(tick: number, events: SimEvent[]) {
     this.events.push({ tick, events });
+    if (this.events.length > 512) this.events.shift();
   }
 
   // Moves the drawn tick on, easing it towards a steady distance behind the

@@ -28,7 +28,7 @@ describe('what a guest is sent', () => {
 
 // One player standing at x, on a given host tick.
 const snap = (tick: number, x: number): Snapshot => ({
-  tick, ball: [0, 0], owner: null, score: [0, 0], clock: 0,
+  matchId: 'local', tick, ball: [0, 0], owner: null, score: [0, 0], clock: 0,
   players: [['a', 0, x, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0]],
 });
 
@@ -59,5 +59,41 @@ describe('a guest drawing snapshots', () => {
     remote.push(snap(far + 2, far + 2));
     remote.advance(0);
     expect(remote.state()!.players[0]!.x).toBeGreaterThan(far - CONFIG.net.delayTicks - 3);
+  });
+});
+
+
+describe('snapshot recovery boundaries', () => {
+  it('does not rewind for a snapshot older than its useful history', () => {
+    const remote = new RemoteMatch();
+    remote.push(snap(100, 100));
+    remote.push(snap(102, 102));
+    remote.advance(0);
+    const before = remote.state()!.players[0]!.x;
+    remote.push(snap(10, 10));
+    remote.advance(0);
+    expect(remote.state()!.players[0]!.x).toBe(before);
+  });
+
+  it('rejects another match until explicitly reset and clears queued events', () => {
+    const remote = new RemoteMatch();
+    remote.push(snap(500, 50));
+    remote.pushEvents(510, [{ type: 'kickoff' }]);
+    const next = { ...snap(0, -5), matchId: 'next-match' };
+    remote.push(next);
+    expect(remote.state()!.players[0]!.x).toBe(50);
+    remote.reset(next);
+    remote.push(snap(600, 999));
+    expect(remote.state()!.players[0]!.x).toBe(-5);
+    expect(remote.advance(10)).toEqual([]);
+  });
+
+  it('keeps a bounded snapshot history while the guest is not drawing', () => {
+    const remote = new RemoteMatch();
+    for (let i = 0; i < 2000; i++) remote.push(snap(i, i));
+    remote.advance(0);
+    expect(remote.state()!.players[0]!.x).toBeGreaterThan(1900);
+    remote.push(snap(100, -999));
+    expect(remote.state()!.players[0]!.x).toBeGreaterThan(1900);
   });
 });

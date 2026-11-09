@@ -1,4 +1,5 @@
 import { TEAM_NAME, type GoalRecord, type SimEvent, type Team } from '../engine/sim';
+import type { MatchSync } from '../net/protocol';
 import { clockText } from '../game/rules';
 import { paintNow } from './wash';
 import { $ } from './dom';
@@ -136,4 +137,15 @@ export function matchEvents(events: SimEvent[], nameOf: NameOf, role: Role) {
 export function resetMatchUi() {
   hideGoal();
   hideBoard();
+}
+
+/** Reconstruct persistent UI after a gap; do not replay old kicks/tackles. */
+export function restoreMatchUi(sync: MatchSync, nameOf: NameOf) {
+  resetMatchUi();
+  if (sync.over) {
+    showBoard({ type: 'end', winner: sync.over.winner,
+      score: { gold: sync.snap.score[0], red: sync.snap.score[1] }, goals: sync.goals }, nameOf, 'guest');
+  } else if (sync.restartIn > 0 && sync.goals.length) {
+    showGoal(sync.goals[sync.goals.length - 1]!, nameOf);
+  }
 }

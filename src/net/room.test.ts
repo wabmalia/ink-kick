@@ -182,3 +182,46 @@ describe('host room', () => {
     expect(r.match!.rules).toEqual({ kind: 'first', goals: 7 });
   });
 });
+
+
+it('restores a missed winning goal and final result on rejoining', () => {
+  const r = room();
+  const first = link();
+  r.join('a', 'Ana', first.l);
+  r.setRules({ kind: 'timed', seconds: 180 });
+  r.start();
+  const matchId = r.matchId;
+  skipCoin(r);
+  r.match!.coinPending = false;
+  r.match!.clock = 181;
+  r.match!.score.gold = 1;
+  r.match!.goals.push({ team: 'gold', scorer: 'host', own: false, at: 179 });
+  r.disconnect('a', first.l);
+  expect(r.step(idle).some(e => e.type === 'end')).toBe(true);
+  const returning = link();
+  r.join('a', 'Ana', returning.l);
+  const sync = returning.sent.find(m => m.t === 'sync');
+  expect(sync).toMatchObject({ t: 'sync', sync: {
+    snap: { matchId, score: [1, 0] }, over: { winner: 'gold' },
+    goals: [{ scorer: 'host', at: 179 }],
+  } });
+  r.end();
+  r.start();
+  expect(r.matchId).not.toBe(matchId);
+  expect(r.tick).toBe(0);
+  expect(r.sync()!.over).toBeNull();
+});
+
+it('sends the current goal pause in a reconnect baseline without replaying old events', () => {
+  const r = room();
+  r.start();
+  r.match!.restartIn = 2;
+  r.match!.holdFor = 0;
+  r.match!.goals.push({ team: 'red', scorer: 'host', own: true, at: 10 });
+  const a = link();
+  r.join('a', 'Ana', a.l);
+  expect(a.sent.find(m => m.t === 'sync')).toMatchObject({ t: 'sync', sync: {
+    restartIn: 2, goals: [{ team: 'red', own: true, at: 10 }], over: null,
+  } });
+  expect(a.sent.some(m => m.t === 'events')).toBe(false);
+});

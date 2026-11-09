@@ -18,7 +18,7 @@ forever once a room had already been joined.
 
 - Control carries identity, room changes and match events. State carries
   player inputs and snapshots. Both send a ping every second and answer
-  with the current host tick. Replies confirm traffic in both directions;
+  with the current host tick and the sender's timestamp. Replies confirm traffic in both directions;
   incoming snapshots alone do not prove player inputs can reach the host.
 - Eight seconds without acknowledgements on either connection starts
   recovery. Missing snapshots also trigger recovery if heartbeat replies
@@ -43,6 +43,26 @@ forever once a room had already been joined.
   input or snapshot replaces the skipped update. Send exceptions close the
   failing connection instead of interrupting the host's simulation loop.
 
+## Match consistency
+
+Protocol version 2 is required on both ends. An old host or guest is rejected
+with a message to refresh every browser. Each kickoff has a new random match
+ID, carried by room state, inputs, snapshots, events and heartbeat replies.
+Clients reject old-match traffic even if its tick/sequence is higher.
+
+On joining or starting a match, the reliable control connection sends a
+baseline (`sync`): the current snapshot, goal history, winner, goal pause,
+coin-toss hold and kickoff team. Guests reset their interpolation/effect
+queues to that baseline. A returning guest sees the final scoreboard even
+if they missed the winning goal, or the goal banner if play is still paused.
+Ordinary snapshots remain small; historical goals are not sent 30 times a
+second. Inputs wait until a baseline for the current match has arrived.
+
+Only advancing snapshots update freshness diagnostics. The interpolation
+buffer never resynchronizes to an old arriving packet, rejects another
+match until reset, and retains at most 64 snapshots. Event queues are also
+bounded while the tab is not drawing.
+
 Recovery logs begin with `[ink-kick] reconnecting` and include a reason,
 the latest snapshot and host ticks, and acknowledgement ages. These are
 useful evidence if another live test stalls.
@@ -59,10 +79,32 @@ The queue guard uses the browser's
 [`bufferedAmount`](https://developer.mozilla.org/en-US/docs/Web/API/RTCDataChannel/bufferedAmount).
 It limits new application sends; it cannot cancel already queued packets.
 
-The host still runs the simulation in its browser's animation frames.
-Putting the host tab in the background can pause the game for everyone.
-Guests still draw interpolated snapshots without local input prediction.
-These changes repair recovery, not hosting continuity or latency hiding.
+The host now steps on a timer independent of animation frames and queues
+visual events until drawing resumes. Timer stalls catch up by at most six
+simulation steps per callback, avoiding a burst of stale inputs/updates.
+Browsers can still throttle timers or suspend the tab entirely. This
+improves background hosting but does not provide an always-on guarantee;
+a server would be needed for that. Guests still interpolate snapshots
+without local movement prediction. Neither prediction nor rendering quality
+has been changed in this pass.
+
+## Diagnostics
+
+In a guest's browser console, run `await inkKickNetwork()`. It reports:
+
+- last heartbeat RTT for each connection, in milliseconds;
+- time since the latest accepted snapshot, plus an exponentially smoothed
+  arrival jitter estimate relative to host tick spacing;
+- browser queue size for control and state, in bytes;
+- direct/relay/unknown route for each connection, read on demand from the
+  selected ICE candidate pair using
+  [`getStats()`](https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/getStats);
+- reconnect count and most recent reason, scoped to the current session.
+
+It returns no ICE addresses or relay credentials. Null means a measurement
+is not available yet. Route discovery may return unknown where browser
+statistics do not expose the selected pair. The host currently exposes no
+per-guest metric table; capture this on the affected guest.
 
 ## Verification
 
@@ -70,12 +112,23 @@ These changes repair recovery, not hosting continuity or latency hiding.
 PeerJS connections and timers: silent state stalls, one-way failures,
 snapshot black holes, close/error/ICE failures, retry deadlines, stale
 callbacks, queue pressure, player reclamation and leaving during recovery.
-`src/net/room.test.ts` covers expired input and match restarts.
+`src/net/room.test.ts` covers expired input, match restarts and recovery of
+missed results. `src/game/state.test.ts` covers old packets and buffer reset.
+`src/net/host-clock.test.ts` verifies that hosting delivers snapshots without
+animation frames. `src/ui/match-ui.test.ts` checks scoreboard/banner recovery
+with a minimal DOM substitute.
+
+A browser smoke check was attempted in this environment, but listening on
+the local Vite port was blocked (`EPERM`) and headless Chrome could not
+launch. Actual ICE, TURN and browser suspension behavior remain live checks.
 
 For a live check, reload the host and all guests onto the same build before
 starting a new room. Disconnect a guest's network for over eight seconds,
 restore it, and check that they rejoin as the same player without refreshing.
 Repeat with the other two players continuing their match, and check a
-short interruption also recovers. Capture browser console logs if it fails.
+short interruption also recovers. Also test disconnecting before the final
+goal, letting the host start another match while a guest is away, and
+switching away from the host's tab. Capture `await inkKickNetwork()` and
+browser console logs if it fails.
 Real browser/WebRTC, relay paths and international network behavior still
 need that live check; the automated tests replace the transports.

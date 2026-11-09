@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RoomView, Snapshot } from './protocol';
+import { PROTOCOL_VERSION, type RoomView, type Snapshot } from './protocol';
 
 // Exercise the real session state machine, replacing only the browser and
 // PeerJS transports. Events can be lost, delayed or delivered after close.
@@ -51,11 +51,11 @@ vi.mock('./relay', () => ({ iceServers: vi.fn(async () => undefined) }));
 
 let session: import('./session').Session;
 const room: RoomView = {
-  code: 'ABCDE', hostId: 'host', phase: 'match',
+  version: PROTOCOL_VERSION, matchId: 'match-a', code: 'ABCDE', hostId: 'host', phase: 'match',
   members: [{ id: 'host', name: 'Host', team: 'gold', connected: true }],
   rules: { kind: 'first', goals: 3 }, keepers: false,
 };
-const snap = (tick: number): Snapshot => ({ tick, ball: [0, 0], owner: null, score: [0, 0], clock: 0, players: [] });
+const snap = (tick: number): Snapshot => ({ matchId: 'match-a', tick, ball: [0, 0], owner: null, score: [0, 0], clock: 0, players: [] });
 const idle = { x: 0, y: 0, kick: false, sprint: false };
 const latestPeer = () => transport.peers[transport.peers.length - 1]!;
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); };
@@ -91,15 +91,16 @@ function handshake() {
   // State is opened only after the host has acknowledged our identity.
   expect(peer.connections).toHaveLength(1);
   control.emit('data', { t: 'room', room });
+  control.emit('data', { t: 'sync', sync: { snap: snap(0), goals: [], over: null, restartIn: 0, holdFor: 0, kickoffTeam: 'gold' } });
   const state = peer.connections[1]!;
   expect(state.metadata).toEqual({ id: session.me, controlId: control.connectionId });
   state.ready();
-  state.emit('data', { t: 'pong', tick: 0 });
+  state.emit('data', { t: 'pong', matchId: room.matchId, sentAt: performance.now(), tick: 0 });
   return { peer, control, state };
 }
 function keepAlive(control: InstanceType<typeof transport.Connection>, state?: InstanceType<typeof transport.Connection>, tick = 0) {
-  control.emit('data', { t: 'pong', tick });
-  state?.emit('data', { t: 'pong', tick });
+  control.emit('data', { t: 'pong', matchId: room.matchId, sentAt: performance.now(), tick });
+  state?.emit('data', { t: 'pong', matchId: room.matchId, sentAt: performance.now(), tick });
 }
 
 describe('guest connection recovery', () => {
@@ -176,8 +177,8 @@ describe('guest connection recovery', () => {
     }
     expect(peer.destroyed).toBe(false);
     expect(session.linked).toBe(true);
-    expect(control.sent).toContainEqual({ t: 'ping' });
-    expect(state.sent).toContainEqual({ t: 'ping' });
+    expect(control.sent).toContainEqual(expect.objectContaining({ t: 'ping' }));
+    expect(state.sent).toContainEqual(expect.objectContaining({ t: 'ping' }));
   });
 
   it('gives a match started after a long lobby time to receive its first snapshot', async () => {
@@ -199,8 +200,8 @@ describe('guest connection recovery', () => {
     const { peer, control, state } = await join();
     state.emit('data', { t: 'snap', snap: snap(0) });
     for (let i = 0; i < 8; i++) {
-      state.emit('data', { t: 'pong', tick: 0 });
-      control.emit('data', { t: 'events', tick: 0, events: [] });
+      state.emit('data', { t: 'pong', matchId: room.matchId, sentAt: performance.now(), tick: 0 });
+      control.emit('data', { t: 'events', matchId: room.matchId, tick: 0, events: [] });
       await vi.advanceTimersByTimeAsync(1000);
     }
     expect(peer.destroyed).toBe(true);
@@ -238,7 +239,104 @@ describe('guest connection recovery', () => {
     expect(state.sent).toHaveLength(1);
     state.dataChannel.bufferedAmount = 0;
     session.sendInput({ ...idle, x: 1 });
-    expect(state.sent[1]).toMatchObject({ t: 'input', input: { x: 1, seq: 102 } });
+    expect(state.sent[1]).toMatchObject({ t: 'input', matchId: room.matchId, input: { x: 1, seq: 102 } });
+  });
+
+  it('rejects an incompatible host with a clear refresh message', async () => {
+    const { control, peer } = await join();
+    control.emit('data', { t: 'room', room: { ...room, version: undefined } });
+    expect(session.status).toBe('error');
+    expect(session.message).toMatch(/versions differ.*Refresh/);
+    expect(peer.destroyed).toBe(true);
+  });
+
+  it('restores a final result through a reliable sync and rejects stale match traffic', async () => {
+    const { control, state } = await join();
+    const synced = vi.fn();
+    const received = vi.fn();
+    const events = vi.fn();
+    session.listen({ sync: synced, snap: received, events });
+    const final = { snap: snap(500), goals: [{ team: 'gold', scorer: 'host', own: false, at: 100 }],
+      over: { winner: 'gold' }, restartIn: 0, holdFor: 0, kickoffTeam: 'red' };
+    control.emit('data', { t: 'sync', sync: final });
+    expect(synced).toHaveBeenLastCalledWith(final);
+    state.emit('data', { t: 'snap', snap: snap(499) });
+    control.emit('data', { t: 'events', matchId: room.matchId, tick: 500, events: [{ type: 'kickoff' }] });
+    expect(received).not.toHaveBeenCalled();
+    expect(events).not.toHaveBeenCalled();
+    const nextRoom = { ...room, matchId: 'match-b' };
+    control.emit('data', { t: 'room', room: nextRoom });
+    session.sendInput(idle);
+    expect(state.sent.filter(m => (m as { t: string }).t === 'input')).toHaveLength(0);
+    control.emit('data', { t: 'sync', sync: { ...final, snap: { ...snap(0), matchId: 'match-b' }, over: null, goals: [] } });
+    state.emit('data', { t: 'snap', snap: snap(1000) });
+    control.emit('data', { t: 'events', matchId: 'match-a', tick: 1000, events: [{ type: 'kickoff' }] });
+    control.emit('data', { t: 'sync', sync: final });
+    expect(synced).toHaveBeenCalledTimes(2);
+    expect(received).not.toHaveBeenCalled();
+    expect(events).not.toHaveBeenCalled();
+    session.sendInput(idle);
+    expect(state.sent).toContainEqual(expect.objectContaining({ t: 'input', matchId: 'match-b' }));
+    state.emit('data', { t: 'snap', snap: { ...snap(2), matchId: 'match-b' } });
+    expect(received).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejoins a different match after an outage and waits for its baseline', async () => {
+    const first = await join();
+    first.state.close();
+    await vi.advanceTimersByTimeAsync(2500);
+    const peer = latestPeer();
+    const received = vi.fn();
+    session.listen({ snap: received });
+    peer.emit('open');
+    const control = peer.connections[0]!;
+    control.ready();
+    control.emit('data', { t: 'room', room: { ...room, matchId: 'match-b' } });
+    const state = peer.connections[1]!;
+    state.ready();
+    state.emit('data', { t: 'snap', snap: { ...snap(2), matchId: 'match-b' } });
+    expect(received).not.toHaveBeenCalled();
+    expect(session.linked).toBe(false);
+    control.emit('data', { t: 'sync', sync: {
+      snap: { ...snap(3), matchId: 'match-b' }, goals: [], over: null,
+      restartIn: 0, holdFor: 0, kickoffTeam: 'gold',
+    } });
+    state.emit('data', { t: 'pong', sentAt: performance.now(), matchId: 'match-b', tick: 3 });
+    state.emit('data', { t: 'snap', snap: snap(9000) });
+    state.emit('data', { t: 'snap', snap: { ...snap(4), matchId: 'match-b' } });
+    expect(session.linked).toBe(true);
+    expect(received).toHaveBeenCalledTimes(1);
+    expect(received).toHaveBeenCalledWith(expect.objectContaining({ matchId: 'match-b', tick: 4 }));
+  });
+
+  it('does not reset healthy game transports for a signaling network error', async () => {
+    const { peer } = await join();
+    peer.emit('error', { type: 'network' });
+    expect(peer.destroyed).toBe(false);
+    expect(session.linked).toBe(true);
+  });
+
+  it('reports RTT, snapshot jitter, queue pressure and relay route without IP addresses', async () => {
+    const { control, state } = await join();
+    await vi.advanceTimersByTimeAsync(100);
+    control.emit('data', { t: 'pong', matchId: room.matchId, sentAt: 50, tick: 0 });
+    state.emit('data', { t: 'snap', snap: snap(6) });
+    await vi.advanceTimersByTimeAsync(150);
+    state.emit('data', { t: 'snap', snap: snap(12) });
+    state.dataChannel.bufferedAmount = 2048;
+    const stats = new Map([
+      ['transport', { type: 'transport', selectedCandidatePairId: 'pair' }],
+      ['pair', { type: 'candidate-pair', localCandidateId: 'local', remoteCandidateId: 'remote' }],
+      ['local', { type: 'local-candidate', candidateType: 'relay', address: 'private-address' }],
+      ['remote', { type: 'remote-candidate', candidateType: 'host', address: 'remote-address' }],
+    ]);
+    Object.assign(state.peerConnection, { getStats: async () => stats });
+    const result = await session.diagnostics();
+    expect(result.control.rttMs).toBe(50);
+    expect(result.state).toMatchObject({ route: 'relay', bufferedBytes: 2048 });
+    expect(result.snapshotJitterMs).toBeGreaterThan(0);
+    expect(result.snapshotAgeMs).toBe(0);
+    expect(JSON.stringify(result)).not.toMatch(/private-address|remote-address/);
   });
 
   it('cancels pending recovery on leaving the room', async () => {
@@ -263,7 +361,7 @@ describe('host transport isolation', () => {
     const control = new transport.Connection(guestPeer, 'control');
     peer.emit('connection', control);
     control.ready();
-    control.emit('data', { t: 'hello', id, name: 'Guest' });
+    control.emit('data', { t: 'hello', version: PROTOCOL_VERSION, id, name: 'Guest' });
     const state = new transport.Connection(guestPeer, 'state', { id, controlId: control.connectionId });
     peer.emit('connection', state);
     state.ready();
@@ -279,14 +377,14 @@ describe('host transport isolation', () => {
     first.state.emit('open');
     expect(session.room!.members.find(m => m.id === 'guest')!.connected).toBe(true);
     expect(session.host!.match!.players.filter(p => p.id === 'guest')).toHaveLength(1);
-    first.state.emit('data', { t: 'input', input: { ...idle, seq: 9999, y: -1 } });
-    next.state.emit('data', { t: 'input', input: { ...idle, seq: 1, y: 1 } });
+    first.state.emit('data', { t: 'input', matchId: session.host!.matchId, input: { ...idle, seq: 9999, y: -1 } });
+    next.state.emit('data', { t: 'input', matchId: session.host!.matchId, input: { ...idle, seq: 1, y: 1 } });
     session.host!.match!.holdFor = 0;
     for (let i = 0; i < 10; i++) session.host!.step(idle);
     expect(session.host!.match!.players.find(p => p.id === 'guest')!.vy).toBeGreaterThan(0);
     for (const conn of [next.control, next.state]) {
-      conn.emit('data', { t: 'ping' });
-      expect(conn.sent).toContainEqual({ t: 'pong', tick: 10 });
+      conn.emit('data', { t: 'ping', sentAt: performance.now() });
+      expect(conn.sent).toContainEqual({ t: 'pong', matchId: session.host!.matchId, sentAt: performance.now(), tick: 10 });
     }
     const count = next.state.sent.length;
     next.state.dataChannel.bufferedAmount = 32 * 1024;
@@ -311,6 +409,31 @@ describe('host transport isolation', () => {
     for (let i = 0; i < 12; i++) session.host!.step(idle);
     expect(returning.state.sent.some(m => (m as { t: string }).t === 'snap')).toBe(true);
     expect(session.host!.match!.players).toHaveLength(3);
+  });
+
+  it('rejects legacy guests before they can claim a player', async () => {
+    const peer = await host();
+    const conn = new transport.Connection('old-peer', 'control');
+    peer.emit('connection', conn);
+    conn.ready();
+    conn.emit('data', { t: 'hello', id: 'guest', name: 'Guest' });
+    expect(conn.sent).toContainEqual(expect.objectContaining({ t: 'rejected', reason: expect.stringMatching(/Refresh/) }));
+    expect(session.room!.members).toHaveLength(1);
+    expect(conn.open).toBe(false);
+  });
+
+  it('ignores delayed inputs from a previous match even with a higher sequence', async () => {
+    const peer = await host();
+    const { state } = guest(peer);
+    session.start();
+    const old = session.host!.matchId;
+    session.end();
+    session.start();
+    session.host!.match!.holdFor = 0;
+    state.emit('data', { t: 'input', matchId: old, input: { ...idle, seq: 9999, y: -1 } });
+    state.emit('data', { t: 'input', matchId: session.host!.matchId, input: { ...idle, seq: 1, y: 1 } });
+    for (let i = 0; i < 10; i++) session.host!.step(idle);
+    expect(session.host!.match!.players.find(p => p.id === 'guest')!.vy).toBeGreaterThan(0);
   });
 
   it('marks a guest disconnected if their state connection closes', async () => {

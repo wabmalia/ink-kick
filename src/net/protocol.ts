@@ -1,4 +1,4 @@
-import type { Action, Input, Rules, SimEvent, Team } from '../engine/sim';
+import type { Action, GoalRecord, Input, Rules, SimEvent, Team } from '../engine/sim';
 import type { Attributes } from '../game/attributes';
 
 // Messages between the host and guests. Each guest holds two connections to
@@ -9,6 +9,8 @@ import type { Attributes } from '../game/attributes';
 // Room codes are registered with the PeerJS broker under this prefix.
 export const PEER_PREFIX = 'inkkick-';
 export const NAME_MAX = 16;
+export const PROTOCOL_VERSION = 2;
+export const VERSION_MESSAGE = 'Game versions differ. Refresh the game in every browser, then try again.';
 
 export interface MemberView {
   id: string;
@@ -18,6 +20,8 @@ export interface MemberView {
 }
 
 export interface RoomView {
+  version: number;
+  matchId: string | null;
   code: string;
   hostId: string;
   phase: 'lobby' | 'match';
@@ -39,6 +43,7 @@ export type PlayerState = [
 ];
 
 export interface Snapshot {
+  matchId: string;
   tick: number;
   ball: [number, number];
   owner: string | null;
@@ -47,24 +52,35 @@ export interface Snapshot {
   players: PlayerState[];
 }
 
+/** Reliable baseline on joining/rejoining; visual events need not be replayed. */
+export interface MatchSync {
+  snap: Snapshot;
+  goals: GoalRecord[];
+  over: { winner: Team | null } | null;
+  restartIn: number;
+  holdFor: number;
+  kickoffTeam: Team;
+}
+
 export interface WireInput extends Input {
   // Increases with every input a guest sends; older ones arriving late are dropped.
   seq: number;
 }
 
 export type ToHost =
-  | { t: 'ping' }
-  | { t: 'hello'; id: string; name: string; attrs: Attributes }
+  | { t: 'ping'; sentAt: number }
+  | { t: 'hello'; version: number; id: string; name: string; attrs: Attributes }
   | { t: 'team'; team: Team }
   // Attributes changed in the lobby; used from the next kickoff.
   | { t: 'attrs'; attrs: Attributes }
-  | { t: 'input'; input: WireInput };
+  | { t: 'input'; matchId: string; input: WireInput };
 
 export type ToClient =
-  | { t: 'pong'; tick: number }
+  | { t: 'pong'; tick: number; matchId: string | null; sentAt: number }
   | { t: 'room'; room: RoomView }
+  | { t: 'sync'; sync: MatchSync }
   // What happened on a tick, for the guest to play when it draws that tick.
-  | { t: 'events'; tick: number; events: SimEvent[] }
+  | { t: 'events'; matchId: string; tick: number; events: SimEvent[] }
   | { t: 'snap'; snap: Snapshot }
   | { t: 'rejected'; reason: string };
 

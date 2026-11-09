@@ -7,7 +7,7 @@ import { NO_INPUT } from '../engine/input';
 import { cleanRules } from '../game/rules';
 import { toSnapshot } from '../game/state';
 import { cleanAttributes, type Attributes } from '../game/attributes';
-import { cleanName, type MemberView, type RoomView, type ToClient, type WireInput } from './protocol';
+import { PROTOCOL_VERSION, cleanName, type MatchSync, type MemberView, type RoomView, type ToClient, type WireInput } from './protocol';
 
 // The room as the host runs it: who's in, on which team, and the match once
 // it kicks off. It knows nothing about PeerJS; each guest is a Link.
@@ -38,6 +38,7 @@ export class HostRoom {
   keepers = false;
   match: Match | null = null;
   tick = 0;
+  matchId: string | null = null;
 
   constructor(readonly code: string, readonly hostId: string, hostName: string, private listener: RoomListener, hostAttrs?: Attributes) {
     this.members.push({ id: hostId, name: cleanName(hostName), attrs: cleanAttributes(hostAttrs), team: 'gold', connected: true, link: null, input: null, inputTick: 0 });
@@ -45,6 +46,8 @@ export class HostRoom {
 
   view(): RoomView {
     return {
+      version: PROTOCOL_VERSION,
+      matchId: this.matchId,
       code: this.code,
       hostId: this.hostId,
       phase: this.phase,
@@ -78,6 +81,15 @@ export class HostRoom {
     }
     if (this.match && !this.match.players.some(p => p.id === id)) addPlayer(this.match, createPlayer(id, m.team, m.attrs));
     this.changed();
+    const sync = this.sync();
+    if (sync) link.send({ t: 'sync', sync });
+  }
+
+  sync(): MatchSync | null {
+    if (!this.match || !this.matchId) return null;
+    const m = this.match;
+    return { snap: toSnapshot(m, this.tick, this.matchId), goals: m.goals.map(g => ({ ...g })),
+      over: m.over ? { ...m.over } : null, restartIn: m.restartIn, holdFor: m.holdFor, kickoffTeam: m.kickoffTeam };
   }
 
   // Their player stays on the pitch, standing still, until they come back.
@@ -127,17 +139,21 @@ export class HostRoom {
     if (this.phase !== 'lobby') return;
     // Anyone who left in the lobby is gone for good.
     this.members = this.members.filter(m => m.connected);
+    this.matchId = crypto.randomUUID();
     this.phase = 'match';
     this.tick = 0;
     for (const m of this.members) m.inputTick = -Infinity;
     const kickoff = Math.random() < 0.5 ? 'gold' : 'red';
     this.match = createMatch(this.members.map(m => createPlayer(m.id, m.team, m.attrs)), { kickoff, coin: true, rules: this.rules, keepers: this.keepers });
     this.changed();
+    const sync = this.sync()!;
+    for (const m of this.members) m.link?.send({ t: 'sync', sync });
   }
 
   end() {
     if (this.phase !== 'match') return;
     this.phase = 'lobby';
+    this.matchId = null;
     this.match = null;
     this.changed();
   }
@@ -155,11 +171,11 @@ export class HostRoom {
     const events = step(match, inputs);
     this.tick++;
     if (events.length) {
-      const msg: ToClient = { t: 'events', tick: this.tick, events };
+      const msg: ToClient = { t: 'events', matchId: this.matchId!, tick: this.tick, events };
       for (const m of this.members) m.link?.send(msg);
     }
     if (this.tick % CONFIG.net.snapshotEvery === 0) {
-      const msg: ToClient = { t: 'snap', snap: toSnapshot(match, this.tick) };
+      const msg: ToClient = { t: 'snap', snap: toSnapshot(match, this.tick, this.matchId!) };
       for (const m of this.members) m.link?.sendState(msg);
     }
     return events;

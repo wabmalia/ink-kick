@@ -1,10 +1,11 @@
 import { Peer, type DataConnection, type PeerOptions } from 'peerjs';
+import { CONFIG } from '../config';
 import type { Input, Rules, SimEvent, Team } from '../engine/sim';
 import { loadKeepers, loadRules, saveKeepers, saveRules } from '../game/rules';
 import { iceServers } from './relay';
 import {
-  cleanInput, cleanName, newRoomCode, PEER_PREFIX, validTeam,
-  type RoomView, type Snapshot, type ToClient, type ToHost,
+  cleanInput, cleanName, newRoomCode, PEER_PREFIX, PROTOCOL_VERSION, VERSION_MESSAGE, validTeam,
+  type MatchSync, type RoomView, type Snapshot, type ToClient, type ToHost,
 } from './protocol';
 import { HostRoom, type Link } from './room';
 import { loadAttributes, type Attributes } from '../game/attributes';
@@ -19,6 +20,7 @@ export type Status = 'home' | 'connecting' | 'room' | 'solo' | 'training' | 'err
 export interface SessionListener {
   change?(): void;
   snap?(snap: Snapshot): void;
+  sync?(sync: MatchSync): void;
   events?(tick: number, events: SimEvent[]): void;
 }
 
@@ -202,8 +204,8 @@ export class Session {
       conn.on('data', d => {
         if (this.host !== host || this.states.get(id) !== conn || !paired()) return;
         const msg = d as ToHost;
-        if (msg?.t === 'ping') return send(conn, { t: 'pong', tick: host.tick }, true);
-        if (msg?.t !== 'input') return;
+        if (msg?.t === 'ping') return send(conn, { t: 'pong', tick: host.tick, matchId: host.matchId, sentAt: msg.sentAt }, true);
+        if (msg?.t !== 'input' || msg.matchId !== host.matchId) return;
         const input = cleanInput(msg.input);
         if (input) host.input(id, input);
       });
@@ -230,6 +232,11 @@ export class Session {
       if (this.host !== host) return;
       const msg = d as ToHost;
       if (msg?.t === 'hello' && !id && typeof msg.id === 'string' && msg.id && msg.id !== this.me) {
+        if (msg.version !== PROTOCOL_VERSION) {
+          send(conn, { t: 'rejected', reason: VERSION_MESSAGE });
+          conn.close({ flush: true });
+          return;
+        }
         id = msg.id;
         const oldControl = this.controls.get(id);
         const oldState = this.states.get(id);
@@ -241,7 +248,7 @@ export class Session {
       } else if (id && this.controls.get(id) !== conn) {
         return;
       } else if (msg?.t === 'ping' && id) {
-        send(conn, { t: 'pong', tick: host.tick });
+        send(conn, { t: 'pong', tick: host.tick, matchId: host.matchId, sentAt: msg.sentAt });
       } else if (msg?.t === 'team' && id && validTeam(msg.team)) {
         host.setTeam(id, msg.team);
       } else if (msg?.t === 'attrs' && id) {
@@ -327,6 +334,8 @@ export class Session {
     });
     peer.on('error', err => {
       if (this.peer !== peer) return;
+      // Signaling can reconnect while established WebRTC transports carry on.
+      if ((err.type === 'network' || err.type === 'server-error') && this.control?.open && this.state?.open) return;
       if (this.room) return this.scheduleReconnect(`peer-${err.type}`);
       if (err.type === 'peer-unavailable') {
         return this.fail(`Couldn't find room ${code}. Check the code, and that the host still has the page open.`);
@@ -341,18 +350,81 @@ export class Session {
   private snapshotTick = -1;
   private hostTick = -1;
   private stateReady = false;
+  private syncedMatchId: string | null = null;
+  private eventTick = -1;
+  private reconnectCount = 0;
+  private reconnectReason: string | null = null;
+  private rtt = { control: null as number | null, state: null as number | null };
+  private jitterMs = 0;
+  private previousSnapshot: { tick: number; at: number } | null = null;
+
+  /** Safe to share: no candidate addresses or relay credentials. */
+  async diagnostics() {
+    const route = async (conn: DataConnection | null) => {
+      if (!conn?.peerConnection?.getStats) return 'unknown';
+      try {
+        const stats = await conn.peerConnection.getStats();
+        let selected: RTCStats | undefined;
+        stats.forEach(s => {
+          if (s.type === 'transport' && s.selectedCandidatePairId) selected = stats.get(s.selectedCandidatePairId);
+        });
+        if (!selected) stats.forEach(s => {
+          if (s.type === 'candidate-pair' && s.nominated && s.state === 'succeeded') selected = s;
+        });
+        if (!selected) return 'unknown';
+        const pair = selected as RTCStats & { localCandidateId: string; remoteCandidateId: string };
+        return [stats.get(pair.localCandidateId), stats.get(pair.remoteCandidateId)]
+          .some(c => c?.candidateType === 'relay') ? 'relay' : 'direct';
+      } catch { return 'unknown'; }
+    };
+    const [controlRoute, stateRoute] = await Promise.all([route(this.control), route(this.state)]);
+    return {
+      linked: this.linked, matchId: this.room?.matchId ?? null,
+      reconnectCount: this.reconnectCount, reconnectReason: this.reconnectReason,
+      snapshotAgeMs: this.previousSnapshot ? performance.now() - this.lastSnapshotAt : null,
+      snapshotJitterMs: this.jitterMs,
+      control: { rttMs: this.rtt.control, bufferedBytes: this.control?.dataChannel?.bufferedAmount ?? 0, route: controlRoute },
+      state: { rttMs: this.rtt.state, bufferedBytes: this.state?.dataChannel?.bufferedAmount ?? 0, route: stateRoute },
+    };
+  }
+
+  private pong(msg: Extract<ToClient, { t: 'pong' }>, channel: 'control' | 'state') {
+    const age = performance.now() - msg.sentAt;
+    if (!Number.isFinite(age) || age < 0 || age >= SILENCE_MS || !Number.isSafeInteger(msg.tick) || msg.tick < 0) return false;
+    this.rtt[channel] = age;
+    if (msg.matchId === this.room?.matchId) this.hostTick = Math.max(this.hostTick, msg.tick);
+    return true;
+  }
+
+  private snapshot(snap: Snapshot) {
+    if (!snap || !Number.isSafeInteger(snap.tick) || snap.tick < 0) return;
+    if (snap.matchId !== this.room?.matchId || snap.matchId !== this.syncedMatchId || snap.tick <= this.snapshotTick) return;
+    const at = performance.now();
+    if (this.previousSnapshot) {
+      const variation = Math.abs((at - this.previousSnapshot.at) - (snap.tick - this.previousSnapshot.tick) * CONFIG.tick * 1000);
+      this.jitterMs += (variation - this.jitterMs) / 16;
+    }
+    this.previousSnapshot = { tick: snap.tick, at };
+    this.lastSnapshotAt = at;
+    this.snapshotTick = snap.tick;
+    this.emit('snap', snap);
+  }
 
   // Watch application traffic, not just WebRTC's open flag. A transport
   // can silently stop delivering while its sibling connection stays open.
   private watchGuest(peer: Peer) {
     clearInterval(this.monitor);
-    const started = Date.now();
+    const started = performance.now();
     this.lastControlAt = this.lastStateAt = this.lastSnapshotAt = started;
     this.snapshotTick = this.hostTick = -1;
     this.stateReady = false;
+    this.syncedMatchId = null;
+    this.previousSnapshot = null;
+    this.jitterMs = 0;
+    this.rtt = { control: null, state: null };
     this.monitor = setInterval(() => {
       if (this.peer !== peer) return;
-      const now = Date.now();
+      const now = performance.now();
       if (!this.control?.open || !this.state?.open || !this.room) {
         if (now - started < JOIN_TIMEOUT_MS) return;
         if (this.room) this.scheduleReconnect('connection-timeout');
@@ -366,13 +438,13 @@ export class Session {
       if (this.room.phase === 'match' && this.hostTick > this.snapshotTick && now - this.lastSnapshotAt >= SILENCE_MS) {
         return this.scheduleReconnect('snapshot-timeout');
       }
-      send(this.control, { t: 'ping' });
-      send(this.state, { t: 'ping' }, true);
+      send(this.control, { t: 'ping', sentAt: performance.now() });
+      send(this.state, { t: 'ping', sentAt: performance.now() }, true);
     }, HEARTBEAT_MS);
   }
 
   private markLinked() {
-    if (!this.linked && this.room && this.control?.open && this.state?.open && this.stateReady) this.set({ linked: true });
+    if (!this.linked && this.room && (!this.room.matchId || this.syncedMatchId === this.room.matchId) && this.control?.open && this.state?.open && this.stateReady) this.set({ linked: true });
   }
 
   private connectToHost() {
@@ -386,14 +458,15 @@ export class Session {
     });
     conn.on('open', () => {
       if (!current()) return;
-      this.lastControlAt = Date.now();
-      this.sendControl({ t: 'hello', id: this.me, name: this.name || 'Player', attrs: loadAttributes() });
+      this.lastControlAt = performance.now();
+      this.sendControl({ t: 'hello', version: PROTOCOL_VERSION, id: this.me, name: this.name || 'Player', attrs: loadAttributes() });
     });
     conn.on('data', d => {
       if (!current()) return;
       const msg = d as ToClient;
       if (!msg || typeof msg !== 'object') return;
-      if (msg.t === 'room' || msg.t === 'pong') this.lastControlAt = Date.now();
+      if (msg.t === 'room') this.lastControlAt = performance.now();
+      if (msg.t === 'pong' && !this.pong(msg, 'control')) return;
       this.receive(msg);
       // Wait for the hello acknowledgement before opening state, so the
       // host can bind both connections to the same player and attempt.
@@ -403,25 +476,23 @@ export class Session {
           metadata: { id: this.me, controlId: conn.connectionId },
         });
         this.state = state;
-        this.lastStateAt = this.lastSnapshotAt = Date.now();
+        this.lastStateAt = this.lastSnapshotAt = performance.now();
         this.watchConnection(state, () => {
           if (this.state === state) this.scheduleReconnect('state-closed');
         });
         state.on('open', () => {
           if (this.state !== state) return;
-          this.lastStateAt = this.lastSnapshotAt = Date.now();
-          send(state, { t: 'ping' }, true);
+          this.lastStateAt = this.lastSnapshotAt = performance.now();
+          send(state, { t: 'ping', sentAt: performance.now() }, true);
         });
         state.on('data', d => {
           if (this.state !== state) return;
           const msg = d as ToClient;
           if (msg?.t === 'pong') {
-            this.lastStateAt = Date.now();
-            this.hostTick = msg.tick;
+            if (!this.pong(msg, 'state')) return;
+            this.lastStateAt = performance.now();
           } else if (msg?.t === 'snap') {
-            this.lastSnapshotAt = Date.now();
-            this.snapshotTick = Math.max(this.snapshotTick, msg.snap.tick);
-            this.emit('snap', msg.snap);
+            this.snapshot(msg.snap);
           } else return;
           this.stateReady = true;
           this.markLinked();
@@ -444,10 +515,12 @@ export class Session {
 
   private scheduleReconnect(reason: string) {
     if (this.role !== 'client' || this.retry !== undefined) return;
+    this.reconnectCount++;
+    this.reconnectReason = reason;
     console.warn('[ink-kick] reconnecting', {
       reason, snapshotTick: this.snapshotTick, hostTick: this.hostTick,
-      controlSilenceMs: Date.now() - this.lastControlAt,
-      stateSilenceMs: Date.now() - this.lastStateAt,
+      controlSilenceMs: performance.now() - this.lastControlAt,
+      stateSilenceMs: performance.now() - this.lastStateAt,
     });
     clearInterval(this.monitor);
     // Detach before closing: late callbacks must not affect the new pair.
@@ -467,17 +540,30 @@ export class Session {
   private receive(msg: ToClient) {
     switch (msg.t) {
       case 'pong':
-        this.hostTick = msg.tick;
+        this.lastControlAt = performance.now();
         break;
       case 'room':
-        if (msg.room.phase === 'match' && this.room?.phase !== 'match') {
-          this.lastSnapshotAt = Date.now();
+        if (msg.room?.version !== PROTOCOL_VERSION) return this.fail(VERSION_MESSAGE);
+        if (msg.room.matchId !== this.room?.matchId) {
+          this.syncedMatchId = null;
+          this.previousSnapshot = null;
+          this.lastSnapshotAt = performance.now();
           this.snapshotTick = this.hostTick = -1;
         }
         this.set({ room: msg.room, status: 'room' });
         location.hash = `#/join/${this.code}`;
         break;
+      case 'sync':
+        if (msg.sync.snap.matchId !== this.room?.matchId) return;
+        this.syncedMatchId = msg.sync.snap.matchId;
+        this.snapshotTick = this.eventTick = msg.sync.snap.tick;
+        this.lastSnapshotAt = performance.now();
+        this.previousSnapshot = { tick: msg.sync.snap.tick, at: this.lastSnapshotAt };
+        this.emit('sync', msg.sync);
+        break;
       case 'events':
+        if (msg.matchId !== this.syncedMatchId || msg.matchId !== this.room?.matchId || msg.tick <= this.eventTick) return;
+        this.eventTick = msg.tick;
         this.emit('events', msg.tick, msg.events);
         break;
       case 'rejected':
@@ -493,7 +579,8 @@ export class Session {
 
   /** A guest's input for this tick. */
   sendInput(input: Input) {
-    send(this.state, { t: 'input', input: { ...input, seq: ++this.seq } }, true);
+    if (!this.room?.matchId || this.syncedMatchId !== this.room.matchId) return;
+    send(this.state, { t: 'input', matchId: this.room.matchId, input: { ...input, seq: ++this.seq } }, true);
   }
 
   // Shared ----------------------------------------------------------------
@@ -523,6 +610,12 @@ export class Session {
     this.role = null;
     this.linked = true;
     this.seq = 0;
+    this.syncedMatchId = null;
+    this.previousSnapshot = null;
+    this.reconnectCount = 0;
+    this.reconnectReason = null;
+    this.jitterMs = 0;
+    this.rtt = { control: null, state: null };
   }
 
   private fail(message: string) {
