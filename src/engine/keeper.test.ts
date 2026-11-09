@@ -123,16 +123,19 @@ describe('goalkeepers', () => {
     expect(soft / n).toBeLessThan(0.15);
   });
 
-  it('keeps the ball when an opponent runs into it', () => {
+  it('keeps the ball, and stands firm, when an opponent runs into it', () => {
     const match = createMatch([createPlayer('me', 'gold'), createPlayer('them', 'red')], { keepers: true, seed: 2 });
     match.kickoffHeld = false;
     const gk = match.players.find(p => p.id === KEEPER_IDS.red)!;
     const me = match.players.find(p => p.id === 'me')!;
     Object.assign(match.ball, { x: gk.x - 0.6, y: gk.y, vx: 0, vy: 0 });
     match.owner = gk.id;
-    Object.assign(me, { x: gk.x - 3, y: gk.y, fx: 1, fy: 0, vx: 0, vy: 0 });
+    // Slightly off centre, so a push would also shove it sideways.
+    Object.assign(me, { x: gk.x - 3, y: gk.y + 0.2, fx: 1, fy: 0, vx: 0, vy: 0 });
+    const at = { x: gk.x, y: gk.y };
     for (let i = 0; i < ticks(0.8); i++) step(match, { me: { x: 1, y: 0, kick: false, sprint: true }, them: idle });
     expect(match.owner).toBe(gk.id);
+    expect(Math.hypot(gk.x - at.x, gk.y - at.y)).toBeLessThan(0.05);
   });
 
   it('kicks it out away from an opponent standing in the way', () => {

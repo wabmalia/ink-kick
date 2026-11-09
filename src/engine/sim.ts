@@ -377,11 +377,23 @@ export function step(match: Match, inputs: Record<string, Input>): SimEvent[] {
     const behind = q && (q.x - p.x) * p.fx + (q.y - p.y) * p.fy < 0 && Math.hypot(q.x - p.x, q.y - p.y) > p.r + q.r + 0.1;
     if (!q || (q.action !== 'slide' && q.action !== 'recover') || behind) p.hurdling = undefined;
   }
+  // A keeper with the ball in its hands stands firm: anyone running into it
+  // comes off it, not the other way round.
+  const firm = playerById(match, match.owner)?.keeper ? match.owner : null;
   for (let i = 0; i < players.length; i++) {
     for (let j = i + 1; j < players.length; j++) {
       const a = players[i]!;
       const b = players[j]!;
-      if (a.hurdling !== b.id && b.hurdling !== a.id) collide(a, b);
+      if (a.hurdling === b.id || b.hurdling === a.id) continue;
+      if (a.id === firm || b.id === firm) {
+        const keeper = a.id === firm ? a : b;
+        const mass = keeper.invMass;
+        keeper.invMass = 0;
+        collide(a, b);
+        keeper.invMass = mass;
+      } else {
+        collide(a, b);
+      }
     }
     for (const post of match.posts) collide(players[i]!, post);
     // The dribbler's own body doesn't get in the ball's way; anyone else's

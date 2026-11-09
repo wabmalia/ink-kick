@@ -17,6 +17,7 @@ export const RELEASE_NOTES: ReleaseDay[] = [
       'Keepers stand better, cover their near post and dive further: a corner curler is no longer a sure goal.',
       'Keepers dive with their hands out instead of sliding.',
       'Keepers close down anyone dribbling at them up close.',
+      'A keeper holding the ball can\'t be barged out of the way.',
       'Players keep striding while winding up a shot on the run.',
     ],
   },
