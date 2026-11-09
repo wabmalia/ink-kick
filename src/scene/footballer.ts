@@ -65,6 +65,11 @@ const SKID_TOO_SUDDEN = 220;
 // full from SKID_SPEED_FULL.
 const SKID_SPEED_FROM = 3;
 const SKID_SPEED_FULL = 4.5;
+// Still faster than this and braking less than SKID_SURE, it's easing off
+// (letting go of sprint brakes at about 24 m/s², but you run on), not a
+// skid; a reversal or a sharp turn brakes harder.
+const SKID_STILL_RUNNING = 4.6;
+const SKID_SURE = 26;
 // How quickly (per second) the planted leg swaps from in front to behind as
 // you turn round.
 const SKID_SWAP = 12;
@@ -230,7 +235,9 @@ export class Footballer {
       // Faster than any skid: put back on a spot for a restart, not braking.
       if (brake > SKID_TOO_SUDDEN) brake = 0;
       const fast = Math.max(0, Math.min(1, (v0 - SKID_SPEED_FROM) / (SKID_SPEED_FULL - SKID_SPEED_FROM)));
-      const want = fast * Math.max(0, Math.min(1, (brake - SKID_FROM) / SKID_FULL));
+      // Winding up a kick slows you on purpose: that's no skid.
+      const easing = pose.action === 'charge' || (Math.hypot(vx, vz) > SKID_STILL_RUNNING && brake < SKID_SURE);
+      const want = easing ? 0 : fast * Math.max(0, Math.min(1, (brake - SKID_FROM) / SKID_FULL));
       if (want > this.skidW) {
         this.skidW = Math.min(want, this.skidW + dt / SKID_IN);
       } else {
@@ -291,11 +298,14 @@ export class Footballer {
     }
 
     if (pose.action === 'charge') {
-      // Right leg drawn back further the more power is stored.
+      // Right leg drawn back further the more power is stored. On the move
+      // the stride carries on, the leg only coming back as the charge
+      // builds, so it doesn't glide along with one leg held up.
       const w = Math.min(1, pose.actionT / 0.08);
       const c = 0.3 + 0.7 * pose.charge;
-      hipR = mix(hipR, 0.85 * c, w);
-      kneeR = mix(kneeR, 1.5 * c, w);
+      const legW = w * (1 - moving * (1 - pose.charge));
+      hipR = mix(hipR, 0.85 * c, legW);
+      kneeR = mix(kneeR, 1.5 * c, legW);
       shoulderL = mix(shoulderL, -0.6 * c, w);
       shoulderR = mix(shoulderR, 0.4 * c, w);
       spread = mix(spread, 0.65 * c, w);

@@ -90,9 +90,14 @@ function onAngle(ball: { x: number; y: number }, line: number, side: number, dep
   const a = unit(line - ball.x, half - ball.y);
   const b = unit(line - ball.x, -half - ball.y);
   const dir = unit(a.x + b.x, a.y + b.y);
+  // How far along that line it is to just in front of the goal line: it
+  // never stands behind the ball, nor in its own net.
+  const toLine = Math.abs(dir.x) > 1e-3 ? (line - side * 0.3 - ball.x) / dir.x : 0;
+  if (toLine <= 0) return { x: line - side * CONFIG.keeper.lineOff, y: Math.max(-half, Math.min(half, ball.y)) };
   const tx = line - side * depth;
-  let t = Math.abs(dir.x) > 1e-3 ? (tx - ball.x) / dir.x : 0;
-  t = Math.max(t, gap);
+  let t = (tx - ball.x) / dir.x;
+  t = Math.max(t, Math.min(gap, toLine), Math.min(0.8, toLine));
+  t = Math.min(t, toLine);
   return { x: ball.x + dir.x * t, y: ball.y + dir.y * t };
 }
 
@@ -283,16 +288,28 @@ export function keeperInput(match: Match, p: Player, random: () => number): Keep
   }
   if (!attacker) k.rushAt = null;
   const near = attacker && Math.hypot(attacker.x - p.x, attacker.y - p.y) < cfg.rushFrom;
-  if (attacker && k.rushing && near && !mateNearer && inside(ball.x, ball.y, areaDepth, areaHalf, 1.5)) {
-    const gap = Math.hypot(ball.x - p.x, ball.y - p.y);
-    if (gap < cfg.pokeAt && random() < cfg.rushPoke) return { input: { ...toward(p, ball.x, ball.y), kick: true } };
+  const gap = Math.hypot(ball.x - p.x, ball.y - p.y);
+  // Pokes go the way it faces, so only once it's turned to the ball.
+  const facingBall = (p.fx * (ball.x - p.x) + p.fy * (ball.y - p.y)) / (gap || 1) > 0.8;
+  // Dribbled at, right up close in its box, it always closes them down,
+  // rushing or not. One winding up a shot it sets itself for instead.
+  const closeIn = attacker && attacker.action !== 'charge' && gap < cfg.closeDown && inside(ball.x, ball.y, areaDepth, areaHalf, 0.5);
+  if (attacker && !mateNearer && (closeIn || (k.rushing && near && inside(ball.x, ball.y, areaDepth, areaHalf, 1.5)))) {
+    if (gap < cfg.pokeAt) {
+      // In range: straight at the ball, turning to it, and poke once facing.
+      if (facingBall && random() < cfg.rushPoke) return { input: { ...toward(p, ball.x, ball.y), kick: true } };
+      return { input: toward(p, ball.x, ball.y, false, 0) };
+    }
+    // Otherwise into their way to goal, never past its own line.
     const gx = ball.x - line;
     const l = Math.hypot(gx, ball.y) || 1;
-    return { input: toward(p, ball.x - (gx / l) * 0.9, ball.y - (ball.y / l) * 0.9, true) };
+    const wx = ball.x - (gx / l) * 0.9;
+    const tx = side > 0 ? Math.min(wx, line - 0.3) : Math.max(wx, line + 0.3);
+    return { input: toward(p, tx, ball.y - (ball.y / l) * 0.9, true) };
   }
 
   // An attacker on the ball right up close: now and then, a poke at it.
-  if (attacker && Math.hypot(ball.x - p.x, ball.y - p.y) < cfg.pokeAt && p.action === 'none') {
+  if (attacker && gap < cfg.pokeAt && facingBall && p.action === 'none') {
     if (random() < cfg.pokeChance) return { input: { ...toward(p, ball.x, ball.y), kick: true } };
   }
 

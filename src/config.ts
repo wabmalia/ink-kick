@@ -263,6 +263,10 @@ export const CONFIG = {
     rushFrom: 6,
     rushChance: 0.6,
     rushPoke: 0.12,
+    // An attacker dribbling this close to it in its big box, it always
+    // closes down, whatever it decided about rushing (not one winding up a
+    // shot).
+    closeDown: 1.8,
     // How far off its line it stands at the least.
     lineOff: 0.55,
     // It comes off its line as the ball comes within comeOutFrom metres of

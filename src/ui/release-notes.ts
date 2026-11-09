@@ -16,6 +16,8 @@ export const RELEASE_NOTES: ReleaseDay[] = [
       'Passes hit on the run go faster, and further still on the sprint.',
       'Keepers stand better, cover their near post and dive further: a corner curler is no longer a sure goal.',
       'Keepers dive with their hands out instead of sliding.',
+      'Keepers close down anyone dribbling at them up close.',
+      'Players keep striding while winding up a shot on the run.',
     ],
   },
   {

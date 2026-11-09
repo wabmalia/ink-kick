@@ -29,6 +29,12 @@ all 5s.
   line by `standOff` (further the closer the ball).
 - **Narrowing:** while a shooter winds up, it walks out on the angle by up
   to `narrowBy` (1.2 m) more, never within `narrowGap` (4.5 m) of the ball.
+  It always stays goal-side of the ball and never stands in its own net.
+- **Closing down:** an attacker dribbling within `closeDown` (1.8 m) of it
+  in its big box it always goes for, whatever it rolled about rushing
+  (`rushChance`, from `rushFrom`). One winding up a shot it sets itself
+  for instead. Once within `pokeAt` it goes straight at the ball and pokes
+  only when facing it (a poke goes the way it faces).
 - **Reacting:** it meets a shot where it stands (`k.at`), never backing
   off towards its line. It reads where the ball will cross exactly, but
   only `curlRead` (60%) of the curl, re-reading every `reread` (0.2 s).
@@ -54,15 +60,15 @@ Power 5, the full grid (below), against today's keeper:
 
 | | Avg goals | Sure-goal setups | Setups at 7+ |
 |---|---|---|---|
-| Full power, no curl | 1.84 | 0 | 5 |
-| Half power, no curl | 0.34 | 0 | 3 |
-| Full power, curled | 0.77 | 13 | 19 |
-| Half power, curled | 0.03 | 0 | 0 |
-| Best option per spot, curled | 3.36 | 10 spots | 14 spots |
-| Best option per spot, no curl | 3.09 | 0 spots | 5 spots |
+| Full power, no curl | 1.53 | 0 | 0 |
+| Half power, no curl | 0.08 | 0 | 0 |
+| Full power, curled | 0.78 | 13 | 19 |
+| Half power, curled | 0.04 | 0 | 0 |
+| Best option per spot, curled | 3.46 | 10 spots | 14 spots |
+| Best option per spot, no curl | 2.56 | 0 spots | 0 spots |
 
 "Best option per spot" is what a player who picks the right shot gets
-from each spot. Curl stays the better choice (3.36 against 3.09) without
+from each spot. Curl stays the better choice (3.46 against 2.56) without
 being a free goal.
 
 ## What we tried, and what we learned
@@ -90,6 +96,29 @@ time: consistent behaviour, varying quality.
 - **Distance matters:** a keeper is quicker to a shot from close.
   `reactionClose` and `spreadClose` brought point-blank hot spots down
   to about 7/9.
+
+### Close range: confused, then fixed
+
+Dribbled at in its box, the keeper backed off, poked sideways (it pokes the
+way it faces, which lagged), and once the ball was nearer the line than its
+usual depth its spot on the angle came out upfield of the ball, leaving the
+goal open: it ended up in its own net while the ball was walked in. That
+bug was also why straight shots from 2 to 5 m scored 1.6 out of 9 (half
+and full, Power 5); with it fixed, 0.85.
+
+Now it stays goal-side, goes straight at the ball in poking range, pokes
+only facing it, and always closes down a dribbler within 1.8 m. Walking the
+ball in from four angles (straight, at an angle, along the byline, across
+the six-yard box), 9 seeds each: never walked in; it won or knocked the
+ball away 34 times of 36. Straight shots from 2 to 5 m now score about
+0.6 out of 9: point-blank is the keeper's.
+
+| Close-down range / poke chance a tick | Straight shots from 2 to 5 m |
+|---|---|
+| Off | 0.85 |
+| 1.8 m / 0.12 (chosen) | 0.62 |
+| 2.5 m / 0.12 | 0.54 |
+| 1.8 m / 0.04 | 0.66 |
 
 ### Varying the reaction makes it better, not worse
 
