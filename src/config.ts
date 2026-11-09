@@ -143,11 +143,15 @@ export const CONFIG = {
     sprintCarry: 1.5,
     // Movement while charging.
     moveFactor: 0.3,
-    // While charging near the opposing goal, gently bring its centre into
-    // this forward cone. Range is metres; cone is degrees either side of
-    // facing; turn rate is radians/s (30 degrees/s). Zero range disables it.
+    // Goal assist: while charging a shot (at least goalAssistFrom of a full
+    // charge, so never a tap) within goalAssistRange metres of the opposing
+    // goal's centre, with the goal ahead, a kick that couldn't go in even
+    // with goalAssistCurl of the kicker's full curl held turns slowly
+    // (radians a second, 30 degrees/s) towards goal, and stops as soon as
+    // that curl could just bring it in. Zero range disables it.
     goalAssistRange: 20,
-    goalAssistCone: 20,
+    goalAssistFrom: 0.3,
+    goalAssistCurl: 1,
     goalAssistTurnRate: Math.PI / 6,
     // The kicker can't trap their own kick for this long.
     cooldown: 0.3,

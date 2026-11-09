@@ -19,7 +19,7 @@ export const RELEASE_NOTES: ReleaseDay[] = [
       'Keepers close down anyone dribbling at them up close.',
       'A keeper holding the ball can\'t be barged out of the way.',
       'Players keep striding while winding up a shot on the run.',
-      'Wind-ups near goal gently turn towards it when it is ahead but well off your facing.',
+      'Shots near goal that even a curl couldn\'t save turn slowly until one could.',
       'Online matches reconnect without a page refresh and restore the score and final result.',
       'Matches can keep running while the host\'s tab is in the background.',
     ],

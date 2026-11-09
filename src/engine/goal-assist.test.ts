@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../config';
-import { angleBetween } from '../math';
-import { createMatch, createPlayer, step, type Input, type Player, type Team } from './sim';
+import { evenAttributes } from '../game/attributes';
+import { createMatch, createPlayer, step, type Input, type Match, type Player, type Team } from './sim';
 
 const idle: Input = { x: 0, y: 0, kick: false, sprint: false };
 const held = { ...idle, kick: true };
+const FULL = Math.ceil(CONFIG.kick.chargeTime / CONFIG.tick) + 5;
+const LINE = CONFIG.pitch.width / 2;
+const MOUTH = CONFIG.pitch.goalWidth / 2 - CONFIG.ball.radius;
 const degrees = (p: Player) => Math.atan2(p.fy, p.fx) * 180 / Math.PI;
-function setup(x = 10, y = 0, heading = 45, team: Team = 'gold', keeper = false) {
-  const p = createPlayer('me', team, undefined, keeper);
+
+interface Shot { p: Player; m: Match }
+function setup(x: number, y: number, heading: number, opts: { team?: Team; keeper?: boolean; power?: number } = {}): Shot {
+  const p = createPlayer('me', opts.team ?? 'gold', { ...evenAttributes(), power: opts.power ?? 5 }, opts.keeper);
   const m = createMatch([p], { practice: true, seed: 1 });
   const a = heading * Math.PI / 180;
   Object.assign(p, { x, y, fx: Math.cos(a), fy: Math.sin(a), vx: 0, vy: 0 });
@@ -15,97 +20,146 @@ function setup(x = 10, y = 0, heading = 45, team: Team = 'gold', keeper = false)
   m.owner = p.id;
   return { p, m };
 }
-function advance(s: ReturnType<typeof setup>, n: number, input = held) {
+function advance(s: Shot, n: number, input = held) {
   for (let i = 0; i < n; i++) step(s.m, { me: input });
 }
+// Held across the kick's path, turned `amount` (0..1) of the way to a full
+// curl, clockwise (side -1) or anticlockwise (side 1).
+function curl(p: Player, amount: number, side: number): Input {
+  const s = Math.min(1, 0.57 * amount) * side;
+  const c = Math.sqrt(1 - s * s);
+  return { ...idle, x: c * p.fx - s * p.fy, y: c * p.fy + s * p.fx };
+}
+// Releases with that curl held, and where the ball crosses the goal line
+// (null if it never does: into a wall, or too slow).
+function release(s: Shot, amount = 0, side = -1) {
+  const input = curl(s.p, amount, side);
+  const toX = s.p.team === 'gold' ? LINE : -LINE;
+  for (let i = 0; i < 4 / CONFIG.tick; i++) {
+    const { x, y } = s.m.ball;
+    step(s.m, { me: input });
+    const b = s.m.ball;
+    if ((toX - x) * (toX - b.x) <= 0 && b.x !== x) return y + (b.y - y) * ((toX - x) / (b.x - x));
+  }
+  return null;
+}
+// Whether some amount of curl that way puts a fresh copy of this kick in,
+// with the assist switched off so the aim stays as given.
+function curlable(make: () => Shot, side = -1) {
+  const kick = CONFIG.kick as { goalAssistRange: number };
+  const range = kick.goalAssistRange;
+  kick.goalAssistRange = 0;
+  try {
+    for (let amount = 0; amount <= 1.0001; amount += 0.05) {
+      const s = make();
+      advance(s, FULL);
+      const y = release(s, amount, side);
+      if (y !== null && Math.abs(y) < MOUTH) return true;
+    }
+    return false;
+  } finally {
+    kick.goalAssistRange = range;
+  }
+}
 
-describe('goal-facing assistance during charging', () => {
-  it('turns at the slow configured rate, then stops exactly at the cone edge', () => {
-    const s = setup();
-    advance(s, 15);
-    expect(degrees(s.p)).toBeCloseTo(45 - CONFIG.kick.goalAssistTurnRate * CONFIG.tick * 15 * 180 / Math.PI, 5);
-    advance(s, 120);
-    expect(degrees(s.p)).toBeCloseTo(CONFIG.kick.goalAssistCone, 5);
-    expect(s.m.owner).toBe('me');
-    expect(s.m.spin).toBe(0);
+describe('goal assist while charging a shot', () => {
+  it('leaves an aim alone that curl can already bring in', () => {
+    const make = () => setup(5, 0, 25);
+    const s = make();
+    advance(s, FULL);
+    expect(degrees(s.p)).toBeCloseTo(25, 5);
+    expect(release(make())).toBeNull();
+    expect(curlable(make)).toBe(true);
   });
 
-  it('does not steer while dribbling without charging', () => {
-    const s = setup();
-    advance(s, 60, idle);
+  it('turns a hopeless aim only until curl can just bring it in', () => {
+    const before = () => setup(5, 0, 35);
+    expect(curlable(before)).toBe(false);
+    const s = before();
+    advance(s, FULL);
+    const aimed = degrees(s.p);
+    expect(aimed).toBeLessThan(35);
+    // Still well off the goal: a straight strike misses, a curl scores.
+    expect(aimed).toBeGreaterThan(20);
+    const after = () => setup(5, 0, aimed);
+    // Already within reach: holding the charge turns it no further.
+    const check = after();
+    advance(check, FULL);
+    expect(degrees(check.p)).toBeCloseTo(aimed, 5);
+    const straight = release(after());
+    expect(straight === null || Math.abs(straight) > MOUTH).toBe(true);
+    expect(curlable(after)).toBe(true);
+  });
+
+  it('turns slowly, and only once a tap would have become a shot', () => {
+    const s = setup(5, 0, 45);
+    const from = Math.ceil(CONFIG.kick.goalAssistFrom * CONFIG.kick.chargeTime / CONFIG.tick);
+    advance(s, from - 1);
+    expect(degrees(s.p)).toBeCloseTo(45, 5);
+    advance(s, 20);
+    const most = CONFIG.kick.goalAssistTurnRate * CONFIG.tick * 21 * 180 / Math.PI;
+    expect(degrees(s.p)).toBeLessThan(45);
+    expect(degrees(s.p)).toBeGreaterThanOrEqual(45 - most - 1e-9);
+  });
+
+  it('never steers a tap', () => {
+    const s = setup(5, 0, 45);
+    advance(s, 5);
+    step(s.m, { me: idle });
+    expect(Math.atan2(s.m.ball.vy, s.m.ball.vx) * 180 / Math.PI).toBeCloseTo(45, 5);
+  });
+
+  it('does nothing beyond its range of the goal', () => {
+    const s = setup(LINE - CONFIG.kick.goalAssistRange - 0.5, 0, 45);
+    advance(s, FULL);
     expect(degrees(s.p)).toBeCloseTo(45, 5);
   });
 
-  it.each([0, CONFIG.kick.goalAssistCone / 2, -CONFIG.kick.goalAssistCone / 2, CONFIG.kick.goalAssistCone, -CONFIG.kick.goalAssistCone])('preserves intentional aim already inside the cone (%s degrees)', heading => {
-    const s = setup(10, 0, heading);
-    advance(s, 60);
+  it.each([90, -90, 135, -135, 180])('never pulls a sideways or backwards kick round (%s degrees)', heading => {
+    const s = setup(5, 0, heading);
+    advance(s, FULL);
     expect(degrees(s.p)).toBeCloseTo(heading, 5);
   });
 
-  it('uses distance to the goal centre and includes the configured range boundary', () => {
-    const out = setup(15 - CONFIG.kick.goalAssistRange - 0.01);
-    advance(out, 30);
-    expect(degrees(out.p)).toBeCloseTo(45, 5);
-    const edge = setup(15 - CONFIG.kick.goalAssistRange);
-    advance(edge, 1);
-    expect(degrees(edge.p)).toBeLessThan(45);
-    // Inside the longitudinal range, but outside the radial range out wide.
-    const lateral = Math.min(CONFIG.pitch.height / 3, CONFIG.kick.goalAssistRange * 0.6);
-    const along = Math.sqrt(CONFIG.kick.goalAssistRange ** 2 - lateral ** 2) + 0.1;
-    const wide = setup(15 - along, lateral, 45);
-    advance(wide, 30);
-    expect(degrees(wide.p)).toBeCloseTo(45, 5);
-  });
-
-  it.each([90, -90, 135, -135, 180])('never pulls a sideways or backwards kick around (%s degrees)', heading => {
-    const s = setup(10, 0, heading);
-    advance(s, 60);
-    expect(Math.abs(angleBetween(heading * Math.PI / 180, Math.atan2(s.p.fy, s.p.fx)))).toBeLessThan(1e-9);
-  });
-
-  it('mirrors the assistance for the opposing team', () => {
-    const gold = setup(10, 0, 45);
-    const red = setup(-10, 0, 135, 'red');
-    advance(gold, 20);
-    advance(red, 20);
-    expect(degrees(gold.p)).toBeCloseTo(35, 5);
-    expect(degrees(red.p)).toBeCloseTo(145, 5);
-  });
-
-  it('excludes keeper distribution', () => {
-    const s = setup(10, 0, 45, 'gold', true);
-    advance(s, 30);
+  it('leaves keepers kicking out alone', () => {
+    const s = setup(5, 0, 45, { keeper: true });
+    advance(s, FULL);
     expect(degrees(s.p)).toBeCloseTo(45, 5);
   });
 
-  it('applies even without movement keys and releases a kick on the assisted heading', () => {
-    const s = setup();
+  it('mirrors for Red attacking the other goal', () => {
+    const gold = setup(5, 0, 35);
+    const red = setup(-5, 0, 145, { team: 'red' });
+    advance(gold, FULL);
+    advance(red, FULL);
+    expect(degrees(red.p)).toBeCloseTo(180 - degrees(gold.p), 5);
+  });
+
+  it('gives a weaker curler more help than a stronger one', () => {
+    const weak = setup(5, 0, 35, { power: 1 });
+    const strong = setup(5, 0, 35, { power: 10 });
+    advance(weak, FULL);
+    advance(strong, FULL);
+    expect(degrees(weak.p)).toBeLessThan(degrees(strong.p));
+  });
+
+  it('keeps the direction keys for curl: they never steer the charge', () => {
+    // Either key walks you on the way you face, so only the assist turns you.
+    const left = setup(5, 0, 25);
+    const right = setup(5, 0, 25);
+    advance(left, FULL, { ...held, y: 1 });
+    advance(right, FULL, { ...held, y: -1 });
+    expect(degrees(left.p)).toBeCloseTo(degrees(right.p), 5);
+    expect(left.p.x).toBeCloseTo(right.p.x, 5);
+  });
+
+  it('stops turning once the charge is called off', () => {
+    const s = setup(5, 0, 45);
     advance(s, 20);
-    expect(Math.hypot(s.p.vx, s.p.vy)).toBe(0);
-    step(s.m, { me: idle });
-    const shot = Math.atan2(s.m.ball.vy, s.m.ball.vx) * 180 / Math.PI;
-    expect(shot).toBeCloseTo(34.5, 5);
-    expect(s.m.owner).toBeNull();
-    // Curl still uses the usual post-release input.
-    advance(s, 3, { ...idle, y: -1 });
-    expect(s.m.spin).toBeLessThan(0);
-  });
-
-  it('moves along assisted facing while charging, rather than the held input direction', () => {
-    const s = setup();
-    advance(s, 20, { ...held, y: 1 });
-    expect(degrees(s.p)).toBeLessThan(45);
-    expect(s.p.vx).toBeGreaterThan(0);
-    expect(s.p.vy).toBeGreaterThan(0);
-    expect(s.m.owner).toBe('me');
-  });
-
-  it('does not assist a cancelled charge', () => {
-    const s = setup();
-    advance(s, 2);
-    const before = degrees(s.p);
     step(s.m, { me: { ...held, sprint: true } });
     expect(s.p.action).toBe('none');
+    const before = degrees(s.p);
+    advance(s, 10, idle);
     expect(degrees(s.p)).toBeCloseTo(before, 5);
   });
 });

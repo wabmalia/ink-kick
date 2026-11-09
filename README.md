@@ -14,12 +14,11 @@ npm run dev
 - **Space / X with the ball**: hold to power a kick, release to strike it
 - **Space / X without the ball**: tap to poke the ball loose, hold to slide
 
-While charging within 20 m of the opposing goal's centre, you turn at 30°/s
-towards it if it is ahead but more than 20° off your facing. The turn stops
-when the goal enters that cone. Direction keys after the kick still add curl.
-The range, cone and speed are `goalAssistRange`, `goalAssistCone` and
-`goalAssistTurnRate` in `CONFIG.kick` (`src/config.ts`); the speed is stored
-in radians per second. Set the range to 0 to disable the assist.
+Shooting within 20 m of goal, a wind-up that couldn't go in even with a
+full curl turns slowly towards goal, just until a curl could bring it in.
+It never steers a tap, and a shot you can already curl in is left alone.
+Hold a direction after kicking to curl the ball. Tuning and how it works:
+[docs/keeper-and-shooting.md](docs/keeper-and-shooting.md#goal-assist).
 
 The ring under your player marks who you control. The half ring in front of it shows
 stamina (left) when it isn't full and kick power (right) while charging.

@@ -229,3 +229,48 @@ Index into the output with
 
 Spot checks are quicker in the lab (`#/lab`, Shooting): drag the shot,
 pick the run-up and kick, and use Run 50 for a goal rate.
+
+## Goal assist
+
+While a shot charges near the opposing goal, `assistGoalAim` in
+`src/engine/sim.ts` decides whether to turn the kicker. It only helps a
+shot that can't be scored, never one that could be: making it go in stays
+the kicker's job.
+
+Each tick it plays the kick forward three times from the current aim, as a
+full-power kick released now: straight, and with the kicker's full curl
+held each way from release through the aftertouch. Curl strength comes
+from the kicker's own stats, so a weaker curler gets more help. If the
+three crossings of the goal line span any of the mouth (posts less the
+ball's radius), some amount of curl scores and nothing happens. Otherwise
+the kicker turns towards the goal's centre at the turn rate, and stops on
+the first tick the check passes.
+
+It only runs when all of these hold:
+
+- the charge is at least `goalAssistFrom` (0.3), so a tap or quick pass
+  is never steered;
+- the goal's centre is within `goalAssistRange` (20 m) and in front;
+- the kicker isn't a keeper.
+
+Settings in `CONFIG.kick`:
+
+| Setting | Default | Meaning |
+|---|---:|---|
+| `goalAssistRange` | 20 | Metres from the goal's centre; 0 turns the assist off |
+| `goalAssistFrom` | 0.3 | Least charge (0..1) before it helps |
+| `goalAssistCurl` | 1 | Share of the kicker's full curl the check assumes; lower is more forgiving |
+| `goalAssistTurnRate` | π/6 | Radians a second (30°/s) |
+
+Judging at full power keeps a slow, still-charging wind-up from being
+pulled round early. The check doesn't foresee posts, players or bounces:
+a kick into a side wall counts as a miss on that side, so a deliberate
+bank shot off the wall near goal can be turned. Lab shots go through the
+same code: setups whose aim a curl can already score are unaffected, but
+hopeless aims are now turned, so the "goals / all attempts" rates above
+predate the assist.
+
+Measured from 10 m out on the centre line (Power 5, full charge): aims up
+to about 25° off goal are left alone; a 30–40° aim is turned to about 27°,
+where a near-full curl just goes in. From 20 m out, aims up to 40° can
+already be curled in and are left alone.

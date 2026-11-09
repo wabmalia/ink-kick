@@ -534,21 +534,78 @@ function loseBall(match: Match, p: Player, cooldown: number) {
   p.charge = 0;
 }
 
-// Charging assist: only the opposing goal, ahead and near enough. Preserve
-// deliberate placement inside the cone; never pull a sideways/backward
-// wind-up round to goal. Clamp the final step at the cone boundary.
-function assistGoalAim(p: Player) {
-  if (p.keeper) return;
+// How fast a kick released now leaves the foot. On the run, a pass carries
+// some of the kicker's speed (forward only, so backing off doesn't weaken
+// it), more on the sprint; a shot doesn't.
+function kickSpeed(p: Player, charge = p.charge) {
+  const { kick } = CONFIG;
+  const run = Math.max(0, p.vx * p.fx + p.vy * p.fy);
+  const carry = kick.carry * (p.sprinting ? kick.sprintCarry : 1);
+  return kick.passSpeed + (p.stats.shotSpeed - kick.passSpeed) * charge + carry * run * (1 - charge);
+}
+
+// Where a kick released now would cross the line x = toX, with `side` (1
+// left, -1 right, 0 none) curl held from release through the aftertouch, up
+// to `most` of the kicker's curl. Judged at full power, so the aim isn't
+// taken away from a kick that's still charging. Mirrors the aftertouch and
+// the ball's flight in step(); posts, players and wall bounces aren't
+// foreseen. Into a side wall first counts as missing that side (±Infinity),
+// so the outcomes still run in order from one curl to the other. Null if it
+// won't get there.
+function kickCross(match: Match, p: Player, toX: number, side: number, most: number) {
+  const dt = CONFIG.tick;
+  const { kick } = CONFIG;
+  const wall = CONFIG.pitch.height / 2 - match.ball.r;
+  const speed = kickSpeed(p, 1);
+  let { x, y } = match.ball;
+  const c = { vx: p.fx * speed, vy: p.fy * speed, spin: 0, curled: 0 };
+  const cap = p.stats.curl * most;
+  const build = (p.stats.curl / kick.curlBuild) * dt;
+  let left = kick.aftertouch;
+  for (let i = 0; i < 4 / dt; i++) {
+    if (left > 0) {
+      left -= dt;
+      c.spin = Math.max(-cap, Math.min(cap, c.spin + side * build));
+    }
+    if (c.spin) curlStep(c, dt);
+    const nx = x + c.vx * dt;
+    const ny = y + c.vy * dt;
+    if ((toX - x) * (toX - nx) <= 0 && nx !== x) return y + (ny - y) * ((toX - x) / (nx - x));
+    if (Math.abs(ny) > wall) return Math.sign(ny) * Infinity;
+    x = nx;
+    y = ny;
+    c.vx *= match.ball.damping;
+    c.vy *= match.ball.damping;
+    if (Math.hypot(c.vx, c.vy) < 1) return null;
+  }
+  return null;
+}
+
+// Goal assist while charging a shot: only near the opposing goal, with it
+// ahead, never for a tap or a keeper. A kick that curl could bring in is
+// left alone, however far off it starts: scoring it is the kicker's job.
+// One that couldn't go in even with full curl turns slowly towards goal,
+// and stops as soon as curl could just bring it in.
+function assistGoalAim(match: Match, p: Player) {
   const k = CONFIG.kick;
-  const gx = -homeSide(p.team) * CONFIG.pitch.width / 2 - p.x;
+  if (p.keeper || p.charge < k.goalAssistFrom) return;
+  const goalX = -homeSide(p.team) * CONFIG.pitch.width / 2;
+  const gx = goalX - p.x;
   const gy = -p.y;
   const distance = Math.hypot(gx, gy);
   if (distance < 1e-6 || distance > k.goalAssistRange || gx * p.fx + gy * p.fy <= distance * 1e-6) return;
+  const straight = kickCross(match, p, goalX, 0, k.goalAssistCurl);
+  if (straight === null) return;
+  const mouth = CONFIG.pitch.goalWidth / 2 - match.ball.r;
+  const crossings = [straight, kickCross(match, p, goalX, 1, k.goalAssistCurl), kickCross(match, p, goalX, -1, k.goalAssistCurl)]
+    .filter((y): y is number => y !== null);
+  const low = Math.min(...crossings);
+  const high = Math.max(...crossings);
+  // Somewhere between full curl one way and the other goes in.
+  if (high >= -mouth && low <= mouth) return;
   const current = Math.atan2(p.fy, p.fx);
   const turn = angleBetween(current, Math.atan2(gy, gx));
-  const outside = Math.abs(turn) - k.goalAssistCone * Math.PI / 180;
-  if (outside <= 0) return;
-  const a = current + Math.sign(turn) * Math.min(outside, k.goalAssistTurnRate * CONFIG.tick);
+  const a = current + Math.sign(turn) * Math.min(Math.abs(turn), k.goalAssistTurnRate * CONFIG.tick);
   p.fx = Math.cos(a);
   p.fy = Math.sin(a);
 }
@@ -577,7 +634,6 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
       if (!pressed) break;
       if (hasBall) {
         setAction(p, 'charge');
-        assistGoalAim(p);
       } else if (inPokeRange(match, p)) {
         setAction(p, 'poke');
         spend(p, tackle.pokeCost / p.stats.tackleFactor);
@@ -603,13 +659,8 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
         setAction(p, 'none');
         events.push({ type: 'feint', player: p.id });
       } else if (released) {
-        assistGoalAim(p);
-        // On the run, a pass carries some of the kicker's speed (forward
-        // only, so backing off doesn't weaken it), more on the sprint; a
-        // shot doesn't.
-        const run = Math.max(0, p.vx * p.fx + p.vy * p.fy);
-        const carry = kick.carry * (p.sprinting ? kick.sprintCarry : 1);
-        const speed = kick.passSpeed + (p.stats.shotSpeed - kick.passSpeed) * p.charge + carry * run * (1 - p.charge);
+        assistGoalAim(match, p);
+        const speed = kickSpeed(p);
         match.ball.vx = p.fx * speed;
         match.ball.vy = p.fy * speed;
         match.owner = null;
@@ -623,7 +674,7 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
         p.charge = 0;
         setAction(p, 'none');
       } else if (hasBall) {
-        assistGoalAim(p);
+        assistGoalAim(match, p);
       }
       break;
     case 'poke':
