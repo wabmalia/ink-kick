@@ -534,6 +534,25 @@ function loseBall(match: Match, p: Player, cooldown: number) {
   p.charge = 0;
 }
 
+// Charging assist: only the opposing goal, ahead and near enough. Preserve
+// deliberate placement inside the cone; never pull a sideways/backward
+// wind-up round to goal. Clamp the final step at the cone boundary.
+function assistGoalAim(p: Player) {
+  if (p.keeper) return;
+  const k = CONFIG.kick;
+  const gx = -homeSide(p.team) * CONFIG.pitch.width / 2 - p.x;
+  const gy = -p.y;
+  const distance = Math.hypot(gx, gy);
+  if (distance < 1e-6 || distance > k.goalAssistRange || gx * p.fx + gy * p.fy <= distance * 1e-6) return;
+  const current = Math.atan2(p.fy, p.fx);
+  const turn = angleBetween(current, Math.atan2(gy, gx));
+  const outside = Math.abs(turn) - k.goalAssistCone * Math.PI / 180;
+  if (outside <= 0) return;
+  const a = current + Math.sign(turn) * Math.min(outside, k.goalAssistTurnRate * CONFIG.tick);
+  p.fx = Math.cos(a);
+  p.fy = Math.sin(a);
+}
+
 // The button, timers, stamina, facing and velocity for one player.
 function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
   const dt = CONFIG.tick;
@@ -558,6 +577,7 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
       if (!pressed) break;
       if (hasBall) {
         setAction(p, 'charge');
+        assistGoalAim(p);
       } else if (inPokeRange(match, p)) {
         setAction(p, 'poke');
         spend(p, tackle.pokeCost / p.stats.tackleFactor);
@@ -583,6 +603,7 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
         setAction(p, 'none');
         events.push({ type: 'feint', player: p.id });
       } else if (released) {
+        assistGoalAim(p);
         // On the run, a pass carries some of the kicker's speed (forward
         // only, so backing off doesn't weaken it), more on the sprint; a
         // shot doesn't.
@@ -601,6 +622,8 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
         events.push({ type: 'kick', player: p.id, power: p.charge });
         p.charge = 0;
         setAction(p, 'none');
+      } else if (hasBall) {
+        assistGoalAim(p);
       }
       break;
     case 'poke':
@@ -697,8 +720,8 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
       speed *= ahead >= 0 ? g.sideSpeed + (1 - g.sideSpeed) * ahead : g.sideSpeed + (g.backSpeed - g.sideSpeed) * -ahead;
     }
   } else if (moving && p.action === 'charge') {
-    // Powering up a kick, you can't turn: you go on the way you face, and
-    // the keys are free to set up the curl.
+    // Movement follows the charge's facing, including the gentle goal
+    // assist above. Direction keys remain free to prepare aftertouch.
     mx = p.fx;
     my = p.fy;
   } else if (!moving) {

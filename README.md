@@ -14,6 +14,13 @@ npm run dev
 - **Space / X with the ball**: hold to power a kick, release to strike it
 - **Space / X without the ball**: tap to poke the ball loose, hold to slide
 
+While charging within 20 m of the opposing goal's centre, you turn at 30°/s
+towards it if it is ahead but more than 20° off your facing. The turn stops
+when the goal enters that cone. Direction keys after the kick still add curl.
+The range, cone and speed are `goalAssistRange`, `goalAssistCone` and
+`goalAssistTurnRate` in `CONFIG.kick` (`src/config.ts`); the speed is stored
+in radians per second. Set the range to 0 to disable the assist.
+
 The ring under your player marks who you control. The half ring in front of it shows
 stamina (left) when it isn't full and kick power (right) while charging.
 

@@ -143,6 +143,12 @@ export const CONFIG = {
     sprintCarry: 1.5,
     // Movement while charging.
     moveFactor: 0.3,
+    // While charging near the opposing goal, gently bring its centre into
+    // this forward cone. Range is metres; cone is degrees either side of
+    // facing; turn rate is radians/s (30 degrees/s). Zero range disables it.
+    goalAssistRange: 20,
+    goalAssistCone: 20,
+    goalAssistTurnRate: Math.PI / 6,
     // The kicker can't trap their own kick for this long.
     cooldown: 0.3,
     // Aftertouch: for this long after a kick, holding a direction across
