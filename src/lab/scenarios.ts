@@ -1031,6 +1031,212 @@ export const pass: Scenario = {
   },
 };
 
+// --- Passing to a teammate -----------------------------------------------
+// A passer on the ball and a teammate standing or making a run, placed so
+// that at the kick they're the chosen distance away and that many degrees
+// off where the passer faces. With the pass assist on or off: does it get
+// to their feet?
+
+const RECEIVING: Role[] = [
+  { id: 'passer', label: 'Passer', team: 'gold' },
+  { id: 'mate', label: 'Teammate', team: 'gold' },
+];
+const PASS_FROM = { x: -10, y: 0 };
+// Seconds before the passer starts the kick, and after it to see it home.
+const KICK_AT = 0.8;
+const PASS_WAIT = 3;
+const RECEIVED_AFTER = 0.6;
+// No run away from the passer: a pass from behind can't be taken (only one
+// in front of you is), and a scripted runner never turns for it.
+const RUNS: Record<string, string> = { stand: 'Standing', across: 'Running across', short: 'Coming short' };
+const SWEEP_ANGLES = [-30, -25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30];
+const SWEEP_DISTANCES = [6, 10, 14];
+
+interface PassPlan { move: string; offset: number; dist: number; firm: boolean; assist: boolean; cone: number; curl: number }
+type PassResult = 'received' | 'bounced' | 'short' | 'missed';
+const PASS_RESULT: Record<PassResult, string> = { received: 'Received', bounced: 'Hit them, not taken', short: 'Stopped short', missed: 'Missed them' };
+
+const passPlan = (opts: Options): PassPlan => ({
+  move: opts.move ?? 'stand',
+  offset: Number(opts.offset ?? 10),
+  dist: Number(opts.dist ?? 10),
+  firm: opts.kick === 'firm',
+  assist: opts.assist !== 'off',
+  cone: Number(opts.cone ?? CONFIG.kick.passAssistCone),
+  curl: Number(opts.curl ?? CONFIG.kick.passAssistCurl),
+});
+
+// The sim's own step, with the pass assist's cone (0 is off) and curl as
+// given.
+function stepAssist(match: Match, inputs: Record<string, Input>, assistCone: number, assistCurl: number) {
+  const kick = CONFIG.kick as { passAssistCone: number; passAssistCurl: number };
+  const was = { cone: kick.passAssistCone, curl: kick.passAssistCurl };
+  kick.passAssistCone = assistCone;
+  kick.passAssistCurl = assistCurl;
+  try {
+    return step(match, inputs);
+  } finally {
+    kick.passAssistCone = was.cone;
+    kick.passAssistCurl = was.curl;
+  }
+}
+
+function receiveRun(attrs: Record<string, Attributes>, pl: PassPlan) {
+  const [passerRole, mateRole] = RECEIVING as [Role, Role];
+  const match = labMatch([{ role: passerRole, attrs: attrs.passer! }, { role: mateRole, attrs: attrs.mate! }], 1);
+  const passer = match.players[0]!;
+  const mate = match.players[1]!;
+  Object.assign(passer, { x: PASS_FROM.x, y: PASS_FROM.y, fx: 1, fy: 0 });
+  Object.assign(match.ball, { x: PASS_FROM.x + CONFIG.dribble.distance, y: PASS_FROM.y });
+  match.owner = passer.id;
+
+  // Where they should be at the kick, and the way they run.
+  const a = (pl.offset * Math.PI) / 180;
+  const spot = { x: PASS_FROM.x + pl.dist * Math.cos(a), y: PASS_FROM.y + pl.dist * Math.sin(a) };
+  const dir = pl.move === 'across' ? { x: 0, y: spot.y > 0.01 ? -1 : 1 }
+    : pl.move === 'short' ? { x: -1, y: 0 }
+    : null;
+  const runInput: Input = dir ? { x: dir.x, y: dir.y, kick: false, sprint: false } : NO_INPUT;
+  // The kick goes off once the charge is held long enough: a tap at once,
+  // a firm pass at a quarter of a full one.
+  const hold = pl.firm ? 0.25 : 0.05;
+  const kickTicks = Math.round(KICK_AT / CONFIG.tick) + Math.ceil((hold * passer.stats.chargeTime) / CONFIG.tick) + 2;
+  if (dir) {
+    // Rehearsed alone first, to start them as far back as the run up to
+    // the kick takes them.
+    const solo = labMatch([{ role: mateRole, attrs: attrs.mate! }], 1);
+    const q = solo.players[0]!;
+    Object.assign(q, { x: 0, y: 0, fx: dir.x, fy: dir.y });
+    for (let i = 0; i < kickTicks; i++) step(solo, { [q.id]: runInput });
+    Object.assign(mate, { x: spot.x - q.x, y: spot.y - q.y, fx: dir.x, fy: dir.y });
+  } else {
+    const l = Math.hypot(match.ball.x - spot.x, match.ball.y - spot.y);
+    Object.assign(mate, { x: spot.x, y: spot.y, fx: (match.ball.x - spot.x) / l, fy: (match.ball.y - spot.y) / l });
+  }
+
+  const out = {
+    match, spot, done: false, t: 0,
+    kicked: null as number | null,
+    spin: null as number | null,
+    bent: 0,
+    speed: null as number | null,
+    at: null as { x: number; y: number } | null,
+    closest: Infinity,
+    result: null as PassResult | null,
+    receivedAt: null as number | null,
+    step(): SimEvent[] {
+      let input: Input = NO_INPUT;
+      if (out.kicked === null && out.t >= KICK_AT) input = { ...NO_INPUT, kick: !(passer.action === 'charge' && passer.charge >= hold) };
+      const events = stepAssist(match, { [passer.id]: input, [mate.id]: runInput }, pl.assist ? pl.cone : 0, pl.curl);
+      out.t += CONFIG.tick;
+      if (out.kicked === null && events.some(e => e.type === 'kick' && e.player === passer.id)) {
+        out.kicked = out.t;
+        out.spin = match.spin;
+        out.speed = Math.hypot(match.ball.vx, match.ball.vy);
+        out.at = { x: mate.x, y: mate.y };
+      } else if (out.kicked !== null && out.result === null) {
+        if (match.owner === null) out.bent = match.curled;
+        const gap = Math.hypot(match.ball.x - mate.x, match.ball.y - mate.y) - mate.r - match.ball.r;
+        out.closest = Math.min(out.closest, Math.max(0, gap));
+        const since = out.t - out.kicked;
+        if (match.owner === mate.id) {
+          out.result = 'received';
+          out.receivedAt = since;
+        } else if (since > PASS_WAIT || Math.hypot(match.ball.vx, match.ball.vy) < 0.2) {
+          // Touched them without being taken; or came to rest before
+          // getting as far as they are; or went by.
+          const stopped = Math.hypot(match.ball.vx, match.ball.vy) < 1;
+          const shortOf = Math.hypot(match.ball.x - passer.x, match.ball.y - passer.y) < Math.hypot(mate.x - passer.x, mate.y - passer.y);
+          out.result = out.closest < 0.05 ? 'bounced' : stopped && shortOf ? 'short' : 'missed';
+        }
+      }
+      if (out.result && (out.result !== 'received' || out.t - out.kicked! - out.receivedAt! > RECEIVED_AFTER)) out.done = true;
+      if (out.t > KICK_AT + PASS_WAIT + 2) out.done = true;
+      return events;
+    },
+  };
+  return out;
+}
+
+export const receive: Scenario = {
+  id: 'receive',
+  name: 'Passing to a teammate',
+  roles: RECEIVING,
+  choices: [
+    { key: 'move', label: 'Teammate', options: Object.entries(RUNS).map(([value, label]) => ({ value, label })) },
+    { key: 'offset', label: 'Off the facing', options: ['0', '5', '10', '15', '20', '25', '30'].map(v => ({ value: v, label: `${v}°` })) },
+    { key: 'dist', label: 'Distance', options: SWEEP_DISTANCES.map(v => ({ value: String(v), label: `${v} m` })) },
+    { key: 'kick', label: 'Kick', options: [{ value: 'tap', label: 'Tap' }, { value: 'firm', label: 'Firm pass' }] },
+    { key: 'assist', label: 'Pass assist', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] },
+    {
+      key: 'cone', label: 'Assist cone',
+      options: ['15', '20', '25', '30'].map(v => ({ value: v, label: `${v}°${Number(v) === CONFIG.kick.passAssistCone ? ' (game)' : ''}` })),
+      enabled: o => o.assist !== 'off',
+    },
+    {
+      key: 'curl', label: 'Assist curl',
+      options: ['1', '1.5', '2'].map(v => ({ value: v, label: `×${v} the passer's${Number(v) === CONFIG.kick.passAssistCurl ? ' (game)' : ''}` })),
+      enabled: o => o.assist !== 'off',
+    },
+  ],
+  hint: 'The passer faces straight on; the teammate is where you set them at the kick. With the assist, the pass leaves straight and curls onto them. Try a wider cone than the game\'s. Run 50 sweeps every angle and distance, assist on and off.',
+  defaults: { move: 'stand', offset: '10', dist: '6', kick: 'tap', assist: 'on', cone: String(CONFIG.kick.passAssistCone), curl: String(CONFIG.kick.passAssistCurl) },
+  start(attrs, opts) {
+    const pl = passPlan(opts);
+    const r = receiveRun(attrs, pl);
+    const run: Run = {
+      match: r.match, t: 0, done: false,
+      cones: [{ x: r.spot.x, y: r.spot.y, label: 'at the kick' }],
+      step() {
+        const events = r.step();
+        run.t = r.t;
+        run.done = r.done;
+        return events;
+      },
+      readout() {
+        return [
+          {
+            title: 'Pass', rows: [
+              row('Teammate', `${RUNS[pl.move]}, ${m(pl.dist)} away`),
+              row('Off the facing', `${pl.offset}°`),
+              row('Kick', pl.firm ? 'firm pass' : 'tap', 'power'),
+              row('Pass assist', pl.assist ? `on, ${pl.cone}° cone, curl ×${pl.curl}` : 'off'),
+            ],
+          },
+          {
+            title: 'What happened', rows: [
+              row('Curl put on it', r.spin === null ? '-' : r.spin === 0 ? 'none' : `${Math.abs(r.spin).toFixed(3)} rad/m ${r.spin > 0 ? 'left' : 'right'}`, 'power'),
+              row('Bent by', r.kicked === null ? '-' : `${Math.abs((r.bent * 180) / Math.PI).toFixed(1)}°`),
+              row('Pass speed', r.speed === null ? '-' : `${r.speed.toFixed(1)} m/s`, 'power'),
+              row('Result', r.result ? PASS_RESULT[r.result] + (r.receivedAt !== null ? ` after ${s(r.receivedAt)}` : '') : '-', 'dribbling'),
+              row('Closest to them', r.kicked === null ? '-' : m(r.closest === Infinity ? 0 : r.closest)),
+            ],
+          },
+        ];
+      },
+    };
+    return run;
+  },
+  // Not chance but geometry: every angle and distance, with and without.
+  repeat(attrs, opts) {
+    const base = passPlan(opts);
+    const received = (assist: boolean, dist: number) => {
+      let n = 0;
+      for (const offset of SWEEP_ANGLES) {
+        const r = receiveRun(attrs, { ...base, assist, dist, offset });
+        for (let i = 0; i < 2000 && !r.done; i++) r.step();
+        if (r.result === 'received') n++;
+      }
+      return n;
+    };
+    const of = SWEEP_ANGLES.length;
+    return [{
+      title: `${RUNS[base.move]}, ${base.firm ? 'firm pass' : 'tap'}, ${base.cone}° cone, curl ×${base.curl}: received, of ${of} angles (${SWEEP_ANGLES[0]}° to ${SWEEP_ANGLES[of - 1]}°)`,
+      rows: SWEEP_DISTANCES.map(dist => row(`${dist} m`, `assist on ${received(true, dist)}, off ${received(false, dist)}`)),
+    }];
+  },
+};
+
 // --- Shooting range ------------------------------------------------------
 // Shooter A, then shooter B, from the same spot and aim, which you place by
 // dragging on the pitch, at the right goal and its keeper if you like. Both
@@ -1254,7 +1460,7 @@ export const range: Scenario = {
   },
 };
 
-export const SCENARIOS: Scenario[] = [track, arena, stance, slalom, pass, range];
+export const SCENARIOS: Scenario[] = [track, arena, stance, slalom, pass, receive, range];
 
 export const defaultAttrs = (scenario: Scenario): Record<string, Attributes> =>
   Object.fromEntries(scenario.roles.map(r => [r.id, evenAttributes()]));

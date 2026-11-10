@@ -17,7 +17,10 @@ npm run dev
 Shooting within 20 m of goal, a wind-up that couldn't go in even with a
 full curl turns slowly towards goal, just until a curl could bring it in.
 It never steers a tap, and a shot you can already curl in is left alone.
-Hold a direction after kicking to curl the ball. Tuning and how it works:
+A pass (a tap, or up to 30% charge) to a teammate under 15 m away and
+within 15° of your facing leaves your foot straight, then curls onto their
+feet, a step ahead if they're running; how hard to hit it is still up to
+you. Hold a direction after any other kick to curl the ball. Tuning and how both work:
 [docs/keeper-and-shooting.md](docs/keeper-and-shooting.md#goal-assist).
 
 The ring under your player marks who you control. The half ring in front of it shows

@@ -274,3 +274,60 @@ Measured from 10 m out on the centre line (Power 5, full charge): aims up
 to about 25° off goal are left alone; a 30–40° aim is turned to about 27°,
 where a near-full curl just goes in. From 20 m out, aims up to 40° can
 already be curled in and are left alone.
+
+## Pass assist
+
+A pass is a tap or a kick up to `passAssistCharge` (0.3 of a full charge).
+On the kick, `assistPass` in `src/engine/sim.ts` may give it curl: the
+ball still leaves the foot the way the passer faces (turning the kick
+itself looked like a diagonal mis-hit), then bends onto the teammate.
+
+- **Who:** outfield teammates (never keepers or opponents) within
+  `passAssistCone` (15°) of the passer's facing, judged where they stand
+  now, and under `passAssistRange` (15 m) from the ball. The one nearest
+  the facing wins.
+- **Where:** their feet when the ball gets there. `meetTime` steps the
+  pass along at its own speed and damping against the teammate's run
+  (`passAssistLead`, 1, of their velocity), taking the first moment the
+  ball has rolled as far as they then are, or the moment it gets nearest
+  if they outrun it or it stops short. A runner gets it up to
+  `passAssistAhead` (0.8 m) in front of their feet, in full at running
+  speed, since a player only takes a ball within 60° of their facing.
+- **How much:** the least spin whose flight (`curlMiss`, mirroring the
+  ball's flight in `step()`) passes through that spot, found by halving
+  the range, and never more than `passAssistCurl` (1) times the passer's
+  own full curl. The weight is never changed. An assisted pass gets no
+  aftertouch, so the keys held after it don't add curl of their own.
+
+`passTarget` (where a pass should go to meet a teammate) is shared with
+the keepers' kicks out: a keeper now kicks to where a running teammate
+will be, a step ahead, allowing for its own wind-up, during which its
+facing is locked. So it lines up to within `keeper.kickAim` (2.5°) before
+it starts the kick, rather than the 14° it used to settle for.
+
+Set `passAssistCone` to 0 to turn it off. Only online matches with two or
+more players on a team have teammates, so solo and training play are
+unaffected.
+
+To try it, the lab (`#/lab`) has **Passing to a teammate**: a passer and a
+teammate who is standing, running across or coming short, placed a chosen
+distance and angle off the passer's facing at the kick, with the assist on
+or off, and its cone and curl allowance (×1, ×1.5, ×2) to experiment with.
+The readout shows the curl put on and how far the pass bent. Run 50 sweeps
+13 angles (-30° to 30°, every 5°) at 6, 10 and 14 m and counts the passes
+received each way.
+
+What it showed (all attributes at 5; a tap, or a firm pass at a quarter
+charge across), received of 13 angles at 6 / 10 / 14 m:
+
+| Cone, curl | Standing, tap | Coming short, tap | Running across, firm |
+|---|---|---|---|
+| Off | 3 / 1 / 0 | 3 / 1 / 1 | 4 / 2 / 0 |
+| 15°, ×1 (game) | 5 / 5 / 0 | 5 / 5 / 5 | 6 / 4 / 0 |
+| 15°, ×1.5 | 5 / 5 / 0 | 5 / 5 / 5 | 9 / 4 / 0 |
+| 20°, ×1.5 | 7 / 7 / 0 | 7 / 7 / 7 | 11 / 6 / 0 |
+| 25°, ×2 | 9 / 9 / 0 | 7 / 9 / 9 | 11 / 8 / 0 |
+
+The cone is what limits standing teammates and those coming short; the
+curl allowance mostly helps a pass catch a crossing run. A tap stops short
+of a teammate standing 14 m away whatever the assist: the weight is yours.

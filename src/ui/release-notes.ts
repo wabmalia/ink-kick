@@ -11,6 +11,13 @@ export interface ReleaseDay {
 
 export const RELEASE_NOTES: ReleaseDay[] = [
   {
+    date: '2026-11-10',
+    notes: [
+      'A quick pass to a teammate you\'re facing curls onto their feet, a step ahead if they\'re running.',
+      'Keepers kick out to where a running teammate is heading, not where they were.',
+    ],
+  },
+  {
     date: '2026-11-09',
     notes: [
       'Passes hit on the run go faster, and further still on the sprint.',

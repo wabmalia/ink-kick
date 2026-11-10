@@ -610,6 +610,117 @@ function assistGoalAim(match: Match, p: Player) {
   p.fy = Math.sin(a);
 }
 
+// When a ball rolling at this speed from (x, y) meets someone at (qx, qy)
+// moving at (vx, vy): the first moment it has rolled as far as they then
+// are; failing that (they outrun it, or it stops short), the moment it gets
+// nearest. Straight-line, with the ball's damping as in step().
+function meetTime(x: number, y: number, speed: number, damping: number, qx: number, qy: number, vx: number, vy: number) {
+  const dt = CONFIG.tick;
+  let v = speed;
+  let gone = 0;
+  let best = { short: Infinity, t: 0 };
+  for (let i = 1; i < 4 / dt; i++) {
+    gone += v * dt;
+    const t = i * dt;
+    const short = Math.hypot(qx + vx * t - x, qy + vy * t - y) - gone;
+    if (short <= 0) return t;
+    if (short < best.short) best = { short, t };
+    v *= damping;
+    if (v < 0.2) break;
+  }
+  return best.t;
+}
+
+/**
+ * Where a pass from (x, y) at this speed should go to reach a teammate: their
+ * feet when it gets there, allowing passAssistLead of their run, and up to
+ * passAssistAhead in front of a runner (in full at running speed), since a
+ * ball's only taken in front of you. `delay` is how long until it's struck
+ * (a keeper's wind-up). Shared by the pass assist and the keepers' kicks
+ * out.
+ */
+export function passTarget(x: number, y: number, speed: number, damping: number, mate: Player, delay = 0) {
+  const k = CONFIG.kick;
+  const lead = k.passAssistLead;
+  // Where they'll be when it's struck, `delay` seconds from now.
+  const qx = mate.x + mate.vx * delay * lead;
+  const qy = mate.y + mate.vy * delay * lead;
+  const t = meetTime(x, y, speed, damping, qx, qy, mate.vx * lead, mate.vy * lead);
+  const run = Math.hypot(mate.vx, mate.vy);
+  const ahead = run > 0.5 ? (k.passAssistAhead * Math.min(1, run / mate.stats.runSpeed)) / run : 0;
+  return { x: qx + mate.vx * (t * lead + ahead), y: qy + mate.vy * (t * lead + ahead) };
+}
+
+// Where a kick just struck passes closest to (tx, ty) with this much spin,
+// and how far off it is there: positive with the point to its left. Mirrors
+// the ball's flight in step() (no aftertouch); posts and players aren't
+// foreseen.
+function curlMiss(match: Match, spin: number, tx: number, ty: number) {
+  const dt = CONFIG.tick;
+  const { ball } = match;
+  let { x, y } = ball;
+  const c = { vx: ball.vx, vy: ball.vy, spin, curled: 0 };
+  let best = { d: Math.hypot(tx - x, ty - y), side: 0 };
+  for (let i = 0; i < 4 / dt; i++) {
+    if (c.spin) curlStep(c, dt);
+    x += c.vx * dt;
+    y += c.vy * dt;
+    const d = Math.hypot(tx - x, ty - y);
+    if (d < best.d) {
+      const v = Math.hypot(c.vx, c.vy) || 1;
+      best = { d, side: Math.sign((c.vx * (ty - y) - c.vy * (tx - x)) / v) };
+    }
+    c.vx *= ball.damping;
+    c.vy *= ball.damping;
+    if (Math.hypot(c.vx, c.vy) < 0.2) break;
+  }
+  return best.d * best.side;
+}
+
+// Pass assist, on the kick: a pass (up to passAssistCharge of a full
+// charge) with an outfield teammate roughly where you're facing still
+// leaves your foot the way you face, but curls on its way to their feet:
+// where they'll be when it gets there if they're on the move, a step ahead
+// of a runner (a ball's only taken in front of you). The spin is the least
+// that gets it there, no more than the passer could put on it; the weight is
+// never changed. Returns the spin, or null to leave the kick alone.
+function assistPass(match: Match, p: Player) {
+  const k = CONFIG.kick;
+  if (p.keeper || p.charge > k.passAssistCharge || k.passAssistCone <= 0) return null;
+  const { ball } = match;
+  const speed = Math.hypot(ball.vx, ball.vy);
+  const cone = (k.passAssistCone * Math.PI) / 180;
+  const facing = Math.atan2(ball.vy, ball.vx);
+  let mate: Player | null = null;
+  let nearest = Infinity;
+  for (const q of match.players) {
+    if (q === p || q.team !== p.team || q.keeper) continue;
+    const dist = Math.hypot(q.x - ball.x, q.y - ball.y);
+    if (dist < 1 || dist >= k.passAssistRange) continue;
+    const off = Math.abs(angleBetween(facing, Math.atan2(q.y - ball.y, q.x - ball.x)));
+    if (off <= cone && off < nearest) {
+      mate = q;
+      nearest = off;
+    }
+  }
+  if (!mate) return null;
+  const { x: tx, y: ty } = passTarget(ball.x, ball.y, speed, ball.damping, mate);
+  // The least spin that brings it to that spot, up to the passer's curl
+  // (times passAssistCurl).
+  const straight = curlMiss(match, 0, tx, ty);
+  if (Math.abs(straight) < 0.05) return 0;
+  const most = Math.sign(straight) * p.stats.curl * k.passAssistCurl;
+  if (Math.sign(curlMiss(match, most, tx, ty)) === Math.sign(straight)) return most;
+  let lo = 0;
+  let hi = most;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (Math.sign(curlMiss(match, mid, tx, ty)) === Math.sign(straight)) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
 // The button, timers, stamina, facing and velocity for one player.
 function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
   const dt = CONFIG.tick;
@@ -667,8 +778,11 @@ function control(match: Match, p: Player, input: Input, events: SimEvent[]) {
         match.owner = null;
         match.spin = 0;
         match.curled = 0;
-        // A keeper's kick out goes straight: walking off after it is no aftertouch.
-        match.aftertouch = p.keeper ? null : { player: p.id, dx: p.fx, dy: p.fy, left: kick.aftertouch };
+        const passSpin = assistPass(match, p);
+        if (passSpin !== null) match.spin = passSpin;
+        // A keeper's kick out goes straight: walking off after it is no
+        // aftertouch, and an assisted pass already has its curl.
+        match.aftertouch = p.keeper || passSpin !== null ? null : { player: p.id, dx: p.fx, dy: p.fy, left: kick.aftertouch };
         if (p.keeper) match.guard = { team: p.team, left: CONFIG.keeper.kickGuard };
         p.cooldown = kick.cooldown;
         events.push({ type: 'kick', player: p.id, power: p.charge });

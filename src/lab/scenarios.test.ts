@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { evenAttributes } from '../game/attributes';
-import { arena, defaultAttrs, range, slalom, track } from './scenarios';
+import { arena, defaultAttrs, range, receive, slalom, track } from './scenarios';
 
 const finish = (run: ReturnType<typeof track.start>) => {
   let n = 0;
@@ -81,5 +81,28 @@ describe('lab scenarios', () => {
     const attrs = { a: { ...evenAttributes(), pace: 10 }, b: { ...evenAttributes(), dribbling: 10 } };
     const run = finish(slalom.start(attrs, { spacing: '2.5', pace: 'run', ball: 'with' }, 1));
     expect(run.readout()[0]!.rows.find(r => r.label === 'Quicker')!.value).toMatch(/^B by/);
+  });
+
+  it('Passing to a teammate: the assist finds a standing teammate the plain pass misses', () => {
+    const attrs = defaultAttrs(receive);
+    const result = (assist: string) => {
+      const run = finish(receive.start(attrs, { move: 'stand', offset: '10', dist: '6', kick: 'tap', assist }, 1));
+      return run.readout()[1]!.rows.find(r => r.label === 'Result')!.value;
+    };
+    expect(result('on')).toMatch(/^Received/);
+    expect(result('off')).toBe('Missed them');
+  });
+
+  it('Passing to a teammate: a soft tap to someone far off stops short', () => {
+    const run = finish(receive.start(defaultAttrs(receive), { move: 'stand', offset: '0', dist: '14', kick: 'tap', assist: 'on' }, 1));
+    expect(run.readout()[1]!.rows.find(r => r.label === 'Result')!.value).toBe('Stopped short');
+  });
+
+  it('Passing to a teammate: the sweep never does worse with the assist on', () => {
+    const [sweep] = receive.repeat!(defaultAttrs(receive), { move: 'stand', kick: 'firm', offset: '0', dist: '6', assist: 'on' }, 50);
+    for (const r of sweep!.rows) {
+      const [on, off] = r.value.match(/\d+/g)!.map(Number);
+      expect(on).toBeGreaterThanOrEqual(off!);
+    }
   });
 });

@@ -1,7 +1,7 @@
 import { CONFIG } from '../config';
 import { curlStep } from './curl';
 import { NO_INPUT, toward } from './input';
-import { homeSide, type Input, type Match, type Player } from './sim';
+import { homeSide, passTarget, type Input, type Match, type Player } from './sim';
 
 // A goalkeeper: a bot kept to its own small box (see keepPlayerIn). It reads
 // the game from where it stands, playing through the same Input as anyone:
@@ -155,7 +155,21 @@ function chooseTarget(match: Match, p: Player, side: number) {
     .filter(m => m.room > clear && m.dist > 3)
     .sort((a, b) => b.alone - a.alone);
   const mate = mates[0];
-  if (mate) return { x: mate.q.x, y: mate.q.y, charge: Math.min(p.stats.chargeTime, 0.1 + mate.dist * 0.025) };
+  if (mate) {
+    // Weighted for how far they are, to where they'll be when it gets there
+    // (a step ahead of a runner), and weighted again for that. Its facing
+    // is locked while it charges, so it lines up closely first.
+    const hold = (dist: number) => Math.min(p.stats.chargeTime, 0.1 + dist * 0.025);
+    const speed = (secs: number) => CONFIG.kick.passSpeed + (p.stats.shotSpeed - CONFIG.kick.passSpeed) * Math.min(1, secs / p.stats.chargeTime);
+    let charge = hold(mate.dist);
+    let to = { x: mate.q.x, y: mate.q.y };
+    for (let i = 0; i < 2; i++) {
+      // Struck once it's charged: they run on meanwhile.
+      to = passTarget(match.ball.x, match.ball.y, speed(charge), match.ball.damping, mate.q, charge);
+      charge = hold(Math.hypot(to.x - p.x, to.y - p.y));
+    }
+    return { ...to, charge };
+  }
   let best = { x: p.x - side * 12, y: 0, charge: p.stats.chargeTime, room: -1 };
   for (let deg = -55; deg <= 55; deg += 11) {
     const a = (deg * Math.PI) / 180;
@@ -195,7 +209,7 @@ export function keeperInput(match: Match, p: Player, random: () => number): Keep
     const dx = k.target.x - p.x;
     const dy = k.target.y - p.y;
     const dist = Math.hypot(dx, dy) || 1;
-    if ((p.fx * dx + p.fy * dy) / dist > 0.97) {
+    if ((p.fx * dx + p.fy * dy) / dist > cfg.kickAim) {
       k.charging = k.target.charge;
       return { input: { ...NO_INPUT, kick: true } };
     }

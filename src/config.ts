@@ -153,6 +153,22 @@ export const CONFIG = {
     goalAssistFrom: 0.3,
     goalAssistCurl: 1,
     goalAssistTurnRate: Math.PI / 6,
+    // Pass assist: a tap, or a kick up to passAssistCharge of a full charge,
+    // with an outfield teammate within passAssistCone degrees either side of
+    // your facing (judged where they stand) and under passAssistRange
+    // metres still leaves your foot the way you face, but curls onto their
+    // feet: where they'll be when it gets there, with passAssistLead of
+    // their run allowed for, and up to passAssistAhead metres in front of a
+    // runner (in full at a run), since you only take a ball in front of
+    // you. The least spin that does it, no more than passAssistCurl times
+    // your full curl; the weight is never changed. The teammate nearest
+    // your facing wins. Zero cone disables it.
+    passAssistCharge: 0.3,
+    passAssistCurl: 1,
+    passAssistCone: 15,
+    passAssistRange: 15,
+    passAssistLead: 1,
+    passAssistAhead: 0.8,
     // The kicker can't trap their own kick for this long.
     cooldown: 0.3,
     // Aftertouch: for this long after a kick, holding a direction across
@@ -334,6 +350,9 @@ export const CONFIG = {
     gatherSpeed: 5,
     // After its kick out, the other team can't touch the ball for this long.
     kickGuard: 0.4,
+    // Kicking out: lined up this closely (cos of 2.5 degrees) before it
+    // starts the kick, since it can't turn while charging.
+    kickAim: 0.999,
     // Kicking out: a teammate needs this much room either side of the
     // ball's path from any opponent to be passed to.
     clearPass: 1.4,

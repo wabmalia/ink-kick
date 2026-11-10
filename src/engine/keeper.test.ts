@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../config';
+import { angleBetween } from '../math';
 import { evenAttributes } from '../game/attributes';
 import { createMatch, createPlayer, KEEPER_IDS, step, type Input, type Match } from './sim';
 import { keeperInput } from './keeper';
@@ -186,6 +187,41 @@ describe('goalkeepers', () => {
     expect(match.spin).toBe(0);
     expect(Math.atan2(match.ball.vy, match.ball.vx)).toBeCloseTo(dir, 5);
     expect(match.ball.y).toBeLessThan(gk.y);
+  });
+
+  it('kicks it out ahead of a teammate on the run, for them to run onto', () => {
+    const result = (lead: boolean) => {
+      const kick = CONFIG.kick as { passAssistLead: number; passAssistAhead: number };
+      const was = { lead: kick.passAssistLead, ahead: kick.passAssistAhead };
+      if (!lead) Object.assign(kick, { passAssistLead: 0, passAssistAhead: 0 });
+      try {
+        const match = createMatch([createPlayer('mate', 'red'), createPlayer('them', 'gold')], { keepers: true, seed: 3 });
+        match.kickoffHeld = false;
+        const gk = match.players.find(p => p.id === KEEPER_IDS.red)!;
+        const mate = match.players.find(p => p.id === 'mate')!;
+        Object.assign(match.players.find(p => p.id === 'them')!, { x: -12, y: 8 });
+        Object.assign(match.ball, { x: gk.x - 0.6, y: 0, vx: 0, vy: 0 });
+        Object.assign(gk, { y: 0, fx: -1, fy: 0 });
+        match.owner = gk.id;
+        Object.assign(mate, { x: gk.x - 9, y: -5, fx: 0, fy: 1, vx: 0, vy: 0 });
+        const run = { ...idle, y: 1 };
+        let bearing = 0;
+        for (let i = 0; i < ticks(3) && match.owner === gk.id; i++) {
+          bearing = Math.atan2(mate.y - match.ball.y, mate.x - match.ball.x);
+          step(match, { mate: run, them: idle });
+        }
+        const dir = Math.atan2(match.ball.vy, match.ball.vx);
+        for (let i = 0; i < ticks(2.5) && match.owner !== 'mate'; i++) step(match, { mate: run, them: idle });
+        return { ahead: angleBetween(bearing, dir), got: match.owner === 'mate' };
+      } finally {
+        Object.assign(kick, { passAssistLead: was.lead, passAssistAhead: was.ahead });
+      }
+    };
+    const led = result(true);
+    // Kicking towards -x, running +y: ahead is clockwise of where they were.
+    expect(led.ahead).toBeLessThan(-0.05);
+    expect(led.got).toBe(true);
+    expect(result(false).got).toBe(false);
   });
 
   it("dives for a shot it can't reach on its feet", () => {
