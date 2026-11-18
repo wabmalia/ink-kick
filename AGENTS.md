@@ -1,7 +1,7 @@
 # Ink Kick
 
 3D arcade football in the browser: Three.js + TypeScript + Vite + Vitest.
-Live at https://wabmalia.github.io/ink-kick/ (repo wabmalia/ink-kick).
+Live at https://arcade.wabmalia.eu/ink-kick/ (repo wabmalia/ink-kick; the old wabmalia.github.io/ink-kick/ redirects there).
 Desktop first; mobile is deferred.
 
 ## Commands
