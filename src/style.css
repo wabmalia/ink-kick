@@ -1176,7 +1176,8 @@ html, body {
 }
 .perf p { margin: 0; white-space: nowrap; }
 .perf .perf-setting { color: #b8bdd8; }
-.perf button { margin-top: 4px; font: inherit; padding: 3px 10px; }
+.perf button { margin: 4px 6px 0 0; font: inherit; padding: 3px 10px; }
+.perf-text { display: block; width: 100%; height: 6em; margin-top: 4px; font: inherit; }
 .perf table { margin-top: 4px; border-collapse: collapse; }
 .perf td { padding: 1px 8px 1px 0; text-align: right; }
 .perf td:first-child { text-align: left; }

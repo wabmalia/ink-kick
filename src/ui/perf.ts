@@ -42,8 +42,30 @@ export function mountPerf(view: GameView) {
   const run = document.createElement('button');
   run.type = 'button';
   run.textContent = 'Run test';
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.textContent = 'Copy results';
+  copy.hidden = true;
   const table = document.createElement('table');
-  panel.append(live, setting, run, table);
+  panel.append(live, setting, run, copy, table);
+  // The last test as plain text, to paste somewhere from a phone.
+  let report = '';
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(report);
+    } catch {
+      // No clipboard access (an old browser, or not https): select the
+      // text instead, so a long press can copy it.
+      const area = document.createElement('textarea');
+      area.value = report;
+      area.className = 'perf-text';
+      panel.append(area);
+      area.select();
+      return;
+    }
+    copy.textContent = 'Copied';
+    setTimeout(() => (copy.textContent = 'Copy results'), 1500);
+  });
   document.body.append(panel);
 
   const describe = (q: Quality) => `density ${q.ratio} · shadows ${q.shadows ? 'on' : 'off'} · MSAA ${q.samples}x · ${innerWidth}x${innerHeight} @${devicePixelRatio}`;
@@ -67,7 +89,9 @@ export function mountPerf(view: GameView) {
 
   run.addEventListener('click', async () => {
     run.disabled = true;
+    copy.hidden = true;
     table.replaceChildren();
+    const lines = [`Ink Kick ?perf, ${new Date().toISOString().slice(0, 16)}`, `Screen ${innerWidth}x${innerHeight} CSS px at DPR ${devicePixelRatio}`, navigator.userAgent, ''];
     const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
     for (const step of STEPS) {
       const q = { ...base, ...step.q };
@@ -80,11 +104,14 @@ export function mountPerf(view: GameView) {
       measuring = null;
       const row = table.insertRow();
       for (const cell of [step.name, s.fps.toFixed(0), s.p95.toFixed(1), s.worst.toFixed(0), String(s.drops)]) row.insertCell().textContent = cell;
+      lines.push(`${step.name}: ${fmt(s)} (${describe(q)})`);
     }
     const head = table.createTHead().insertRow();
     for (const h of ['Setting', 'fps', 'p95 ms', 'worst', 'drops']) head.insertCell().textContent = h;
     view.setQuality(base);
     setting.textContent = describe(base);
+    report = lines.join('\n');
+    copy.hidden = false;
     run.disabled = false;
   });
 
