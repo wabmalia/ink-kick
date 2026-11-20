@@ -33,6 +33,10 @@ const attrInfo = document.getElementById('attr-info') as HTMLDialogElement;
 // Picks what's on the pitch from the session: bots playing behind the menu,
 // a solo game, a hosted match, or a guest's view of one.
 
+// No zooming on a double tap: the viewport and touch-action ask for that,
+// but some phone browsers still zoom on the double click a double tap makes.
+document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
+
 const view = new GameView(document.getElementById('game')!);
 
 type Mode =
