@@ -23,6 +23,9 @@ import { Training } from './game/training';
 import { resetTimes, showTimes } from './ui/training-hud';
 import { mountFullscreen } from './ui/fullscreen';
 import { mountPerf, PERF } from './ui/perf';
+import { Governor, LEVELS } from './game/governor';
+import type { Quality } from './game/view';
+import { KEYS, store } from './storage';
 import { matchEvents, resetMatchUi, restoreMatchUi, type NameOf } from './ui/match-ui';
 import { rulesLine, rulesName } from './game/rules';
 import type { SimEvent } from './engine/sim';
@@ -42,7 +45,17 @@ document.addEventListener('dblclick', e => e.preventDefault(), { passive: false 
 mountFullscreen();
 const view = new GameView(document.getElementById('game')!);
 // Frame times and a settings test at ?perf (see ui/perf.ts).
-const perfFrame = PERF ? mountPerf(view) : null;
+const perf = PERF ? mountPerf(view, () => focused) : null;
+
+// Phones and tablets: drawing quality follows what the device keeps up
+// with while playing (game/governor.ts), starting where it settled last
+// time. Desktop keeps its settings.
+const onScreen = (q: Quality): Quality => ({ ...q, ratio: Math.min(q.ratio, window.devicePixelRatio || 1) });
+const governor = matchMedia('(pointer: coarse)').matches
+  ? new Governor(Number(store.get(localStorage, KEYS.quality) ?? 0) || 0)
+  : null;
+if (governor && !perf?.holds()) view.setQuality(onScreen(governor.quality));
+let lastDrawn = 0;
 
 type Mode =
   | { kind: 'attract'; local: LocalMatch }
@@ -174,6 +187,15 @@ const MATCH_FRAME = 1 / 60;
 const MENU_FRAME = 1 / 30;
 const UNFOCUSED_FRAME = 1 / 5;
 let undrawn = 0;
+// Whether the window has focus, from its focus and blur events rather than
+// document.hasFocus(): iOS Safari answers false after its own toolbar or
+// menus were used, until the page is tapped, and touches the game takes
+// over (the stick, Kick) may not hand focus back, which left phones drawing
+// at 5 frames a second. A page starts focused; any touch on it is focus.
+let focused = true;
+window.addEventListener('blur', () => { focused = false; });
+window.addEventListener('focus', () => { focused = true; });
+window.addEventListener('pointerdown', () => { focused = true; }, { capture: true });
 
 // Players' names by id, for the labels over their heads: made again only
 // when the room changes, not every frame.
@@ -181,6 +203,17 @@ let named: { room: RoomView; names: Map<string, string> } | null = null;
 function namesIn(room: RoomView) {
   if (named?.room !== room) named = { room, names: new Map(room.members.map(m => [m.id, m.name])) };
   return named.names;
+}
+
+// Judged only while playing at full rate: not the menu (30 fps on purpose),
+// a dialog, an unfocused window, or a ?perf test.
+function adjustQuality(now: number) {
+  const playing = mode.kind !== 'attract' && focused && !dialogOpen() && document.visibilityState === 'visible' && !perf?.holds();
+  if (!playing || !lastDrawn) return governor!.pause();
+  const to = governor!.frame(now - lastDrawn);
+  if (to === null) return;
+  view.setQuality(onScreen(LEVELS[to]!));
+  store.set(localStorage, KEYS.quality, String(to));
 }
 
 function frame(now: number) {
@@ -226,11 +259,13 @@ function frame(now: number) {
   if (session.room && mode.kind !== 'solo' && mode.kind !== 'attract') names = namesIn(session.room);
 
   undrawn += dt;
-  const every = !document.hasFocus() ? UNFOCUSED_FRAME : mode.kind === 'attract' ? MENU_FRAME : MATCH_FRAME;
+  const every = !focused ? UNFOCUSED_FRAME : mode.kind === 'attract' ? MENU_FRAME : MATCH_FRAME;
   // A little slack, so 30 a second on a 60 Hz screen is every other frame.
   if (undrawn >= every - 0.004) {
     view.render(state, Math.min(0.25, undrawn), now, me, names);
-    perfFrame?.(now);
+    perf?.frame(now);
+    if (governor) adjustQuality(now);
+    lastDrawn = now;
     undrawn = 0;
   }
   requestAnimationFrame(frame);

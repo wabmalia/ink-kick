@@ -11,7 +11,7 @@ import { summarize } from './frame-stats';
 export const PERF = typeof location !== 'undefined' && new URLSearchParams(location.search).has('perf');
 
 const STEPS: { name: string; q: Partial<Quality> }[] = [
-  { name: 'As shipped', q: {} },
+  { name: 'Current', q: {} },
   { name: 'Density 1.5', q: { ratio: 1.5 } },
   { name: 'Density 1', q: { ratio: 1 } },
   { name: 'No shadows', q: { shadows: false } },
@@ -24,7 +24,10 @@ const MEASURE_MS = 6000;
 const fmt = (s: ReturnType<typeof summarize>) =>
   `${s.fps.toFixed(0)} fps · avg ${s.avg.toFixed(1)} · p95 ${s.p95.toFixed(1)} · worst ${s.worst.toFixed(0)} ms · drops ${s.drops}`;
 
-export function mountPerf(view: GameView) {
+/** isFocused: whether the game is drawing at full rate rather than the
+ *  unfocused 5 a second (see main.ts), so a throttled run says so. */
+export function mountPerf(view: GameView, isFocused: () => boolean) {
+  let busy = false;
   const params = new URLSearchParams(location.search);
   const num = (k: string) => (params.has(k) ? Number(params.get(k)) : undefined);
   const base: Quality = {
@@ -32,7 +35,9 @@ export function mountPerf(view: GameView) {
     shadows: params.get('shadows') !== '0',
     samples: num('samples') ?? DEFAULT_QUALITY.samples,
   };
-  view.setQuality(base);
+  // Settings given in the address: those, and nothing adjusting them.
+  const forced = ['ratio', 'shadows', 'samples'].some(k => params.has(k));
+  if (forced) view.setQuality(base);
 
   const panel = document.createElement('div');
   panel.className = 'perf';
@@ -69,14 +74,15 @@ export function mountPerf(view: GameView) {
   document.body.append(panel);
 
   const describe = (q: Quality) => `density ${q.ratio} · shadows ${q.shadows ? 'on' : 'off'} · MSAA ${q.samples}x · ${innerWidth}x${innerHeight} @${devicePixelRatio}`;
-  setting.textContent = describe(base);
+  setting.textContent = describe(view.quality);
 
   // The last few seconds, for the live line; and a test's own window.
   let recent: number[] = [];
   let measuring: number[] | null = null;
   let lastAt = 0;
   setInterval(() => {
-    live.textContent = fmt(summarize(recent));
+    live.textContent = (isFocused() ? '' : 'NOT FOCUSED, tap the screen · ') + fmt(summarize(recent));
+    if (!busy) setting.textContent = describe(view.quality);
     recent = [];
   }, 2000);
 
@@ -89,12 +95,14 @@ export function mountPerf(view: GameView) {
 
   run.addEventListener('click', async () => {
     run.disabled = true;
+    busy = true;
+    const before = view.quality;
     copy.hidden = true;
     table.replaceChildren();
     const lines = [`Ink Kick ?perf, ${new Date().toISOString().slice(0, 16)}`, `Screen ${innerWidth}x${innerHeight} CSS px at DPR ${devicePixelRatio}`, navigator.userAgent, ''];
     const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
     for (const step of STEPS) {
-      const q = { ...base, ...step.q };
+      const q = { ...before, ...step.q };
       view.setQuality(q);
       setting.textContent = `Testing: ${step.name} (${describe(q)})`;
       await wait(WARMUP_MS);
@@ -104,24 +112,30 @@ export function mountPerf(view: GameView) {
       measuring = null;
       const row = table.insertRow();
       for (const cell of [step.name, s.fps.toFixed(0), s.p95.toFixed(1), s.worst.toFixed(0), String(s.drops)]) row.insertCell().textContent = cell;
-      lines.push(`${step.name}: ${fmt(s)} (${describe(q)})`);
+      lines.push(`${step.name}: ${fmt(s)} (${describe(q)})${isFocused() ? '' : ' NOT FOCUSED'}`);
     }
     const head = table.createTHead().insertRow();
     for (const h of ['Setting', 'fps', 'p95 ms', 'worst', 'drops']) head.insertCell().textContent = h;
-    view.setQuality(base);
-    setting.textContent = describe(base);
+    view.setQuality(before);
+    busy = false;
+    setting.textContent = describe(before);
     report = lines.join('\n');
     copy.hidden = false;
     run.disabled = false;
   });
 
   /** Called after each frame is drawn. */
-  return (now: number) => {
+  const frame = (now: number) => {
     if (lastAt) {
       const ms = now - lastAt;
       recent.push(ms);
       measuring?.push(ms);
     }
     lastAt = now;
+  };
+  return {
+    frame,
+    /** A test is running, or the settings were forced: leave the quality alone. */
+    holds: () => busy || forced,
   };
 }

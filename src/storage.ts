@@ -12,6 +12,8 @@ export const KEYS = {
   attributes: 'inkkick.attributes',
   rules: 'inkkick.rules',
   keepers: 'inkkick.keepers',
+  // Phones and tablets: the drawing quality level that kept up (game/governor.ts).
+  quality: 'inkkick.quality',
 } as const;
 
 export const store = {

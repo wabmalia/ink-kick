@@ -99,8 +99,45 @@ landscape 874x292 CSS px at DPR 3: a steady 60 fps, 0 drops, for every
 setting. The simulator draws with the Mac's GPU, so this only shows that
 the mode works; it says nothing about an iPhone's GPU. The simulator also
 drew the scene much darker than desktop Chrome, likely its GPU path.
-Still to do: the same run on a real iPhone (the report was frame drops on
-an iPhone 15 in the training ground).
+### iPhone 15, Safari 26.6, training ground (2026-11-20)
+
+The first run read exactly 200 ms a frame for every setting: the page was
+drawing at the unfocused 5 fps. `document.hasFocus()` answered false after
+Safari's own menu (Hide Toolbar) was used and until the page was tapped,
+and the touch controls may not hand focus back. Fixed: the game now follows
+the window's focus and blur events and treats any touch as focus; the
+overlay says NOT FOCUSED when throttled.
+
+Tapped first, 852x368 CSS px at DPR 3:
+
+| Setting | fps | p95 ms | drops in 6 s |
+|---|---|---|---|
+| As shipped (density 2, shadows, MSAA 4x) | 42 | 33.0 | 70 |
+| Density 1.5 | 56 | 23.0 | 7 |
+| Density 1 | 60 | 18.0 | 5 |
+| No shadows | 55 | 23.0 | 11 |
+| No MSAA | 57 | 23.0 | 3 |
+| All three off | 59 | 18.0 | 9 |
+
+With Safari's page zoomed out (1002x433 CSS px), starting from density
+1.5 without MSAA: 54 to 55 fps with 6 to 14 drops; density 1, or 1.5
+without shadows, held 60. Pixel count is the main cost, and the right
+level depends on the device and on the page's size, so a fixed setting
+would be wrong for someone.
+
+### Dynamic resolution on touch screens
+
+[governor.ts](../src/game/governor.ts) picks the drawing quality on phones
+and tablets from frame times during play: levels 1.5, 1.25 and 1 (all
+without MSAA), then 1 without shadows. A 2 s window averaging over 18 ms
+steps down one level; 20 s of steady frames tries one level up; a level
+that ran late isn't tried again that session, so it can't flicker. It
+judges only full-rate play (not the menu at 30 fps, dialogs, an
+unfocused window or a ?perf test), ignores 1.5 s after any change, and
+counts one stall as at most 50 ms. The level is kept in localStorage
+(`inkkick.quality`), so a device starts where it settled. Desktop is
+unchanged. Checked in Chromium with the CPU throttled: it stepped from
+1.5 to 1.25 within a few seconds and held 60.
 
 ## Validation still needed
 

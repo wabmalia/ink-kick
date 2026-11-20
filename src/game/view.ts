@@ -136,7 +136,10 @@ export class GameView {
 
   /** Rendering settings the diagnostics mode (?perf) compares: drawing
    *  density, the floodlights' shadows and the scene's multisampling. */
+  quality: Quality = DEFAULT_QUALITY;
+
   setQuality(q: Quality) {
+    this.quality = q;
     this.renderer.setPixelRatio(q.ratio);
     this.scene.traverse(o => {
       if (o instanceof THREE.SpotLight) o.castShadow = q.shadows;
