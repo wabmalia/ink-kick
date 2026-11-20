@@ -5,7 +5,7 @@ import './rename';
 import { CONFIG } from './config';
 import { Bot } from './engine/ai';
 import { createMatch, createPlayer, KEEPER_IDS, step } from './engine/sim';
-import { enableKeys, keyboardInput } from './game/input';
+import { enableKeys, playerInput } from './game/input';
 import { LocalMatch, RemoteMatch, type ViewState } from './game/state';
 import { GameView } from './game/view';
 import { HostClock } from './net/host-clock';
@@ -20,7 +20,7 @@ import { renderPings } from './ui/pings';
 import { paintMenu } from './ui/wash';
 import { currentAttributes, mountLocker, onAttributes } from './ui/locker';
 import { Training } from './game/training';
-import { showTimes } from './ui/training-hud';
+import { resetTimes, showTimes } from './ui/training-hud';
 import { matchEvents, resetMatchUi, restoreMatchUi, type NameOf } from './ui/match-ui';
 import { rulesLine, rulesName } from './game/rules';
 import type { SimEvent } from './engine/sim';
@@ -58,13 +58,14 @@ function solo(): Mode {
   const bot = new Bot('bot');
   return {
     kind: 'solo', round: session.soloRound,
-    local: new LocalMatch(match, () => step(match, { [session.me]: keyboardInput(), bot: bot.think(match) })),
+    local: new LocalMatch(match, () => step(match, { [session.me]: playerInput(), bot: bot.think(match) })),
   };
 }
 
 function training(): Mode {
   const t = new Training(session.me, currentAttributes());
-  return { kind: 'training', training: t, local: new LocalMatch(t.match, () => t.step(keyboardInput())) };
+  resetTimes();
+  return { kind: 'training', training: t, local: new LocalMatch(t.match, () => t.step(playerInput())) };
 }
 onAttributes(attrs => {
   if (mode.kind === 'training') mode.training.setAttributes(attrs);
@@ -97,7 +98,7 @@ function pickMode() {
   } else if (inMatch() && host?.match) {
     if (mode.kind !== 'host' || mode.local.match !== host.match) {
       const match = host.match;
-      mode = { kind: 'host', local: new LocalMatch(match, () => host.step(keyboardInput())) };
+      mode = { kind: 'host', local: new LocalMatch(match, () => host.step(playerInput())) };
     }
   } else if (inMatch()) {
     if (mode.kind !== 'guest' || mode.matchId !== session.room!.matchId) {
@@ -116,7 +117,7 @@ function pickMode() {
   const trainingOn = mode.kind === 'training';
   view.setTraining(trainingOn);
   document.getElementById('train-hud')!.hidden = !trainingOn;
-  // Keys steer only in a match, and not while the help is up.
+  // Keys and touch controls steer only in a match, and not while the help is up.
   enableKeys(inMatch() && !dialogOpen());
 }
 onHelp(pickMode);
@@ -185,7 +186,7 @@ function frame(now: number) {
     // Guests send their input at the sim's rate; the host steps with it.
     inputClock += dt;
     while (inputClock >= CONFIG.tick) {
-      session.sendInput(keyboardInput());
+      session.sendInput(playerInput());
       inputClock -= CONFIG.tick;
     }
     played = mode.remote.advance(dt);

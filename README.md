@@ -13,6 +13,10 @@ npm run dev
 - **Shift**: sprint, until your stamina runs dry and you tire
 - **Space / X with the ball**: hold to power a kick, release to strike it
 - **Space / X without the ball**: tap to poke the ball loose, hold to slide
+- **Touch screens**: put a thumb down anywhere on the left to run (and curl):
+  that's the stick's centre. Kick and Sprint buttons at the bottom right
+  stand in for Space and Shift; a quick flick from Kick onto Sprint mid-charge
+  is the fake (a slow slide still kicks)
 
 Shooting within 20 m of goal, a wind-up that couldn't go in even with a
 full curl turns slowly towards goal, just until a curl could bring it in.

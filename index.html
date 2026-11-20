@@ -26,6 +26,11 @@
 <body>
   <div id="game"></div>
   <div class="labels" id="labels"></div>
+  <div class="rotate" role="alert">
+    <div class="rotate-phone" aria-hidden="true"></div>
+    <p>Turn your phone sideways</p>
+    <small>Ink Kick plays in landscape.</small>
+  </div>
 
   <div class="banner" id="banner" aria-live="polite">
     <div class="goal-word" id="goal-word"></div>
@@ -84,7 +89,7 @@
 
   <dialog class="help card" id="help" aria-labelledby="help-title" tabindex="-1">
     <h2 id="help-title">How to play</h2>
-    <dl class="controls">
+    <dl class="controls keys-only">
       <dt>
         <span class="keys cluster">
           <span class="key up">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>
@@ -114,25 +119,54 @@
       <dt><span class="key">H</span><span class="key wide">Esc</span></dt>
       <dd>This help. Esc also leaves solo.</dd>
     </dl>
+    <!-- The same controls on a touch screen. -->
+    <dl class="controls touch-only">
+      <dt><span class="tc-stick" aria-hidden="true"><span></span></span></dt>
+      <dd><b>Run.</b> Put your thumb down anywhere on the left: that's the stick's centre. You turn slower with the ball.</dd>
+
+      <dt><span class="tc-btn sprint">Sprint</span></dt>
+      <dd><b>Sprint</b> until your stamina runs out. Drops your defensive stance.</dd>
+
+      <dt><span class="tc-btn kick">Kick</span><span class="hold">hold</span></dt>
+      <dd><b>Kick.</b> Hold to power up, let go to strike. A quick pass to a teammate you're facing curls onto their feet. Steer just after to curl it.</dd>
+
+      <dt><span class="tc-btn kick">Kick</span><span class="plus">&rarr;</span><span class="tc-btn sprint">Sprint</span></dt>
+      <dd><b>Fake.</b> Mid-charge, flick your thumb from Kick onto Sprint to call it off and sprint away.</dd>
+
+      <dt><span class="tc-btn kick">Kick</span></dt>
+      <dd><b>Tackle.</b> Pokes up close, slides from further or behind.</dd>
+    </dl>
     <button class="brush gold" id="help-close" type="button">Got it</button>
   </dialog>
 
   <dialog class="help card info" id="attr-info" aria-labelledby="attr-info-title" tabindex="-1">
     <h2 id="attr-info-title">Attributes</h2>
     <p class="card-note">Every player starts with 5 in each. Take points off one to put them on another, between 1 and 10.</p>
-    <dl class="attr-list">
-      <dt>Pace</dt><dd><ul><li>Running speed</li><li>Acceleration</li><li class="con">Tires quicker</li><li class="con">Heavier touch sprinting</li></ul></dd>
-      <dt>Stamina</dt><dd><ul><li>Sprint and tackle longer</li><li>Getting your breath back</li></ul></dd>
-      <dt>Dribbling</dt><dd><ul><li>Turning with the ball</li><li>Speed on the ball</li><li>Quick stops and cuts</li></ul></dd>
-      <dt>Power</dt><dd><ul><li>Shot power</li><li>Charging a kick</li><li>Curl</li></ul></dd>
-      <dt>Tackling</dt><dd><ul><li>Poke and slide reach</li><li>Beating strong players</li><li>Less breath per tackle</li></ul></dd>
-      <dt>Strength</dt><dd><ul><li>Riding out tackles</li><li>Getting up after a slide</li><li>Shoved less in a slide</li><li>Less breath lost if robbed</li></ul></dd>
-    </dl>
+    <div class="attr-tabs" role="tablist" aria-label="Attributes">
+      <button class="attr-tab" role="tab" type="button" id="attr-tab-pace" aria-controls="attr-pane-pace" aria-selected="true">Pace</button>
+      <button class="attr-tab" role="tab" type="button" id="attr-tab-stamina" aria-controls="attr-pane-stamina" aria-selected="false" tabindex="-1">Stamina</button>
+      <button class="attr-tab" role="tab" type="button" id="attr-tab-dribbling" aria-controls="attr-pane-dribbling" aria-selected="false" tabindex="-1">Dribbling</button>
+      <button class="attr-tab" role="tab" type="button" id="attr-tab-power" aria-controls="attr-pane-power" aria-selected="false" tabindex="-1">Power</button>
+      <button class="attr-tab" role="tab" type="button" id="attr-tab-tackling" aria-controls="attr-pane-tackling" aria-selected="false" tabindex="-1">Tackling</button>
+      <button class="attr-tab" role="tab" type="button" id="attr-tab-strength" aria-controls="attr-pane-strength" aria-selected="false" tabindex="-1">Strength</button>
+    </div>
+    <div class="attr-panes">
+      <ul class="attr-pane" role="tabpanel" id="attr-pane-pace" aria-labelledby="attr-tab-pace"><li>Running speed</li><li>Acceleration</li><li class="con">Tires quicker</li><li class="con">Heavier touch sprinting</li></ul>
+      <ul class="attr-pane" role="tabpanel" id="attr-pane-stamina" aria-labelledby="attr-tab-stamina" hidden><li>Sprint and tackle longer</li><li>Getting your breath back</li></ul>
+      <ul class="attr-pane" role="tabpanel" id="attr-pane-dribbling" aria-labelledby="attr-tab-dribbling" hidden><li>Turning with the ball</li><li>Speed on the ball</li><li>Quick stops and cuts</li></ul>
+      <ul class="attr-pane" role="tabpanel" id="attr-pane-power" aria-labelledby="attr-tab-power" hidden><li>Shot power</li><li>Charging a kick</li><li>Curl</li></ul>
+      <ul class="attr-pane" role="tabpanel" id="attr-pane-tackling" aria-labelledby="attr-tab-tackling" hidden><li>Poke and slide reach</li><li>Beating strong players</li><li>Less breath per tackle</li></ul>
+      <ul class="attr-pane" role="tabpanel" id="attr-pane-strength" aria-labelledby="attr-tab-strength" hidden><li>Riding out tackles</li><li>Getting up after a slide</li><li>Shoved less in a slide</li><li>Less breath lost if robbed</li></ul>
+    </div>
     <p class="card-note small">No build is best: every strength has something that counters it. Points left unspent do nothing.</p>
     <button class="brush gold" id="attr-info-close" type="button">Got it</button>
   </dialog>
 
-  <div class="side-column">
+  <div class="side-column" id="side-column">
+    <div class="side-pills">
+      <button class="ink-btn side-pill" id="attr-pill" data-opens="attrs" type="button" aria-expanded="false" aria-controls="attr-panel">Attributes <span class="chevron" aria-hidden="true">&#9656;</span></button>
+      <button class="ink-btn side-pill" id="drills-pill" data-opens="drills" type="button" aria-expanded="false" aria-controls="train-hud">Drills <span class="chevron" aria-hidden="true">&#9656;</span></button>
+    </div>
     <aside class="card attr-panel" id="attr-panel" aria-label="Your attributes" hidden>
       <h2>Attributes</h2>
       <button class="ink-btn info-btn" data-attr-info type="button" aria-haspopup="dialog" aria-label="What the attributes do">?</button>
@@ -144,6 +178,8 @@
       <dl id="train-times"></dl>
     </section>
   </div>
+
+  <p class="train-line" id="train-line" aria-live="polite"></p>
 
   <main class="menu" id="menu">
     <section class="screen home" id="home" hidden>

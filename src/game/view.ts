@@ -50,6 +50,10 @@ const TOSS_OUT_END = CONFIG.coinTime - 0.1;
 const TOSS_SPOT: Record<Team, { x: number; y: number }> = { gold: { x: -1.5, y: 0.3 }, red: { x: 1.5, y: 0.3 } };
 const REF_SPOT = { x: 0, y: -1.1 };
 const REF_EXIT = { x: 0, y: -(CONFIG.pitch.height / 2 + 2) };
+// The widest the stage gets, width over height. Past this (ultra-wide
+// screens) the camera would sit so close that the scoreboard leaves the top
+// of the picture, so the stage stays this shape, centred between bars.
+export const MAX_ASPECT = 1.85;
 
 
 export class GameView {
@@ -67,6 +71,8 @@ export class GameView {
   private billboard = new Billboard();
   private infoBoards = new InfoBoards();
   private labelLayer: HTMLElement;
+  // The stage's size in CSS px: the window, unless that's wider than MAX_ASPECT.
+  private stage = { w: 1, h: 1 };
   private coinTimer: ReturnType<typeof setTimeout> | undefined;
   // The broadcast camera, and the close-up on the centre circle for the toss.
   private broadcast = { pos: new THREE.Vector3(), look: new THREE.Vector3(0, 0, 0.6) };
@@ -126,8 +132,11 @@ export class GameView {
   // A fixed broadcast camera on the near side, pulled back just far enough
   // that the four corners and both goals stay in view at any window shape.
   private resize() {
-    const w = window.innerWidth;
     const h = window.innerHeight;
+    const w = Math.min(window.innerWidth, Math.round(h * MAX_ASPECT));
+    this.stage = { w, h };
+    // The canvas and the labels over it share this box (see .stage in CSS).
+    document.documentElement.style.setProperty('--stage-w', `${w}px`);
     const { camera } = this;
     this.renderer.setSize(w, h);
     this.watercolor.setSize(w, h);
@@ -167,6 +176,15 @@ export class GameView {
     const closeView = new THREE.Vector3(0, 0.55, 1).normalize();
     this.closeUp.pos.copy(this.closeUp.look).addScaledVector(closeView, 9 * Math.max(1, 1.5 / camera.aspect));
     this.frame(this.toss ? this.zoom() : 1);
+  }
+
+  // A projected point, from clip space to px across and down the stage.
+  private toX(ndc: number) {
+    return (ndc + 1) * 0.5 * this.stage.w;
+  }
+
+  private toY(ndc: number) {
+    return (1 - ndc) * 0.5 * this.stage.h;
   }
 
   // How far the camera has pulled back from the close-up, 0 to 1.
@@ -405,7 +423,7 @@ export class GameView {
       // A small number beside the cone, a little up and to its right.
       if (label.textContent !== c.label) label.textContent = c.label;
       this.projected.set(c.x + 0.35, 0.55, c.y).project(this.camera);
-      label.style.transform = `translate(${(this.projected.x + 1) * 50}vw, ${(1 - this.projected.y) * 50}vh) translate(0, -50%)`;
+      label.style.transform = `translate(${this.toX(this.projected.x)}px, ${this.toY(this.projected.y)}px) translate(0, -50%)`;
     });
   }
 
@@ -778,12 +796,12 @@ export class GameView {
         if (el.dataset.team !== p.team) el.dataset.team = p.team;
         const at = this.last.get(p.id) ?? p;
         this.projected.set(at.x, 2.1, at.y).project(this.camera);
-        const x = Math.round((this.projected.x + 1) * 5000) / 100;
-        const y = Math.round((1 - this.projected.y) * 5000) / 100;
+        const x = Math.round(this.toX(this.projected.x));
+        const y = Math.round(this.toY(this.projected.y));
         const key = `${x},${y}`;
         if (el.dataset.at !== key) {
           el.dataset.at = key;
-          el.style.transform = `translate(${x}vw, ${y}vh) translate(-50%, -100%)`;
+          el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
         }
       }
     }
@@ -839,9 +857,7 @@ export class GameView {
         continue;
       }
       this.projected.set(at.x, 2.5, at.y).project(this.camera);
-      const x = (this.projected.x + 1) * 50;
-      const y = (1 - this.projected.y) * 50;
-      tag.el.style.translate = `${x}vw ${y}vh`;
+      tag.el.style.translate = `${this.toX(this.projected.x)}px ${this.toY(this.projected.y)}px`;
     }
   }
 

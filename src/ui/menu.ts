@@ -10,6 +10,29 @@ import { pingTag, renderPings } from './pings';
 // session, except whether solo setup is open.
 
 
+// Scrolled down, the menu asks the top buttons to step aside (see CSS).
+const menuEl = $('menu');
+menuEl.addEventListener('scroll', () => menuEl.classList.toggle('scrolled', menuEl.scrollTop > 8), { passive: true });
+
+// On phones the attributes and the drills card fold into buttons, closed
+// until tapped (see CSS); on bigger screens the buttons aren't shown and
+// the panels always are.
+const sideColumn = $('side-column');
+for (const pill of sideColumn.querySelectorAll<HTMLElement>('.side-pill')) {
+  pill.addEventListener('click', () => {
+    const open = sideColumn.classList.toggle(`open-${pill.dataset.opens}`);
+    pill.setAttribute('aria-expanded', String(open));
+  });
+}
+// Open over the screen, the attributes close on a tap anywhere else. The
+// drills stay up: they're watched while playing.
+document.addEventListener('pointerdown', e => {
+  if (!sideColumn.classList.contains('open-attrs') || sideColumn.contains(e.target as Node)) return;
+  if ((e.target as Element).closest?.('dialog')) return;
+  sideColumn.classList.remove('open-attrs');
+  $('attr-pill').setAttribute('aria-expanded', 'false');
+});
+
 const screens = {
   home: $('home'),
   connecting: $('connecting'),

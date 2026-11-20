@@ -16,6 +16,8 @@
 
 html, body {
   margin: 0;
+  /* No double-tap zoom on phones; scrolling the menu still works. */
+  touch-action: manipulation;
   height: 100%;
   overflow: hidden;
   background: var(--navy-deep);
@@ -23,6 +25,16 @@ html, body {
   font-family: 'Caveat Brush', 'Caveat', cursive;
 }
 
+/* The stage: the canvas and the labels over it, as wide as the window up to
+   MAX_ASPECT (view.ts), centred between bars past that. */
+#game, .labels {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: var(--stage-w, 100vw);
+  transform: translateX(-50%);
+}
 #game canvas { display: block; }
 
 .banner {
@@ -110,7 +122,7 @@ html, body {
 [hidden] { display: none !important; }
 
 /* Names over heads in a room. */
-.labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+.labels { pointer-events: none; overflow: hidden; }
 .label {
   position: absolute;
   top: 0;
@@ -278,11 +290,13 @@ html, body {
   inset: 0;
   overflow-y: auto;
   display: grid;
-  place-items: center;
+  /* Centred by the screen's auto margins, which give way when it's taller
+     than the window, so the top can still be scrolled to. */
+  place-items: start center;
   padding: 24px 16px;
   background: radial-gradient(ellipse at center, rgba(13, 16, 38, 0.5), rgba(10, 12, 28, 0.9));
 }
-.screen { width: min(760px, 100%); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.screen { width: min(760px, 100%); margin-block: auto; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 
 .title {
   position: relative;
@@ -534,14 +548,38 @@ html, body {
   line-height: 1;
 }
 .info .card-note { align-self: stretch; }
-.attr-list { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; margin: 6px 0 16px; align-self: stretch; }
-.attr-list dt { font-family: 'Caveat Brush', cursive; font-size: 22px; color: var(--gold); }
-.attr-list dd { margin: 0; font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; line-height: 1.15; color: var(--text); }
-.attr-list ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
-.attr-list li { padding-left: 16px; text-indent: -16px; }
-.attr-list li::before { content: '•'; display: inline-block; width: 16px; text-indent: 0; color: var(--gold); }
+/* One tab an attribute, and what the chosen one does under them. */
+.attr-tabs { display: flex; flex-wrap: wrap; gap: 5px; align-self: stretch; margin: 8px 0 12px; }
+.attr-tab {
+  font: inherit;
+  font-family: 'Caveat Brush', cursive;
+  font-size: 19px;
+  padding: 3px 9px 5px;
+  color: var(--text);
+  background: #0d1024;
+  border: 2px solid rgba(238, 240, 250, 0.45);
+  border-radius: 14px 12px 15px 11px;
+  cursor: pointer;
+}
+.attr-tab:hover { border-color: var(--gold); }
+.attr-tab:focus-visible { outline: 3px dashed var(--text); outline-offset: 3px; }
+.attr-tab[aria-selected='true'] { background: #ffc23a; border-color: #ffc23a; color: var(--ink); }
+/* As tall as the longest list, so switching tabs doesn't jump. */
+.attr-panes { align-self: stretch; min-height: calc(4 * 1.25em * 23 / 16); margin-bottom: 14px; }
+.attr-pane {
+  margin: 0;
+  padding: 0 4px;
+  list-style: none;
+  font-family: 'Caveat', cursive;
+  font-weight: 700;
+  font-size: 23px;
+  line-height: 1.25;
+  color: var(--text);
+}
+.attr-pane li { padding-left: 18px; text-indent: -18px; }
+.attr-pane li::before { content: '•'; display: inline-block; width: 18px; text-indent: 0; color: var(--gold); }
 /* A trade-off rather than a gain. */
-.attr-list li.con::before { content: '−'; color: #ff8a73; }
+.attr-pane li.con::before { content: '−'; color: #ff8a73; }
 .info .card-note.small { margin-bottom: 16px; }
 
 /* --- How to play --------------------------------------------------------- */
@@ -591,6 +629,41 @@ html, body {
 .controls dt { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
 .controls dd { margin: 0; font-family: 'Caveat', cursive; font-weight: 700; font-size: 20px; line-height: 1.15; color: var(--soft); }
 .controls dd b { color: var(--text); }
+/* Keys on a keyboard, the on-screen controls on a touch screen. */
+.controls.touch-only { display: none; }
+@media (pointer: coarse) {
+  .controls.keys-only { display: none; }
+  .controls.touch-only { display: grid; }
+  .help-btn .key { display: none; }
+}
+.tc-btn {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  font-family: 'Caveat Brush', cursive;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.tc-btn.kick { width: 50px; height: 50px; font-size: 14px; color: #1a1d3a; background: rgba(242, 177, 52, 0.9); border: 2px solid #ffe3a0; }
+.tc-btn.sprint { width: 40px; height: 40px; font-size: 11px; color: var(--text); background: rgba(13, 16, 38, 0.7); border: 2px solid rgba(238, 240, 250, 0.55); }
+.tc-stick {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 2px solid rgba(238, 240, 250, 0.5);
+  background: rgba(13, 16, 38, 0.4);
+}
+.tc-stick span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  background: rgba(238, 240, 250, 0.8);
+  translate: 8px -6px;
+}
 .or-word,
 .hold,
 .plus { font-family: 'Caveat', cursive; font-weight: 700; font-size: 18px; color: var(--soft); }
@@ -900,3 +973,183 @@ html, body {
 .goal-list .times { font-size: 17px; color: var(--soft); font-variant-numeric: tabular-nums; }
 .goal-list .none { grid-column: 1 / -1; text-align: center; color: var(--soft); font-size: 22px; }
 .scoreboard-actions { display: flex; gap: 14px; align-items: center; justify-content: center; }
+
+/* --- Touch controls (game/touch.ts) -------------------------------------- */
+
+.touch-controls {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 1;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.touch-controls > * { pointer-events: auto; touch-action: none; }
+.touch-zone {
+  /* Where a thumb can put the stick down: the left side, below the
+     buttons at the top. */
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 45%;
+  height: 70%;
+}
+.touch-stick {
+  position: absolute;
+  /* Placed by its centre: at rest bottom left, else where the thumb landed. */
+  left: calc(22px + 48px + env(safe-area-inset-left));
+  top: calc(100% - 18px - 48px - env(safe-area-inset-bottom));
+  translate: -50% -50%;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: 2px solid rgba(238, 240, 250, 0.3);
+  background: rgba(13, 16, 38, 0.18);
+  pointer-events: none;
+}
+.touch-stick:not(.held) { opacity: 0.7; }
+.touch-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border-radius: 50%;
+  background: rgba(238, 240, 250, 0.4);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+.touch-stick.held .touch-knob { background: rgba(238, 240, 250, 0.55); }
+.touch-btn {
+  position: fixed;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  font-family: 'Caveat Brush', 'Caveat', cursive;
+  color: var(--text);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  -webkit-tap-highlight-color: transparent;
+}
+.touch-kick {
+  right: calc(24px + env(safe-area-inset-right));
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  width: 66px;
+  height: 66px;
+  font-size: 15px;
+  color: #1a1d3a;
+  background: rgba(242, 177, 52, 0.8);
+  border: 2px solid #ffe3a0;
+}
+.touch-sprint {
+  right: calc(102px + env(safe-area-inset-right));
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  width: 48px;
+  height: 48px;
+  font-size: 12px;
+  background: rgba(13, 16, 38, 0.55);
+  border: 2px solid rgba(238, 240, 250, 0.55);
+}
+.touch-btn.held { transform: scale(0.92); filter: brightness(1.15); }
+
+/* --- Phones ------------------------------------------------------------- */
+
+/* Shown only on phones (the media query below): buttons the attributes and
+   drills fold into, and the drill being worked on in one line. */
+.side-pills { display: none; gap: 8px; }
+.side-pill { display: none; align-items: center; gap: 8px; }
+.side-pill .chevron { display: inline-block; font-size: 0.8em; transition: transform 0.15s; }
+.side-column.open-attrs #attr-pill .chevron,
+.side-column.open-drills #drills-pill .chevron { transform: rotate(90deg); }
+.train-line {
+  display: none;
+  position: fixed;
+  z-index: 1;
+  top: max(10px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 360px);
+  margin: 0;
+  padding: 4px 14px;
+  gap: 10px;
+  align-items: baseline;
+  white-space: nowrap;
+  border-radius: 12px 14px 10px 16px;
+  background: rgba(13, 16, 38, 0.85);
+  font-family: 'Caveat', cursive;
+  font-weight: 700;
+  font-size: 17px;
+  pointer-events: none;
+}
+.train-line .drill { font-family: 'Caveat Brush', cursive; font-weight: 400; color: var(--gold); }
+.train-line .now { font-variant-numeric: tabular-nums; }
+.train-line .best { color: var(--soft); font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
+.train-line.record { animation: train-record 1.2s ease-out; }
+@keyframes train-record {
+  0%, 30% { background: rgba(255, 197, 61, 0.9); color: var(--ink); transform: translateX(-50%) scale(1.08); }
+  100% { background: rgba(13, 16, 38, 0.85); transform: translateX(-50%) scale(1); }
+}
+
+@media (max-height: 500px), (max-width: 500px) {
+  /* The menus, buttons and dialogs drawn smaller, all in proportion. */
+  .menu .screen, .top-buttons, .ingame, .net-pings, .scoreboard, .help, .toast,
+  .side-column { zoom: 0.72; }
+  .help { max-height: calc((100dvh - 16px) / 0.72); overflow-y: auto; padding: 22px 28px; }
+
+  /* The menu starts below the top buttons, which step aside once it
+     scrolls rather than float over the cards. The attributes float over
+     the screen when open, so it stays centred. */
+  .menu { padding-top: 48px; }
+  .menu.with-side { padding-inline: 16px; }
+  .top-buttons { transition: opacity 0.2s; }
+  body:has(.menu.scrolled:not([hidden])) .top-buttons { opacity: 0; pointer-events: none; }
+
+  /* Attributes and drills folded into buttons, closed until tapped; above
+     the stick's zone so their own buttons still work. */
+  .side-column { z-index: 2; }
+  .side-pills { display: flex; }
+  .side-column:has(#attr-panel:not([hidden])) #attr-pill,
+  .side-column:has(#train-hud:not([hidden])) #drills-pill { display: inline-flex; }
+  .side-column:not(.open-attrs) .attr-panel,
+  .side-column:not(.open-drills) .train-hud { display: none; }
+  .attr-panel h2 { display: none; }
+  .attr-panel { padding-top: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55); }
+  body:has(#train-hud:not([hidden])) .train-line { display: flex; }
+}
+
+/* The game only plays sideways: in portrait on a touch screen, a note to
+   turn the phone covers everything. */
+.rotate {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px;
+  text-align: center;
+  background: var(--navy-deep);
+  font-size: 30px;
+}
+.rotate p { margin: 0; }
+.rotate small { font-family: 'Caveat', cursive; font-weight: 700; font-size: 20px; color: var(--soft); }
+.rotate-phone {
+  width: 54px;
+  height: 92px;
+  border: 4px solid var(--text);
+  border-radius: 10px;
+  animation: rotate-phone 2.4s ease-in-out infinite;
+}
+@keyframes rotate-phone {
+  0%, 25% { transform: rotate(0deg); }
+  55%, 100% { transform: rotate(-90deg); }
+}
+@media (pointer: coarse) and (orientation: portrait) {
+  .rotate { display: flex; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rotate-phone { animation: none; transform: rotate(-90deg); }
+}

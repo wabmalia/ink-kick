@@ -17,6 +17,11 @@ export const RELEASE_NOTES: ReleaseDay[] = [
       'Online, guests see the match a little closer to live on a steady connection.',
       'A quick kick tap from a guest no longer goes missing on a choppy connection.',
       'A player whose connection quietly drops now shows as away within a few seconds.',
+      'On ultra-wide screens the stadium keeps its shape with bars at the sides, so the scoreboard is never cut off.',
+      'Playable on phones and tablets, held sideways: put your thumb down anywhere on the left to run, with Kick and Sprint at the bottom right.',
+      'On a touch screen, flick from Kick onto Sprint mid-charge to fake the kick.',
+      'How to play shows the touch controls on a phone or tablet.',
+      'The attributes guide shows one attribute at a time, in tabs.',
     ],
   },
   {
