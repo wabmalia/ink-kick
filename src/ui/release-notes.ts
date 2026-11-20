@@ -21,6 +21,7 @@ export const RELEASE_NOTES: ReleaseDay[] = [
       'Playable on phones and tablets, held sideways: put your thumb down anywhere on the left to run, with Kick and Sprint at the bottom right.',
       'On a touch screen, flick from Kick onto Sprint mid-charge to fake the kick.',
       'How to play shows the touch controls on a phone or tablet.',
+      'On phones and tablets that allow it, a Fullscreen button sits under How to play.',
       'The attributes guide shows one attribute at a time, in tabs.',
     ],
   },

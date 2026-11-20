@@ -595,6 +595,11 @@ html, body {
   align-items: center;
   gap: 10px;
 }
+/* Under How to play, on touch screens only (see ui/fullscreen.ts). */
+.fullscreen-btn { position: absolute; top: calc(100% + 8px); right: 0; display: none; }
+@media (pointer: coarse) {
+  .fullscreen-btn { display: inline-flex; }
+}
 .help-btn {
   display: flex;
   align-items: center;
