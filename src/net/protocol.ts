@@ -68,7 +68,9 @@ export interface WireInput extends Input {
 }
 
 export type ToHost =
-  | { t: 'ping'; sentAt: number }
+  // rtt: the guest's own smoothed round trip to the host, in ms, so the host
+  // can show everyone's connection.
+  | { t: 'ping'; sentAt: number; rtt?: number }
   | { t: 'hello'; version: number; id: string; name: string; attrs: Attributes }
   | { t: 'team'; team: Team }
   // Attributes changed in the lobby; used from the next kickoff.
@@ -82,6 +84,8 @@ export type ToClient =
   // What happened on a tick, for the guest to play when it draws that tick.
   | { t: 'events'; matchId: string; tick: number; events: SimEvent[] }
   | { t: 'snap'; snap: Snapshot }
+  // Each connected guest's round trip to the host, in ms, by id.
+  | { t: 'pings'; pings: Record<string, number> }
   | { t: 'rejected'; reason: string };
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -114,4 +118,26 @@ export function cleanInput(raw: unknown): WireInput | null {
   const i = raw as WireInput;
   if (!i || typeof i !== 'object' || !num(i.seq) || !num(i.x) || !num(i.y)) return null;
   return { seq: i.seq, x: clamp(i.x), y: clamp(i.y), kick: i.kick === true, sprint: i.sprint === true };
+}
+
+/** A round trip in ms someone reported, or null if it isn't believable. */
+export function cleanPing(raw: unknown): number | null {
+  return num(raw) && raw >= 0 && raw < 10_000 ? Math.round(raw) : null;
+}
+
+export function cleanPings(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [id, v] of Object.entries(raw)) {
+    const ms = cleanPing(v);
+    if (ms !== null) out[id] = ms;
+  }
+  return out;
+}
+
+export type PingLevel = 'good' | 'fair' | 'poor';
+
+/** How a round trip feels in play. */
+export function pingLevel(ms: number): PingLevel {
+  return ms < 80 ? 'good' : ms < 150 ? 'fair' : 'poor';
 }

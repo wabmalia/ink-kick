@@ -3,6 +3,7 @@ import { RULE_OPTIONS, ruleId } from '../game/rules';
 import { normalizeCode, type MemberView } from '../net/protocol';
 import { session } from '../net/session';
 import { $, dialogOpen } from './dom';
+import { pingTag, renderPings } from './pings';
 
 // The screens over the stadium: home, solo setup, connecting, error and the
 // lobby, and the buttons shown during a match. Everything is drawn from the
@@ -108,6 +109,7 @@ function renderLobby() {
 function memberItem(m: MemberView) {
   const li = document.createElement('li');
   li.textContent = m.name;
+  if (m.connected && m.id !== session.room!.hostId) li.append(pingTag(m.id));
   li.classList.toggle('me', m.id === session.me);
   li.classList.toggle('away', !m.connected);
   const tags = [m.id === session.room!.hostId ? 'host' : '', m.id === session.me ? 'you' : '', m.connected ? '' : 'away']
@@ -121,6 +123,7 @@ function memberItem(m: MemberView) {
 }
 
 export function render() {
+  renderPings();
   const playing = inMatch();
   $('ingame').hidden = !playing;
   // What's new is for the menus, not mid-match.

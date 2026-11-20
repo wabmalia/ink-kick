@@ -417,6 +417,29 @@ html, body {
   align-items: center;
   gap: 10px;
 }
+/* Each player's round trip to the host, under the room tag. */
+.net-pings {
+  position: fixed;
+  top: calc(max(12px, env(safe-area-inset-top)) + 46px);
+  left: 16px;
+  margin: 0;
+  padding: 4px 10px;
+  list-style: none;
+  border-radius: 8px;
+  background: rgba(13, 16, 38, 0.75);
+  font-size: 16px;
+  pointer-events: none;
+}
+.net-pings li { display: flex; justify-content: space-between; gap: 14px; }
+.net-pings li[data-team='gold'] .ping-name { color: #ffd36b; }
+.net-pings li[data-team='red'] .ping-name { color: #ff8a73; }
+.net-pings li.me .ping-name { text-decoration: underline; }
+.ping { margin-left: 8px; font-size: 0.8em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ping::before { content: '\25CF  '; }
+.ping[data-level='good'] { color: #7fd88a; }
+.ping[data-level='fair'] { color: #ffd36b; }
+.ping[data-level='poor'] { color: #ff6b5b; }
+.ping[data-level='host'], .ping[data-level='unknown'] { color: var(--soft); }
 .room-tag { font-size: 20px; color: var(--soft); padding: 2px 10px; border-radius: 8px; background: rgba(13, 16, 38, 0.85); }
 
 .toast {

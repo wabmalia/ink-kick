@@ -4,7 +4,7 @@ import type { Input, Rules, SimEvent, Team } from '../engine/sim';
 import { loadKeepers, loadRules, saveKeepers, saveRules } from '../game/rules';
 import { iceServers } from './relay';
 import {
-  cleanInput, cleanName, newRoomCode, PEER_PREFIX, PROTOCOL_VERSION, VERSION_MESSAGE, validTeam,
+  cleanInput, cleanName, cleanPing, cleanPings, newRoomCode, PEER_PREFIX, PROTOCOL_VERSION, VERSION_MESSAGE, validTeam,
   type MatchSync, type RoomView, type Snapshot, type ToClient, type ToHost,
 } from './protocol';
 import { HostRoom, type Link } from './room';
@@ -22,6 +22,8 @@ export interface SessionListener {
   snap?(snap: Snapshot): void;
   sync?(sync: MatchSync): void;
   events?(tick: number, events: SimEvent[]): void;
+  /** Everyone's round trip to the host changed (see Session.pings). */
+  pings?(): void;
 }
 
 /** Per-tab identity, so a refresh reclaims the same player but two tabs are two players. */
@@ -72,6 +74,13 @@ export class Session {
   linked = true;
   name = store.get(localStorage, KEYS.name) ?? '';
   host: HostRoom | null = null;
+  /**
+   * Each connected guest's round trip to the host, in ms, by id. The host
+   * has none of its own: everyone plays through it, so a guest's number is
+   * the line between them and the host. One high number is that guest's
+   * connection; everyone high is the host's.
+   */
+  pings: Record<string, number> = {};
 
   private listeners = new Set<SessionListener>();
   private peer: Peer | null = null;
@@ -140,6 +149,12 @@ export class Session {
     store.set(sessionStorage, KEYS.host, code);
     this.set({ status: 'connecting', message: resumeCode ? 'Reopening your room…' : 'Creating room…', room: this.host.view() });
     void this.openHostPeer(code, !resumeCode, 0);
+    const host = this.host;
+    this.monitor = setInterval(() => {
+      if (this.host !== host) return;
+      this.pings = host.sendPings();
+      this.emit('pings');
+    }, HEARTBEAT_MS);
   }
 
   private async openHostPeer(code: string, fresh: boolean, attempt: number) {
@@ -248,6 +263,7 @@ export class Session {
       } else if (id && this.controls.get(id) !== conn) {
         return;
       } else if (msg?.t === 'ping' && id) {
+        host.setPing(id, cleanPing(msg.rtt));
         send(conn, { t: 'pong', tick: host.tick, matchId: host.matchId, sentAt: msg.sentAt });
       } else if (msg?.t === 'team' && id && validTeam(msg.team)) {
         host.setTeam(id, msg.team);
@@ -357,6 +373,8 @@ export class Session {
   private reconnectCount = 0;
   private reconnectReason: string | null = null;
   private rtt = { control: null as number | null, state: null as number | null };
+  /** This guest's round trip on the state channel, smoothed: what it reports. */
+  private smoothRtt: number | null = null;
   private jitterMs = 0;
   private previousSnapshot: { tick: number; at: number } | null = null;
 
@@ -394,6 +412,9 @@ export class Session {
     const age = performance.now() - msg.sentAt;
     if (!Number.isFinite(age) || age < 0 || age >= SILENCE_MS || !Number.isSafeInteger(msg.tick) || msg.tick < 0) return false;
     this.rtt[channel] = age;
+    // Inputs and snapshots ride the state channel, so that's the one that
+    // counts; a quarter of each new sample keeps one hiccup from flashing red.
+    if (channel === 'state') this.smoothRtt = this.smoothRtt === null ? age : this.smoothRtt + (age - this.smoothRtt) / 4;
     if (msg.matchId === this.room?.matchId) this.hostTick = Math.max(this.hostTick, msg.tick);
     return true;
   }
@@ -429,6 +450,7 @@ export class Session {
     this.previousSnapshot = null;
     this.jitterMs = 0;
     this.rtt = { control: null, state: null };
+    this.smoothRtt = null;
     this.monitor = setInterval(() => {
       if (this.peer !== peer) return;
       const now = performance.now();
@@ -448,7 +470,8 @@ export class Session {
         && now - this.lastSnapshotAt >= SILENCE_MS) {
         return this.scheduleReconnect('snapshot-timeout');
       }
-      send(this.control, { t: 'ping', sentAt: performance.now() });
+      const rtt = this.smoothRtt === null ? undefined : Math.round(this.smoothRtt);
+      send(this.control, { t: 'ping', sentAt: performance.now(), rtt });
       send(this.state, { t: 'ping', sentAt: performance.now() }, true);
     }, HEARTBEAT_MS);
   }
@@ -576,6 +599,14 @@ export class Session {
         this.eventTick = msg.tick;
         this.emit('events', msg.tick, msg.events);
         break;
+      case 'pings': {
+        const pings = cleanPings(msg.pings);
+        // Our own from here: a second fresher than the host's copy.
+        if (this.smoothRtt !== null) pings[this.me] = Math.round(this.smoothRtt);
+        this.pings = pings;
+        this.emit('pings');
+        break;
+      }
       case 'rejected':
         this.fail(msg.reason);
         store.set(sessionStorage, KEYS.joined, null);
@@ -626,6 +657,8 @@ export class Session {
     this.reconnectReason = null;
     this.jitterMs = 0;
     this.rtt = { control: null, state: null };
+    this.smoothRtt = null;
+    this.pings = {};
   }
 
   private fail(message: string) {

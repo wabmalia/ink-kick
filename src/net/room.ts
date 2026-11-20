@@ -28,6 +28,8 @@ interface Member extends MemberView {
   link: Link | null;
   input: WireInput | null;
   inputTick: number;
+  // Their reported round trip to the host, in ms.
+  ping: number | null;
 }
 
 
@@ -41,7 +43,7 @@ export class HostRoom {
   matchId: string | null = null;
 
   constructor(readonly code: string, readonly hostId: string, hostName: string, private listener: RoomListener, hostAttrs?: Attributes) {
-    this.members.push({ id: hostId, name: cleanName(hostName), attrs: cleanAttributes(hostAttrs), team: 'gold', connected: true, link: null, input: null, inputTick: 0 });
+    this.members.push({ id: hostId, name: cleanName(hostName), attrs: cleanAttributes(hostAttrs), team: 'gold', connected: true, link: null, input: null, inputTick: 0, ping: null });
   }
 
   view(): RoomView {
@@ -72,11 +74,11 @@ export class HostRoom {
   join(id: string, name: string, link: Link, attrs?: unknown) {
     let m = this.member(id);
     if (m) {
-      Object.assign(m, { name: cleanName(name), attrs: cleanAttributes(attrs), connected: true, link, input: null });
+      Object.assign(m, { name: cleanName(name), attrs: cleanAttributes(attrs), connected: true, link, input: null, ping: null });
     } else {
       const gold = this.members.filter(x => x.team === 'gold').length;
       const red = this.members.length - gold;
-      m = { id, name: cleanName(name), attrs: cleanAttributes(attrs), team: red < gold ? 'red' : 'gold', connected: true, link, input: null, inputTick: this.tick };
+      m = { id, name: cleanName(name), attrs: cleanAttributes(attrs), team: red < gold ? 'red' : 'gold', connected: true, link, input: null, inputTick: this.tick, ping: null };
       this.members.push(m);
     }
     if (this.match && !this.match.players.some(p => p.id === id)) addPlayer(this.match, createPlayer(id, m.team, m.attrs));
@@ -96,7 +98,7 @@ export class HostRoom {
   disconnect(id: string, link: Link) {
     const m = this.member(id);
     if (!m || m.link !== link) return;
-    Object.assign(m, { connected: false, link: null, input: null });
+    Object.assign(m, { connected: false, link: null, input: null, ping: null });
     this.changed();
   }
 
@@ -133,6 +135,20 @@ export class HostRoom {
       m.input = input;
       m.inputTick = this.tick;
     }
+  }
+
+  setPing(id: string, ms: number | null) {
+    const m = this.member(id);
+    if (m?.connected && id !== this.hostId && ms !== null) m.ping = ms;
+  }
+
+  /** Every connected guest's round trip; tells the guests too. */
+  sendPings(): Record<string, number> {
+    const pings: Record<string, number> = {};
+    for (const m of this.members) if (m.connected && m.ping !== null) pings[m.id] = m.ping;
+    const msg: ToClient = { t: 'pings', pings };
+    for (const m of this.members) m.link?.send(msg);
+    return pings;
   }
 
   start() {

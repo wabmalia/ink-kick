@@ -475,3 +475,37 @@ describe('host transport isolation', () => {
     expect(session.room!.members.find(m => m.id === 'guest')!.connected).toBe(false);
   });
 });
+
+describe('round trip to the host', () => {
+  it('reports the smoothed state round trip on its control ping', async () => {
+    const { control, state } = await join();
+    // The handshake's pong was instant; this one took 40 ms.
+    state.emit('data', { t: 'pong', matchId: room.matchId, sentAt: performance.now() - 40, tick: 0 });
+    control.sent.length = 0;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(control.sent).toContainEqual(expect.objectContaining({ t: 'ping', rtt: 10 }));
+  });
+
+  it("takes everyone's from the host, its own kept fresher, and drops nonsense", async () => {
+    const { control, state } = await join();
+    state.emit('data', { t: 'pong', matchId: room.matchId, sentAt: performance.now() - 80, tick: 0 });
+    const heard = vi.fn();
+    session.listen({ pings: heard });
+    control.emit('data', { t: 'pings', pings: { a: 42.4, [session.me]: 300, b: -5, c: 'x', d: Infinity } });
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(session.pings).toEqual({ a: 42, [session.me]: 20 });
+  });
+
+  it('a host tells everyone each second, and forgets on leaving', async () => {
+    session.hostRoom();
+    await flush();
+    const heard = vi.fn();
+    session.listen({ pings: heard });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(session.pings).toEqual({});
+    session.leave();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(heard).toHaveBeenCalledTimes(1);
+  });
+});

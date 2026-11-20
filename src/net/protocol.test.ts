@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanInput, cleanName, NAME_MAX, normalizeCode, validTeam } from './protocol';
+import { cleanInput, cleanName, cleanPings, NAME_MAX, normalizeCode, pingLevel, validTeam } from './protocol';
 
 // All of these check what arrives from other people's browsers.
 describe('cleaning what other browsers send', () => {
@@ -31,5 +31,17 @@ describe('cleaning what other browsers send', () => {
     expect(validTeam('red')).toBe(true);
     expect(validTeam('blue')).toBe(false);
     expect(validTeam(undefined)).toBe(false);
+  });
+
+  it('round trips: whole ms, believable numbers only', () => {
+    expect(cleanPings({ a: 41.6, b: -1, c: '9', d: NaN, e: 20_000, f: 0 })).toEqual({ a: 42, f: 0 });
+    expect(cleanPings(null)).toEqual({});
+    expect(cleanPings('x')).toEqual({});
+  });
+});
+
+describe('ping levels', () => {
+  it('good under 80 ms, fair under 150, poor beyond', () => {
+    expect([0, 79, 80, 149, 150, 900].map(pingLevel)).toEqual(['good', 'good', 'fair', 'fair', 'poor', 'poor']);
   });
 });

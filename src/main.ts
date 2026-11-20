@@ -16,6 +16,7 @@ import { onHelp } from './ui/help';
 import './ui/notes';
 import { dialogOpen } from './ui/dom';
 import { inMatch, offerInvite, render } from './ui/menu';
+import { renderPings } from './ui/pings';
 import { paintMenu } from './ui/wash';
 import { currentAttributes, mountLocker, onAttributes } from './ui/locker';
 import { Training } from './game/training';
@@ -132,6 +133,7 @@ session.listen({
   events(tick, events) {
     if (mode.kind === 'guest') mode.remote.pushEvents(tick, events);
   },
+  pings: renderPings,
 });
 
 // Who scored, by name: the bot, you, or whoever's in the room.

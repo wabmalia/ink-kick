@@ -112,8 +112,21 @@ In a guest's browser console, run `await inkKickNetwork()`. It reports:
 
 It returns no ICE addresses or relay credentials. Null means a measurement
 is not available yet. Route discovery may return unknown where browser
-statistics do not expose the selected pair. The host currently exposes no
-per-guest metric table; capture this on the affected guest.
+statistics do not expose the selected pair.
+
+### Pings in the room
+
+Each guest smooths its state-channel RTT (a quarter of each new sample) and
+reports it on its control ping. The host keeps the latest per connected
+member (`HostRoom.setPing`) and once a second sends everyone a `pings`
+message with all of them (`HostRoom.sendPings`). Guests show their own
+local value instead of the host's copy, since it is a second fresher. The
+lobby shows a ping next to each guest and the match a small list under the
+room tag (`src/ui/pings.ts`): under 80 ms good, under 150 ms fair, else
+poor. The host has no number: it is the hub, so each guest's number is
+their own link to it, and every guest being high points at the host.
+Values are self-reported and only sanity-checked, which is fine for
+friendly rooms.
 
 ## Verification
 

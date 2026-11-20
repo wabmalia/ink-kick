@@ -11,6 +11,12 @@ export interface ReleaseDay {
 
 export const RELEASE_NOTES: ReleaseDay[] = [
   {
+    date: '2026-11-20',
+    notes: [
+      'Rooms show each player\'s ping to the host, in the lobby and in a corner during the match.',
+    ],
+  },
+  {
     date: '2026-11-10',
     notes: [
       'A quick pass to a teammate you\'re facing curls onto their feet, a step ahead if they\'re running.',
