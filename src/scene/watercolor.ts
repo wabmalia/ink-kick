@@ -211,6 +211,14 @@ export class Watercolor {
     renderer.domElement.addEventListener('webglcontextrestored', () => { this.noiseDirty = true; });
   }
 
+  /** Multisampling of the scene before the wash (the diagnostics mode
+   *  compares it); the target is rebuilt on its next use. */
+  setSamples(samples: number) {
+    if (this.color.samples === samples) return;
+    this.color.samples = samples;
+    this.color.dispose();
+  }
+
   setSize(width: number, height: number) {
     const ratio = this.renderer.getPixelRatio();
     const w = Math.floor(width * ratio);

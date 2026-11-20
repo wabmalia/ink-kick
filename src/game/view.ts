@@ -49,6 +49,11 @@ const TOSS_OUT_END = CONFIG.coinTime - 0.1;
 // Where the captains face the referee, who stands behind the ball.
 const TOSS_SPOT: Record<Team, { x: number; y: number }> = { gold: { x: -1.5, y: 0.3 }, red: { x: 1.5, y: 0.3 } };
 const REF_SPOT = { x: 0, y: -1.1 };
+/** See GameView.setQuality. */
+export interface Quality { ratio: number; shadows: boolean; samples: number }
+/** What the game draws with unless told otherwise. */
+export const DEFAULT_QUALITY: Quality = { ratio: Math.min(globalThis.devicePixelRatio ?? 1, 2), shadows: true, samples: 4 };
+
 const REF_EXIT = { x: 0, y: -(CONFIG.pitch.height / 2 + 2) };
 // The widest the stage gets, width over height. Past this (ultra-wide
 // screens) the camera would sit so close that the scoreboard leaves the top
@@ -126,6 +131,17 @@ export class GameView {
     this.scene.add(this.billboard.group, this.infoBoards.group);
     this.labelLayer = document.getElementById('labels')!;
     window.addEventListener('resize', () => this.resize());
+    this.resize();
+  }
+
+  /** Rendering settings the diagnostics mode (?perf) compares: drawing
+   *  density, the floodlights' shadows and the scene's multisampling. */
+  setQuality(q: Quality) {
+    this.renderer.setPixelRatio(q.ratio);
+    this.scene.traverse(o => {
+      if (o instanceof THREE.SpotLight) o.castShadow = q.shadows;
+    });
+    this.watercolor.setSamples(q.samples);
     this.resize();
   }
 

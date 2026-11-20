@@ -22,6 +22,7 @@ import { currentAttributes, mountLocker, onAttributes } from './ui/locker';
 import { Training } from './game/training';
 import { resetTimes, showTimes } from './ui/training-hud';
 import { mountFullscreen } from './ui/fullscreen';
+import { mountPerf, PERF } from './ui/perf';
 import { matchEvents, resetMatchUi, restoreMatchUi, type NameOf } from './ui/match-ui';
 import { rulesLine, rulesName } from './game/rules';
 import type { SimEvent } from './engine/sim';
@@ -40,6 +41,8 @@ document.addEventListener('dblclick', e => e.preventDefault(), { passive: false 
 
 mountFullscreen();
 const view = new GameView(document.getElementById('game')!);
+// Frame times and a settings test at ?perf (see ui/perf.ts).
+const perfFrame = PERF ? mountPerf(view) : null;
 
 type Mode =
   | { kind: 'attract'; local: LocalMatch }
@@ -227,6 +230,7 @@ function frame(now: number) {
   // A little slack, so 30 a second on a 60 Hz screen is every other frame.
   if (undrawn >= every - 0.004) {
     view.render(state, Math.min(0.25, undrawn), now, me, names);
+    perfFrame?.(now);
     undrawn = 0;
   }
   requestAnimationFrame(frame);

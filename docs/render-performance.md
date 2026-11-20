@@ -80,6 +80,28 @@ An optional low-power quality preset could expose the successful tradeoffs
 after they are measured. Avoid selecting quality solely from a device
 name; window size, browser and display behavior also affect the cost.
 
+## Measuring on a device: ?perf
+
+`?perf` (never linked) shows the frame intervals as drawn: fps, average,
+95th percentile, worst, and drops (frames over 25 ms) over the last two
+seconds, plus the current settings and screen size. **Run test** goes
+through six settings (as shipped, density 1.5, density 1, no shadows, no
+MSAA, all three off), 2 s to settle and 6 s measured each, and shows a
+table. `?perf=auto` opens the training ground and runs the test by itself;
+`?perf&ratio=1&shadows=0&samples=0` starts with other settings.
+
+Frame intervals only: WebGL in Safari has no GPU timer, so this shows
+whether frames are late, not which pass is slow. That's why the settings
+are changed one at a time.
+
+First run, 2026-11-20, iPhone 18 Pro simulator (Device Hub) in Safari,
+landscape 874x292 CSS px at DPR 3: a steady 60 fps, 0 drops, for every
+setting. The simulator draws with the Mac's GPU, so this only shows that
+the mode works; it says nothing about an iPhone's GPU. The simulator also
+drew the scene much darker than desktop Chrome, likely its GPU path.
+Still to do: the same run on a real iPhone (the report was frame drops on
+an iPhone 15 in the training ground).
+
 ## Validation still needed
 
 - Repeat the same scene before and after each change, allowing sustained
