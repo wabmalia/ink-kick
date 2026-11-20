@@ -8,7 +8,7 @@ import type { Attributes } from '../game/attributes';
 
 // Room codes are registered with the PeerJS broker under this prefix.
 export const PEER_PREFIX = 'inkkick-';
-export const NAME_MAX = 16;
+export { NAME_MAX } from '@wabmalia/courier';
 export const PROTOCOL_VERSION = 2;
 export const VERSION_MESSAGE = 'Game versions differ. Refresh the game in every browser, then try again.';
 
@@ -68,9 +68,6 @@ export interface WireInput extends Input {
 }
 
 export type ToHost =
-  // rtt: the guest's own smoothed round trip to the host, in ms, so the host
-  // can show everyone's connection.
-  | { t: 'ping'; sentAt: number; rtt?: number }
   | { t: 'hello'; version: number; id: string; name: string; attrs: Attributes }
   | { t: 'team'; team: Team }
   // Attributes changed in the lobby; used from the next kickoff.
@@ -79,35 +76,15 @@ export type ToHost =
   | { t: 'input'; matchId: string; inputs: WireInput[] };
 
 export type ToClient =
-  | { t: 'pong'; tick: number; matchId: string | null; sentAt: number }
   | { t: 'room'; room: RoomView }
   | { t: 'sync'; sync: MatchSync }
   // What happened on a tick, for the guest to play when it draws that tick.
   | { t: 'events'; matchId: string; tick: number; events: SimEvent[] }
   | { t: 'snap'; snap: Snapshot }
-  // Each connected guest's round trip to the host, in ms, by id.
-  | { t: 'pings'; pings: Record<string, number> }
   | { t: 'rejected'; reason: string };
 
-const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-
-export function newRoomCode(): string {
-  const buf = new Uint32Array(5);
-  crypto.getRandomValues(buf);
-  return Array.from(buf, x => CODE_ALPHABET[x % CODE_ALPHABET.length]).join('');
-}
-
-export function normalizeCode(code: string): string {
-  return code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
-}
-
-export function cleanName(raw: unknown): string {
-  const name = String(raw ?? '')
-    .replace(/[\p{C}]/gu, '')
-    .trim()
-    .slice(0, NAME_MAX);
-  return name || 'Player';
-}
+// Codes, names and ping grading are courier's, shared with the other arcade games.
+export { cleanName, cleanPing, cleanPings, newRoomCode, normalizeCode, pingLevel, type PingLevel } from '@wabmalia/courier';
 
 // Messages come from other browsers, so check the shapes we rely on.
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -121,24 +98,3 @@ export function cleanInput(raw: unknown): WireInput | null {
   return { seq: i.seq, x: clamp(i.x), y: clamp(i.y), kick: i.kick === true, sprint: i.sprint === true };
 }
 
-/** A round trip in ms someone reported, or null if it isn't believable. */
-export function cleanPing(raw: unknown): number | null {
-  return num(raw) && raw >= 0 && raw < 10_000 ? Math.round(raw) : null;
-}
-
-export function cleanPings(raw: unknown): Record<string, number> {
-  const out: Record<string, number> = {};
-  if (!raw || typeof raw !== 'object') return out;
-  for (const [id, v] of Object.entries(raw)) {
-    const ms = cleanPing(v);
-    if (ms !== null) out[id] = ms;
-  }
-  return out;
-}
-
-export type PingLevel = 'good' | 'fair' | 'poor';
-
-/** How a round trip feels in play. */
-export function pingLevel(ms: number): PingLevel {
-  return ms < 80 ? 'good' : ms < 150 ? 'fair' : 'poor';
-}

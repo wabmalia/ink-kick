@@ -95,12 +95,12 @@ function handshake() {
   const state = peer.connections[1]!;
   expect(state.metadata).toEqual({ id: session.me, controlId: control.connectionId });
   state.ready();
-  state.emit('data', { t: 'pong', matchId: room.matchId, sentAt: performance.now(), tick: 0 });
+  state.emit('data', { t: '~pong', sentAt: performance.now(), d: { matchId: room.matchId, tick: 0 } });
   return { peer, control, state };
 }
 function keepAlive(control: InstanceType<typeof transport.Connection>, state?: InstanceType<typeof transport.Connection>, tick = 0) {
-  control.emit('data', { t: 'pong', matchId: room.matchId, sentAt: performance.now(), tick });
-  state?.emit('data', { t: 'pong', matchId: room.matchId, sentAt: performance.now(), tick });
+  control.emit('data', { t: '~pong', sentAt: performance.now(), d: { matchId: room.matchId, tick } });
+  state?.emit('data', { t: '~pong', sentAt: performance.now(), d: { matchId: room.matchId, tick } });
 }
 
 describe('guest connection recovery', () => {
@@ -177,8 +177,8 @@ describe('guest connection recovery', () => {
     }
     expect(peer.destroyed).toBe(false);
     expect(session.linked).toBe(true);
-    expect(control.sent).toContainEqual(expect.objectContaining({ t: 'ping' }));
-    expect(state.sent).toContainEqual(expect.objectContaining({ t: 'ping' }));
+    expect(control.sent).toContainEqual(expect.objectContaining({ t: '~ping' }));
+    expect(state.sent).toContainEqual(expect.objectContaining({ t: '~ping' }));
   });
 
   it('does not reconnect when the host stops a tick past its last snapshot', async () => {
@@ -222,7 +222,7 @@ describe('guest connection recovery', () => {
     const { peer, control, state } = await join();
     state.emit('data', { t: 'snap', snap: snap(0) });
     for (let i = 0; i < 8; i++) {
-      state.emit('data', { t: 'pong', matchId: room.matchId, sentAt: performance.now(), tick: 0 });
+      state.emit('data', { t: '~pong', sentAt: performance.now(), d: { matchId: room.matchId, tick: 0 } });
       control.emit('data', { t: 'events', matchId: room.matchId, tick: 0, events: [] });
       await vi.advanceTimersByTimeAsync(1000);
     }
@@ -324,7 +324,7 @@ describe('guest connection recovery', () => {
       snap: { ...snap(3), matchId: 'match-b' }, goals: [], over: null,
       restartIn: 0, holdFor: 0, kickoffTeam: 'gold',
     } });
-    state.emit('data', { t: 'pong', sentAt: performance.now(), matchId: 'match-b', tick: 3 });
+    state.emit('data', { t: '~pong', sentAt: performance.now(), d: { matchId: 'match-b', tick: 3 } });
     state.emit('data', { t: 'snap', snap: snap(9000) });
     state.emit('data', { t: 'snap', snap: { ...snap(4), matchId: 'match-b' } });
     expect(session.linked).toBe(true);
@@ -342,7 +342,7 @@ describe('guest connection recovery', () => {
   it('reports RTT, snapshot jitter, queue pressure and relay route without IP addresses', async () => {
     const { control, state } = await join();
     await vi.advanceTimersByTimeAsync(100);
-    control.emit('data', { t: 'pong', matchId: room.matchId, sentAt: 50, tick: 0 });
+    control.emit('data', { t: '~pong', sentAt: 50, d: { matchId: room.matchId, tick: 0 } });
     state.emit('data', { t: 'snap', snap: snap(6) });
     await vi.advanceTimersByTimeAsync(150);
     state.emit('data', { t: 'snap', snap: snap(12) });
@@ -355,7 +355,7 @@ describe('guest connection recovery', () => {
     ]);
     Object.assign(state.peerConnection, { getStats: async () => stats });
     const result = await session.diagnostics();
-    expect(result.control.rttMs).toBe(50);
+    expect(result.control!.rttMs).toBe(50);
     expect(result.state).toMatchObject({ route: 'relay', bufferedBytes: 2048 });
     expect(result.snapshotJitterMs).toBeGreaterThan(0);
     expect(result.snapshotAgeMs).toBe(0);
@@ -411,8 +411,8 @@ describe('host transport isolation', () => {
     session.host!.step(idle);
     expect(session.host!.match!.players.find(p => p.id === 'guest')!.vy).toBeGreaterThan(0);
     for (const conn of [next.control, next.state]) {
-      conn.emit('data', { t: 'ping', sentAt: performance.now() });
-      expect(conn.sent).toContainEqual({ t: 'pong', matchId: session.host!.matchId, sentAt: performance.now(), tick: 11 });
+      conn.emit('data', { t: '~ping', sentAt: performance.now(), id: 'guest' });
+      expect(conn.sent).toContainEqual({ t: '~pong', sentAt: performance.now(), d: { matchId: session.host!.matchId, tick: 11 } });
     }
     const count = next.state.sent.length;
     next.state.dataChannel.bufferedAmount = 32 * 1024;
@@ -486,18 +486,18 @@ describe('round trip to the host', () => {
   it('reports the smoothed state round trip on its control ping', async () => {
     const { control, state } = await join();
     // The handshake's pong was instant; this one took 40 ms.
-    state.emit('data', { t: 'pong', matchId: room.matchId, sentAt: performance.now() - 40, tick: 0 });
+    state.emit('data', { t: '~pong', sentAt: performance.now() - 40, d: { matchId: room.matchId, tick: 0 } });
     control.sent.length = 0;
     await vi.advanceTimersByTimeAsync(1000);
-    expect(control.sent).toContainEqual(expect.objectContaining({ t: 'ping', rtt: 10 }));
+    expect(control.sent).toContainEqual(expect.objectContaining({ t: '~ping', rtt: 10 }));
   });
 
   it("takes everyone's from the host, its own kept fresher, and drops nonsense", async () => {
     const { control, state } = await join();
-    state.emit('data', { t: 'pong', matchId: room.matchId, sentAt: performance.now() - 80, tick: 0 });
+    state.emit('data', { t: '~pong', sentAt: performance.now() - 80, d: { matchId: room.matchId, tick: 0 } });
     const heard = vi.fn();
     session.listen({ pings: heard });
-    control.emit('data', { t: 'pings', pings: { a: 42.4, [session.me]: 300, b: -5, c: 'x', d: Infinity } });
+    control.emit('data', { t: '~pings', pings: { a: 42.4, [session.me]: 300, b: -5, c: 'x', d: Infinity } });
     expect(heard).toHaveBeenCalledTimes(1);
     expect(session.pings).toEqual({ a: 42, [session.me]: 20 });
   });

@@ -1,5 +1,18 @@
 # Online connection recovery
 
+Since 2026-11-20 the transport described here lives in
+[courier](https://github.com/wabmalia/courier) (`@wabmalia/courier` v0.2,
+shared with turn7 and Sinkhole): both channels, their pairing, heartbeats,
+silence and the reconnect loop, backpressure and the diagnostics. Its tests
+cover them, and `src/net/session.test.ts` still runs these scenarios
+end to end through it. What stays in Ink Kick is the match side: the
+`sync` baseline, match ids, stale-traffic rules and the snapshot stall
+check, which reads the host's tick from courier's heartbeat replies
+(`HostOptions.beat`) and calls `guest.reconnect('snapshot-timeout')`.
+Heartbeat messages are courier's own (`~ping`, `~pong`, `~pings`). One
+addition from the move: the host now also drops a guest it hasn't heard
+from on either channel for eight seconds, so they show as away.
+
 ## The reported freeze
 
 In a three-player session on November 9, one guest in Germany stopped
@@ -148,11 +161,11 @@ sequence as the one to beat.
 
 ### Pings in the room
 
-Each guest smooths its state-channel RTT (a quarter of each new sample) and
-reports it on its control ping. The host keeps the latest per connected
-member (`HostRoom.setPing`) and once a second sends everyone a `pings`
-message with all of them (`HostRoom.sendPings`). Guests show their own
-local value instead of the host's copy, since it is a second fresher. The
+Courier measures them: each guest smooths its state-channel RTT (a quarter
+of each new sample) and reports it on its control ping; the host keeps the
+latest per guest and once a second sends everyone the table, which reaches
+`Session.pings`. Guests show their own local value instead of the host's
+copy, since it is a second fresher. The
 lobby shows a ping next to each guest and the match a small list under the
 room tag (`src/ui/pings.ts`): under 80 ms good, under 150 ms fair, else
 poor. The host has no number: it is the hub, so each guest's number is

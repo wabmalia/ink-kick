@@ -21,8 +21,14 @@ runs check, test and build first). Pushing is shipping: only push when asked.
   player attributes (`stats.ts`). Fixed 60 Hz tick.
 - `src/config.ts`: all tuning lives in `CONFIG`.
 - `src/game/`: match/training state, input, snapshot (de)serialisation, view.
-- `src/net/`: PeerJS online play, host authoritative. TURN relay in
-  `relay.ts` (only used on the deployed site).
+- `src/net/`: online play, host authoritative. The connecting (room codes,
+  both channels, heartbeats, reconnects, pings, the TURN relay) is
+  [courier](https://github.com/wabmalia/courier) (`@wabmalia/courier`), a
+  private repo shared with turn7 and Sinkhole; `session.ts` holds what's
+  Ink Kick's on top of it. CI reads courier with this repo's read-only
+  deploy key (`COURIER_DEPLOY_KEY`). Connection behaviour common to the
+  games belongs in courier: change it there, tag a release, bump the tag
+  here. Relay settings in `relay.ts` (only used on the deployed site).
 - `src/scene/`: Three.js scene, procedural footballer, ball, stadium.
 - `src/ui/`: menus, help, release notes.
 - `src/lab/`: hidden tuning lab at `#/lab` (`lab.html`). Never link to it

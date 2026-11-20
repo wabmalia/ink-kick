@@ -226,27 +226,6 @@ it('sends the current goal pause in a reconnect baseline without replaying old e
   expect(a.sent.some(m => m.t === 'events')).toBe(false);
 });
 
-it("gathers guests' round trips and tells everyone, forgetting anyone who leaves", () => {
-  const r = room();
-  const a = link();
-  const b = link();
-  r.join('a', 'Ana', a.l);
-  r.join('b', 'Bo', b.l);
-  r.setPing('a', 35);
-  r.setPing('b', 180);
-  r.setPing('host', 5);
-  r.setPing('nobody', 5);
-  r.setPing('a', null);
-  expect(r.sendPings()).toEqual({ a: 35, b: 180 });
-  expect(b.sent[b.sent.length - 1]).toEqual({ t: 'pings', pings: { a: 35, b: 180 } });
-  r.disconnect('b', b.l);
-  r.setPing('b', 60);
-  expect(r.sendPings()).toEqual({ a: 35 });
-  // Back again: no number until they report one.
-  r.join('b', 'Bo', link().l);
-  expect(r.sendPings()).toEqual({ a: 35 });
-});
-
 describe('guest inputs arriving together', () => {
   function playing() {
     const r = room();

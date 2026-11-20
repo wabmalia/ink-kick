@@ -1,19 +1,22 @@
-import { Peer, type DataConnection, type PeerOptions } from 'peerjs';
+import { host, join, tabId, type Guest, type GuestStatus, type Host, type Link, type LinkHandlers } from '@wabmalia/courier';
 import { CONFIG } from '../config';
 import type { Input, Rules, SimEvent, Team } from '../engine/sim';
 import { loadKeepers, loadRules, saveKeepers, saveRules } from '../game/rules';
 import { iceServers } from './relay';
 import {
-  cleanInput, cleanName, cleanPing, cleanPings, newRoomCode, PEER_PREFIX, PROTOCOL_VERSION, VERSION_MESSAGE, validTeam,
+  cleanInput, cleanName, newRoomCode, PEER_PREFIX, PROTOCOL_VERSION, VERSION_MESSAGE, validTeam,
   type MatchSync, type RoomView, type Snapshot, type ToClient, type ToHost, type WireInput,
 } from './protocol';
-import { HostRoom, type Link } from './room';
+import { HostRoom } from './room';
 import { loadAttributes, type Attributes } from '../game/attributes';
 import { KEYS, store } from '../storage';
 
-// The connection side: one browser hosts the
-// room over PeerJS, the others join by code. Each guest opens two
-// connections to the host (see protocol.ts). Screens listen for changes.
+// The connection side. Courier (@wabmalia/courier) does the connecting: the
+// room code, both channels (reliable "control" for the room, events and
+// choices; unordered "state" for inputs and snapshots, see protocol.ts),
+// heartbeats, reconnects, pings and the relay. This keeps what's Ink Kick's:
+// the host room, what the messages mean, the match baseline, and spotting a
+// host whose simulation stalled. Screens listen for changes.
 
 export type Status = 'home' | 'connecting' | 'room' | 'solo' | 'training' | 'error';
 
@@ -26,49 +29,24 @@ export interface SessionListener {
   pings?(): void;
 }
 
-/** Per-tab identity, so a refresh reclaims the same player but two tabs are two players. */
-function tabId(): string {
-  let id = store.get(sessionStorage, KEYS.id);
-  if (!id) {
-    id = crypto.randomUUID();
-    store.set(sessionStorage, KEYS.id, id);
-  }
-  return id;
+/** How often a guest checks the host's simulation is still sending snapshots. */
+const STALL_CHECK_MS = 1000;
+/** No snapshot for this long, while the host's simulation has moved on: start again. */
+const SNAPSHOT_SILENCE_MS = 8000;
+
+/** What the host adds to its heartbeat replies: how far its match has got. */
+interface Beat {
+  tick: number;
+  matchId: string | null;
 }
-
-/** How long a guest waits for the direct connection before giving up. */
-const JOIN_TIMEOUT_MS = 15_000;
-const HEARTBEAT_MS = 1000;
-const SILENCE_MS = 8000;
-const RETRY_MS = 2500;
-// Stop feeding obsolete inputs/snapshots into a congested browser queue.
-const STATE_BUFFER_BYTES = 16 * 1024;
-
-function send(conn: DataConnection | null | undefined, msg: ToHost | ToClient, realtime = false) {
-  if (!conn?.open) return;
-  if (realtime && conn.dataChannel.bufferedAmount > STATE_BUFFER_BYTES) return;
-  try {
-    conn.send(msg);
-  } catch (error) {
-    console.warn('[ink-kick] send failed', conn.label, error);
-    conn.close();
-  }
-}
-
-// Relay servers when the turn-relay Worker answers, else PeerJS's defaults.
-async function peerOptions(): Promise<PeerOptions> {
-  const servers = await iceServers();
-  return servers ? { config: { iceServers: servers } } : {};
-}
-
-// The room a tab was hosting, so a refresh reopens it under the same code.
 
 export class Session {
   status: Status = 'home';
   message = '';
   role: 'host' | 'client' | null = null;
   code = '';
-  me = tabId();
+  /** Per-tab identity, so a refresh reclaims the same player but two tabs are two players. */
+  me = tabId(KEYS.id);
   room: RoomView | null = null;
   /** False while a guest is reconnecting to the host. */
   linked = true;
@@ -83,16 +61,14 @@ export class Session {
   pings: Record<string, number> = {};
 
   private listeners = new Set<SessionListener>();
-  private peer: Peer | null = null;
-  private control: DataConnection | null = null;
-  private state: DataConnection | null = null;
+  private hosting: Host | null = null;
+  private guest: Guest<ToHost> | null = null;
+  /** Each guest's current link, by player id, so a returning one replaces the old. */
+  private links = new Map<string, Link<ToClient>>();
   private seq = 0;
   /** The latest inputs sent, repeated in each packet. */
   private recentInputs: WireInput[] = [];
-  private retry: ReturnType<typeof setTimeout> | undefined;
-  private monitor: ReturnType<typeof setInterval> | undefined;
-  /** Bumped on teardown, so a peer still being set up knows it's stale. */
-  private gen = 0;
+  private stallCheck: ReturnType<typeof setInterval> | undefined;
 
   listen(l: SessionListener) {
     this.listeners.add(l);
@@ -145,159 +121,86 @@ export class Session {
     const code = resumeCode ?? newRoomCode();
     this.role = 'host';
     this.code = code;
-    this.host = new HostRoom(code, this.me, this.name || 'Host', { change: room => this.set({ room }) }, loadAttributes());
-    this.host.setRules(loadRules());
-    this.host.setKeepers(loadKeepers());
+    const room = new HostRoom(code, this.me, this.name || 'Host', { change: view => this.set({ room: view }) }, loadAttributes());
+    this.host = room;
+    room.setRules(loadRules());
+    room.setKeepers(loadKeepers());
     store.set(sessionStorage, KEYS.host, code);
-    this.set({ status: 'connecting', message: resumeCode ? 'Reopening your room…' : 'Creating room…', room: this.host.view() });
-    void this.openHostPeer(code, !resumeCode, 0);
-    const host = this.host;
-    this.monitor = setInterval(() => {
-      if (this.host !== host) return;
-      this.pings = host.sendPings();
-      this.emit('pings');
-    }, HEARTBEAT_MS);
+    this.set({ status: 'connecting', message: resumeCode ? 'Reopening your room…' : 'Creating room…', room: room.view() });
+    this.hosting = host<ToClient>({
+      prefix: PEER_PREFIX,
+      code,
+      fresh: !resumeCode,
+      iceServers: () => iceServers(),
+      attach: link => this.attachGuest(room, link),
+      open: () => {
+        this.set({ status: 'room' });
+        location.hash = `#/host/${code}`;
+      },
+      // Code collision on a brand new room: just pick another.
+      codeTaken: () => this.hostRoom(),
+      notice: text => {
+        if (this.status !== 'room') this.set({ message: text });
+      },
+      fail: message => this.fail(message),
+      pings: pings => {
+        this.pings = pings;
+        this.emit('pings');
+      },
+      beat: (): Beat => ({ tick: room.tick, matchId: room.matchId }),
+    });
   }
 
-  private async openHostPeer(code: string, fresh: boolean, attempt: number) {
-    const gen = this.gen;
-    const options = await peerOptions();
-    if (gen !== this.gen) return; // left or restarted while waiting
-    const peer = new Peer(PEER_PREFIX + code, options);
-    this.peer = peer;
-    peer.on('open', () => {
-      if (this.peer !== peer) return;
-      this.set({ status: 'room' });
-      location.hash = `#/host/${code}`;
-    });
-    peer.on('connection', conn => {
-      if (this.peer === peer) this.acceptGuest(conn);
-      else conn.close();
-    });
-    peer.on('disconnected', () => {
-      if (this.peer === peer && !peer.destroyed) peer.reconnect();
-    });
-    peer.on('error', err => {
-      if (this.peer !== peer) return;
-      if (err.type === 'unavailable-id') {
-        peer.destroy();
-        // Code collision on a brand new room: just pick another.
-        if (fresh) return this.hostRoom();
-        // The broker still remembers our old connection; it frees up shortly.
-        if (attempt < 20) {
-          this.set({ message: 'Reclaiming your room code…' });
-          this.retry = setTimeout(() => this.openHostPeer(code, false, attempt + 1), 3000);
+  // A guest's hello says who they are; until then nothing else counts.
+  private attachGuest(room: HostRoom, link: Link<ToClient>): LinkHandlers {
+    let id: string | null = null;
+    return {
+      message: raw => {
+        if (this.host !== room) return;
+        const msg = raw as ToHost;
+        if (!msg || typeof msg !== 'object') return;
+        if (msg.t === 'hello' && !id && typeof msg.id === 'string' && msg.id && msg.id !== this.me) {
+          if (msg.version !== PROTOCOL_VERSION) {
+            link.send({ t: 'rejected', reason: VERSION_MESSAGE });
+            link.close();
+            return;
+          }
+          id = msg.id;
+          const old = this.links.get(id);
+          this.links.set(id, link);
+          room.join(id, cleanName(msg.name), link, msg.attrs);
+          // The same player from a new connection: the old one is done.
+          if (old !== link) old?.close();
           return;
         }
-      }
-      if (this.status === 'room' && (err.type === 'network' || err.type === 'server-error')) return;
-      if (this.status !== 'room') this.fail(`Could not open the room (${err.type}).`);
-    });
-  }
-
-  // A guest's control connection says who they are; their state connection
-  // carries that id in its metadata.
-  private states = new Map<string, DataConnection>();
-  private controls = new Map<string, DataConnection>();
-
-  private acceptGuest(conn: DataConnection) {
-    const host = this.host!;
-    if (conn.label === 'state') {
-      const metadata = conn.metadata as { id?: unknown; controlId?: unknown } | undefined;
-      const id = typeof metadata?.id === 'string' ? metadata.id : '';
-      const paired = () => {
-        const control = this.controls.get(id);
-        return control?.peer === conn.peer && control.connectionId === metadata?.controlId;
-      };
-      if (!id) return conn.close();
-      conn.on('open', () => {
-        if (this.host !== host) return conn.close();
-        // State channels from a replaced connection cannot steal the stream.
-        if (!paired()) return conn.close();
-        const old = this.states.get(id);
-        this.states.set(id, conn);
-        old?.close();
-      });
-      conn.on('data', d => {
-        if (this.host !== host || this.states.get(id) !== conn || !paired()) return;
-        const msg = d as ToHost;
-        if (msg?.t === 'ping') return send(conn, { t: 'pong', tick: host.tick, matchId: host.matchId, sentAt: msg.sentAt }, true);
-        if (msg?.t !== 'input' || msg.matchId !== host.matchId || !Array.isArray(msg.inputs)) return;
-        for (const raw of msg.inputs.slice(-CONFIG.net.inputRepeat)) {
-          const input = cleanInput(raw);
-          if (input) host.input(id, input);
+        if (!id || this.links.get(id) !== link) return;
+        if (msg.t === 'team' && validTeam(msg.team)) room.setTeam(id, msg.team);
+        else if (msg.t === 'attrs') room.setAttributes(id, msg.attrs);
+        else if (msg.t === 'input' && msg.matchId === room.matchId && Array.isArray(msg.inputs)) {
+          for (const rawInput of msg.inputs.slice(-CONFIG.net.inputRepeat)) {
+            const input = cleanInput(rawInput);
+            if (input) room.input(id, input);
+          }
         }
-      });
-      const closed = () => {
-        if (this.states.get(id) !== conn) return;
-        this.states.delete(id);
-        if (paired()) this.controls.get(id)?.close();
-        if (conn.open) conn.close();
-      };
-      conn.on('close', closed);
-      conn.on('error', closed);
-      return;
-    }
-    if (conn.label !== 'control') return conn.close();
-    let id: string | null = null;
-    const link: Link = {
-      send: m => send(conn, m),
-      sendState: m => {
-        const state = id && this.controls.get(id) === conn ? this.states.get(id) : undefined;
-        send(state, m, true);
+      },
+      closed: () => {
+        if (!id || this.links.get(id) !== link) return;
+        this.links.delete(id);
+        room.disconnect(id, link);
       },
     };
-    conn.on('data', d => {
-      if (this.host !== host) return;
-      const msg = d as ToHost;
-      if (msg?.t === 'hello' && !id && typeof msg.id === 'string' && msg.id && msg.id !== this.me) {
-        if (msg.version !== PROTOCOL_VERSION) {
-          send(conn, { t: 'rejected', reason: VERSION_MESSAGE });
-          conn.close({ flush: true });
-          return;
-        }
-        id = msg.id;
-        const oldControl = this.controls.get(id);
-        const oldState = this.states.get(id);
-        this.controls.set(id, conn);
-        this.states.delete(id);
-        host.join(id, cleanName(msg.name), link, msg.attrs);
-        oldState?.close();
-        oldControl?.close();
-      } else if (id && this.controls.get(id) !== conn) {
-        return;
-      } else if (msg?.t === 'ping' && id) {
-        host.setPing(id, cleanPing(msg.rtt));
-        send(conn, { t: 'pong', tick: host.tick, matchId: host.matchId, sentAt: msg.sentAt });
-      } else if (msg?.t === 'team' && id && validTeam(msg.team)) {
-        host.setTeam(id, msg.team);
-      } else if (msg?.t === 'attrs' && id) {
-        host.setAttributes(id, msg.attrs);
-      }
-    });
-    const closed = () => {
-      if (!id || this.controls.get(id) !== conn) return;
-      this.controls.delete(id);
-      const state = this.states.get(id);
-      this.states.delete(id);
-      state?.close();
-      host.disconnect(id, link);
-      if (conn.open) conn.close();
-    };
-    conn.on('close', closed);
-    conn.on('error', closed);
   }
 
   setTeam(team: Team) {
     if (this.host) this.host.setTeam(this.me, team);
-    else this.sendControl({ t: 'team', team });
+    else this.guest?.send({ t: 'team', team });
   }
 
   /** Attributes changed in the lobby, for the next kickoff. */
   setAttributes(attrs: Attributes) {
     if (this.status !== 'room') return;
     if (this.host) this.host.setAttributes(this.me, attrs);
-    else this.sendControl({ t: 'attrs', attrs });
+    else this.guest?.send({ t: 'attrs', attrs });
   }
 
   start() {
@@ -330,97 +233,100 @@ export class Session {
 
   // Joining ---------------------------------------------------------------
 
+  private courierLinked = false;
+  private lastSnapshotAt = 0;
+  private snapshotTick = -1;
+  private hostTick = -1;
+  private syncedMatchId: string | null = null;
+  /** The tick of the latest sync; nothing older can help the match. */
+  private baselineTick = -1;
+  private eventTick = -1;
+  private jitterMs = 0;
+  private previousSnapshot: { tick: number; at: number } | null = null;
+
   joinRoom(code: string) {
     this.teardown();
     this.role = 'client';
     this.code = code;
     this.set({ status: 'connecting', message: `Looking for room ${code}…`, linked: false });
     store.set(sessionStorage, KEYS.joined, code);
-    void this.openGuestPeer(code);
+    const me = this.me;
+    this.guest = join<ToClient, ToHost>({
+      prefix: PEER_PREFIX,
+      code,
+      id: me,
+      realtime: true,
+      hello: () => ({ t: 'hello', version: PROTOCOL_VERSION, id: me, name: this.name || 'Player', attrs: loadAttributes() }),
+      message: (msg, channel) => {
+        if (!msg || typeof msg !== 'object') return;
+        if (channel === 'state') {
+          if (msg.t === 'snap') this.snapshot(msg.snap);
+        } else {
+          this.receive(msg);
+        }
+        this.markLinked();
+      },
+      status: s => this.guestStatus(s),
+      fail: message => this.fail(message),
+      pings: pings => {
+        this.pings = pings;
+        this.emit('pings');
+      },
+      beat: data => this.hostBeat(data),
+      iceServers: () => iceServers(),
+    });
+    this.stallCheck = setInterval(() => this.checkStall(), STALL_CHECK_MS);
   }
 
-  private async openGuestPeer(code: string) {
-    const gen = this.gen;
-    const options = await peerOptions();
-    if (gen !== this.gen) return;
-    const peer = new Peer(options);
-    this.peer = peer;
-    this.watchGuest(peer);
-    peer.on('open', () => {
-      if (this.peer === peer && !this.control) this.connectToHost();
-    });
-    peer.on('disconnected', () => {
-      if (this.peer === peer && !peer.destroyed) peer.reconnect();
-    });
-    peer.on('error', err => {
-      if (this.peer !== peer) return;
-      // Signaling can reconnect while established WebRTC transports carry on.
-      if ((err.type === 'network' || err.type === 'server-error') && this.control?.open && this.state?.open) return;
-      if (this.room) return this.scheduleReconnect(`peer-${err.type}`);
-      if (err.type === 'peer-unavailable') {
-        return this.fail(`Couldn't find room ${code}. Check the code, and that the host still has the page open.`);
-      }
-      this.fail(`Connection failed (${err.type}).`);
-    });
+  private guestStatus(s: GuestStatus) {
+    this.courierLinked = s === 'linked';
+    // A new attempt starts from nothing: wait for the room and a baseline.
+    if (s === 'reconnecting') {
+      this.freshAttempt();
+      this.set({ linked: false });
+    }
+    this.markLinked();
   }
 
-  private lastControlAt = 0;
-  private lastStateAt = 0;
-  private lastSnapshotAt = 0;
-  private snapshotTick = -1;
-  private hostTick = -1;
-  private stateReady = false;
-  private syncedMatchId: string | null = null;
-  /** The tick of the latest sync; nothing older can help the match. */
-  private baselineTick = -1;
-  private eventTick = -1;
-  private reconnectCount = 0;
-  private reconnectReason: string | null = null;
-  private rtt = { control: null as number | null, state: null as number | null };
-  /** This guest's round trip on the state channel, smoothed: what it reports. */
-  private smoothRtt: number | null = null;
-  private jitterMs = 0;
-  private previousSnapshot: { tick: number; at: number } | null = null;
+  private freshAttempt() {
+    this.courierLinked = false;
+    this.lastSnapshotAt = performance.now();
+    this.snapshotTick = this.hostTick = -1;
+    this.syncedMatchId = null;
+    this.previousSnapshot = null;
+    this.jitterMs = 0;
+  }
+
+  /** The host's heartbeat reply says how far its match has got. */
+  private hostBeat(data: unknown) {
+    const beat = data as Beat | null;
+    if (!beat || !Number.isSafeInteger(beat.tick) || beat.tick < 0) return;
+    if (beat.matchId === this.room?.matchId) this.hostTick = Math.max(this.hostTick, beat.tick);
+  }
+
+  // A backgrounded host may stop simulating, but still answer pings. Only
+  // call snapshots stalled when its simulation has passed the point where
+  // another one was due: a host stopped between two snapshots is a tick or
+  // so ahead of the last one, and that's no stall.
+  private checkStall() {
+    if (!this.guest || !this.courierLinked || this.room?.phase !== 'match') return;
+    if (this.hostTick - this.snapshotTick >= CONFIG.net.snapshotEvery
+      && performance.now() - this.lastSnapshotAt >= SNAPSHOT_SILENCE_MS) {
+      this.guest.reconnect('snapshot-timeout');
+    }
+  }
 
   /** Safe to share: no candidate addresses or relay credentials. */
   async diagnostics() {
-    const route = async (conn: DataConnection | null) => {
-      if (!conn?.peerConnection?.getStats) return 'unknown';
-      try {
-        const stats = await conn.peerConnection.getStats();
-        let selected: RTCStats | undefined;
-        stats.forEach(s => {
-          if (s.type === 'transport' && s.selectedCandidatePairId) selected = stats.get(s.selectedCandidatePairId);
-        });
-        if (!selected) stats.forEach(s => {
-          if (s.type === 'candidate-pair' && s.nominated && s.state === 'succeeded') selected = s;
-        });
-        if (!selected) return 'unknown';
-        const pair = selected as RTCStats & { localCandidateId: string; remoteCandidateId: string };
-        return [stats.get(pair.localCandidateId), stats.get(pair.remoteCandidateId)]
-          .some(c => c?.candidateType === 'relay') ? 'relay' : 'direct';
-      } catch { return 'unknown'; }
-    };
-    const [controlRoute, stateRoute] = await Promise.all([route(this.control), route(this.state)]);
+    const net = await this.guest?.diagnostics();
     return {
       linked: this.linked, matchId: this.room?.matchId ?? null,
-      reconnectCount: this.reconnectCount, reconnectReason: this.reconnectReason,
+      reconnectCount: net?.reconnectCount ?? 0, reconnectReason: net?.reconnectReason ?? null,
       snapshotAgeMs: this.previousSnapshot ? performance.now() - this.lastSnapshotAt : null,
       snapshotJitterMs: this.jitterMs,
-      control: { rttMs: this.rtt.control, bufferedBytes: this.control?.dataChannel?.bufferedAmount ?? 0, route: controlRoute },
-      state: { rttMs: this.rtt.state, bufferedBytes: this.state?.dataChannel?.bufferedAmount ?? 0, route: stateRoute },
+      control: net?.control ?? null,
+      state: net?.state ?? null,
     };
-  }
-
-  private pong(msg: Extract<ToClient, { t: 'pong' }>, channel: 'control' | 'state') {
-    const age = performance.now() - msg.sentAt;
-    if (!Number.isFinite(age) || age < 0 || age >= SILENCE_MS || !Number.isSafeInteger(msg.tick) || msg.tick < 0) return false;
-    this.rtt[channel] = age;
-    // Inputs and snapshots ride the state channel, so that's the one that
-    // counts; a quarter of each new sample keeps one hiccup from flashing red.
-    if (channel === 'state') this.smoothRtt = this.smoothRtt === null ? age : this.smoothRtt + (age - this.smoothRtt) / 4;
-    if (msg.matchId === this.room?.matchId) this.hostTick = Math.max(this.hostTick, msg.tick);
-    return true;
   }
 
   private snapshot(snap: Snapshot) {
@@ -442,143 +348,13 @@ export class Session {
     this.emit('snap', snap);
   }
 
-  // Watch application traffic, not just WebRTC's open flag. A transport
-  // can silently stop delivering while its sibling connection stays open.
-  private watchGuest(peer: Peer) {
-    clearInterval(this.monitor);
-    const started = performance.now();
-    this.lastControlAt = this.lastStateAt = this.lastSnapshotAt = started;
-    this.snapshotTick = this.hostTick = -1;
-    this.stateReady = false;
-    this.syncedMatchId = null;
-    this.previousSnapshot = null;
-    this.jitterMs = 0;
-    this.rtt = { control: null, state: null };
-    this.smoothRtt = null;
-    this.monitor = setInterval(() => {
-      if (this.peer !== peer) return;
-      const now = performance.now();
-      if (!this.control?.open || !this.state?.open || !this.room) {
-        if (now - started < JOIN_TIMEOUT_MS) return;
-        if (this.room) this.scheduleReconnect('connection-timeout');
-        else this.fail(`Found room ${this.code} but couldn't connect to it. Check your connection and try another browser if WebRTC is blocked.`);
-        return;
-      }
-      if (now - this.lastControlAt >= SILENCE_MS) return this.scheduleReconnect('control-timeout');
-      if (now - this.lastStateAt >= SILENCE_MS) return this.scheduleReconnect('state-timeout');
-      // A backgrounded host may stop simulating, but still answer pings.
-      // Only call snapshots stalled when its simulation has passed the point
-      // where another one was due: a host stopped between two snapshots is
-      // a tick or so ahead of the last one, and that's no stall.
-      if (this.room.phase === 'match' && this.hostTick - this.snapshotTick >= CONFIG.net.snapshotEvery
-        && now - this.lastSnapshotAt >= SILENCE_MS) {
-        return this.scheduleReconnect('snapshot-timeout');
-      }
-      const rtt = this.smoothRtt === null ? undefined : Math.round(this.smoothRtt);
-      send(this.control, { t: 'ping', sentAt: performance.now(), rtt });
-      send(this.state, { t: 'ping', sentAt: performance.now() }, true);
-    }, HEARTBEAT_MS);
-  }
-
   private markLinked() {
-    if (!this.linked && this.room && (!this.room.matchId || this.syncedMatchId === this.room.matchId) && this.control?.open && this.state?.open && this.stateReady) this.set({ linked: true });
-  }
-
-  private connectToHost() {
-    if (!this.peer || this.peer.destroyed) return;
-    const target = PEER_PREFIX + this.code;
-    const conn = this.peer.connect(target, { label: 'control', reliable: true, serialization: 'json' });
-    this.control = conn;
-    const current = () => this.control === conn;
-    this.watchConnection(conn, () => {
-      if (current()) this.scheduleReconnect('control-closed');
-    });
-    conn.on('open', () => {
-      if (!current()) return;
-      this.lastControlAt = performance.now();
-      this.sendControl({ t: 'hello', version: PROTOCOL_VERSION, id: this.me, name: this.name || 'Player', attrs: loadAttributes() });
-    });
-    conn.on('data', d => {
-      if (!current()) return;
-      const msg = d as ToClient;
-      if (!msg || typeof msg !== 'object') return;
-      if (msg.t === 'room') this.lastControlAt = performance.now();
-      if (msg.t === 'pong' && !this.pong(msg, 'control')) return;
-      this.receive(msg);
-      // Wait for the hello acknowledgement before opening state, so the
-      // host can bind both connections to the same player and attempt.
-      if (msg.t === 'room' && current() && !this.state) {
-        const state = this.peer!.connect(target, {
-          label: 'state', reliable: false, serialization: 'json',
-          metadata: { id: this.me, controlId: conn.connectionId },
-        });
-        this.state = state;
-        this.lastStateAt = this.lastSnapshotAt = performance.now();
-        this.watchConnection(state, () => {
-          if (this.state === state) this.scheduleReconnect('state-closed');
-        });
-        state.on('open', () => {
-          if (this.state !== state) return;
-          this.lastStateAt = this.lastSnapshotAt = performance.now();
-          send(state, { t: 'ping', sentAt: performance.now() }, true);
-        });
-        state.on('data', d => {
-          if (this.state !== state) return;
-          const msg = d as ToClient;
-          if (msg?.t === 'pong') {
-            if (!this.pong(msg, 'state')) return;
-            this.lastStateAt = performance.now();
-          } else if (msg?.t === 'snap') {
-            this.snapshot(msg.snap);
-          } else return;
-          this.stateReady = true;
-          this.markLinked();
-        });
-      }
-      this.markLinked();
-    });
-  }
-
-  private watchConnection(conn: DataConnection, lost: () => void) {
-    conn.on('close', lost);
-    conn.on('error', lost);
-    conn.peerConnection?.addEventListener('iceconnectionstatechange', () => {
-      const state = conn.peerConnection?.iceConnectionState;
-      console.info('[ink-kick] connection', conn.label, state);
-      // Give a transient disconnection time to recover; failed is final.
-      if (state === 'failed') lost();
-    });
-  }
-
-  private scheduleReconnect(reason: string) {
-    if (this.role !== 'client' || this.retry !== undefined) return;
-    this.reconnectCount++;
-    this.reconnectReason = reason;
-    console.warn('[ink-kick] reconnecting', {
-      reason, snapshotTick: this.snapshotTick, hostTick: this.hostTick,
-      controlSilenceMs: performance.now() - this.lastControlAt,
-      stateSilenceMs: performance.now() - this.lastStateAt,
-    });
-    clearInterval(this.monitor);
-    // Detach before closing: late callbacks must not affect the new pair.
-    this.gen++;
-    const peer = this.peer;
-    this.peer = null;
-    this.control = this.state = null;
-    peer?.destroy();
-    this.set({ linked: false });
-    // A fresh Peer also rebuilds ICE and refreshes relay credentials.
-    this.retry = setTimeout(() => {
-      this.retry = undefined;
-      void this.openGuestPeer(this.code);
-    }, RETRY_MS);
+    const ready = this.courierLinked && !!this.room && (!this.room.matchId || this.syncedMatchId === this.room.matchId);
+    if (ready && !this.linked) this.set({ linked: true });
   }
 
   private receive(msg: ToClient) {
     switch (msg.t) {
-      case 'pong':
-        this.lastControlAt = performance.now();
-        break;
       case 'room':
         if (msg.room?.version !== PROTOCOL_VERSION) return this.fail(VERSION_MESSAGE);
         if (msg.room.matchId !== this.room?.matchId) {
@@ -603,14 +379,6 @@ export class Session {
         this.eventTick = msg.tick;
         this.emit('events', msg.tick, msg.events);
         break;
-      case 'pings': {
-        const pings = cleanPings(msg.pings);
-        // Our own from here: a second fresher than the host's copy.
-        if (this.smoothRtt !== null) pings[this.me] = Math.round(this.smoothRtt);
-        this.pings = pings;
-        this.emit('pings');
-        break;
-      }
       case 'rejected':
         this.fail(msg.reason);
         store.set(sessionStorage, KEYS.joined, null);
@@ -618,16 +386,12 @@ export class Session {
     }
   }
 
-  private sendControl(msg: ToHost) {
-    send(this.control, msg);
-  }
-
   /** A guest's input for this tick. */
   sendInput(input: Input) {
     if (!this.room?.matchId || this.syncedMatchId !== this.room.matchId) return;
     this.recentInputs.push({ ...input, seq: ++this.seq });
     if (this.recentInputs.length > CONFIG.net.inputRepeat) this.recentInputs.shift();
-    send(this.state, { t: 'input', matchId: this.room.matchId, inputs: [...this.recentInputs] }, true);
+    this.guest?.sendState({ t: 'input', matchId: this.room.matchId, inputs: [...this.recentInputs] });
   }
 
   // Shared ----------------------------------------------------------------
@@ -642,29 +406,22 @@ export class Session {
   }
 
   private teardown() {
-    this.gen++;
-    clearTimeout(this.retry);
-    this.retry = undefined;
-    clearInterval(this.monitor);
+    clearInterval(this.stallCheck);
+    this.stallCheck = undefined;
+    // Detach first: closing fires callbacks that must find nothing to change.
+    const { hosting, guest } = this;
+    this.hosting = null;
+    this.guest = null;
     this.host = null;
-    this.control = null;
-    this.state = null;
-    this.states.clear();
-    this.controls.clear();
-    this.peer?.destroy();
-    this.peer = null;
+    hosting?.close();
+    guest?.close();
+    this.links.clear();
     this.room = null;
     this.role = null;
     this.linked = true;
     this.seq = 0;
     this.recentInputs = [];
-    this.syncedMatchId = null;
-    this.previousSnapshot = null;
-    this.reconnectCount = 0;
-    this.reconnectReason = null;
-    this.jitterMs = 0;
-    this.rtt = { control: null, state: null };
-    this.smoothRtt = null;
+    this.freshAttempt();
     this.pings = {};
   }
 
