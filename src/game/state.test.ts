@@ -97,3 +97,40 @@ describe('snapshot recovery boundaries', () => {
     expect(remote.state()!.players[0]!.x).toBeGreaterThan(1900);
   });
 });
+
+describe('how far behind a guest draws', () => {
+  const MS = CONFIG.tick * 1000;
+  // Snapshots every other tick, each arriving `late(i)` ms after its time.
+  function feed(late: (i: number) => number, count = 150) {
+    const remote = new RemoteMatch();
+    for (let i = 1; i <= count; i++) remote.push(snap(i * 2, 0), i * 2 * MS + late(i));
+    return remote;
+  }
+
+  it('starts at the default until it has heard enough', () => {
+    expect(feed(() => 0, CONFIG.net.jitterSamples - 1).delay).toBe(CONFIG.net.delayTicks);
+  });
+
+  it('draws close to now on a steady line, however slow', () => {
+    expect(feed(() => 0).delay).toBe(CONFIG.net.minDelayTicks);
+    expect(feed(() => 300).delay).toBe(CONFIG.net.minDelayTicks);
+  });
+
+  it('draws further back the more unevenly snapshots arrive, up to a limit', () => {
+    // Up to 50 ms late, evenly spread: about 3 ticks of spread.
+    const choppy = feed(i => (i * 37) % 51);
+    expect(choppy.delay).toBeGreaterThan(CONFIG.net.minDelayTicks + 1);
+    expect(choppy.delay).toBeLessThan(CONFIG.net.maxDelayTicks);
+    expect(feed(i => (i * 37) % 1000).delay).toBe(CONFIG.net.maxDelayTicks);
+  });
+
+  it('ignores a rare straggler', () => {
+    expect(feed(i => (i % 50 === 0 ? 400 : 0)).delay).toBe(CONFIG.net.minDelayTicks);
+  });
+
+  it('settles back once a choppy spell has passed', () => {
+    const remote = feed(i => (i * 37) % 51);
+    for (let i = 151; i <= 300; i++) remote.push(snap(i * 2, 0), i * 2 * MS);
+    expect(remote.delay).toBe(CONFIG.net.minDelayTicks);
+  });
+});

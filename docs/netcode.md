@@ -114,6 +114,38 @@ It returns no ICE addresses or relay credentials. Null means a measurement
 is not available yet. Route discovery may return unknown where browser
 statistics do not expose the selected pair.
 
+### Draw delay
+
+Guests draw behind the newest snapshot so there is a pair to blend between.
+That delay adapts (`RemoteMatch.measure`): each arriving snapshot's lateness
+against its tick is kept for the last `jitterWindow` (150, about 5 s)
+arrivals. The delay is a snapshot gap plus one tick plus the spread between
+the earliest and the `jitterPercentile` (95th) lateness, in ticks, within
+`minDelayTicks`..`maxDelayTicks` (3..12). Only the spread matters, so the
+offset between the two clocks and the one-way latency drop out: a steady
+slow line draws as close as a steady fast one. Until `jitterSamples` (30)
+have arrived it uses the old fixed `delayTicks` (6). On a steady line that
+is 50 ms instead of 100 ms of drawing delay. The existing easing walks the
+drawn tick to the new target, slowing or speeding time slightly rather than
+jumping. `drawDelayTicks` in `inkKickNetwork()` shows the current value.
+
+### Input delivery
+
+The host used to keep only a guest's newest input. Two inputs arriving
+within one host tick (normal under jitter) lost the first, and a quick kick
+tap, press and release in consecutive inputs, could vanish: kicks trigger on
+press/release edges. A late input, retransmitted by the unordered channel
+after a newer one landed, was also dropped as old.
+
+Now each input packet carries the guest's last `inputRepeat` (4) inputs,
+oldest first; the host skips any it has (sequence numbers) and queues the
+rest. Each tick it plays the next input that changes the kick button if
+there is one, else jumps to the newest, since movement only needs the
+latest. Every press and release gets a tick of its own, and plain movement
+adds no queueing delay. Past `inputQueue` (8) waiting, movement-only inputs
+are merged away first. A new match drops unplayed inputs but keeps their
+sequence as the one to beat.
+
 ### Pings in the room
 
 Each guest smooths its state-channel RTT (a quarter of each new sample) and

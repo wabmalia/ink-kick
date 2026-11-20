@@ -14,6 +14,8 @@ export const RELEASE_NOTES: ReleaseDay[] = [
     date: '2026-11-20',
     notes: [
       'Rooms show each player\'s ping to the host, in the lobby and in a corner during the match.',
+      'Online, guests see the match a little closer to live on a steady connection.',
+      'A quick kick tap from a guest no longer goes missing on a choppy connection.',
     ],
   },
   {

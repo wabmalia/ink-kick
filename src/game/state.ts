@@ -88,21 +88,42 @@ function lerpFacing(a: PlayerView, b: PlayerView, t: number) {
 }
 
 // The match as seen by a guest: snapshots from the host, drawn a little
-// behind the newest one so there's always a pair to blend between.
+// behind the newest one so there's always a pair to blend between. How far
+// behind follows how evenly they arrive (see CONFIG.net): a steady line is
+// drawn closer to now, a choppy one further back so it doesn't stutter.
 export class RemoteMatch {
   private snaps: Snapshot[] = [];
   private events: { tick: number; events: SimEvent[] }[] = [];
   // The host tick being drawn, fractional; null until the first snapshot.
   private renderTick: number | null = null;
+  // How late each recent snapshot arrived, in ms against its tick: only the
+  // spread matters, so the offset between the two clocks drops out.
+  private lateness: number[] = [];
+  /** Ticks drawn behind the newest snapshot. */
+  delay: number = CONFIG.net.delayTicks;
 
   reset(snap: Snapshot) {
     this.snaps = [];
     this.events = [];
     this.renderTick = null;
+    this.lateness = [];
+    this.delay = CONFIG.net.delayTicks;
     this.push(snap);
   }
 
-  push(snap: Snapshot) {
+  private measure(tick: number, now: number) {
+    const net = CONFIG.net;
+    this.lateness.push(now - tick * CONFIG.tick * 1000);
+    if (this.lateness.length > net.jitterWindow) this.lateness.shift();
+    if (this.lateness.length < net.jitterSamples) return;
+    const sorted = [...this.lateness].sort((a, b) => a - b);
+    const spread = sorted[Math.floor((sorted.length - 1) * net.jitterPercentile)]! - sorted[0]!;
+    // A hair off: float noise in an even line must not round up a tick.
+    const ticks = net.snapshotEvery + 1 + Math.ceil(spread / (CONFIG.tick * 1000) - 0.01);
+    this.delay = Math.max(net.minDelayTicks, Math.min(net.maxDelayTicks, ticks));
+  }
+
+  push(snap: Snapshot, now = performance.now()) {
     const newest = this.snaps[this.snaps.length - 1];
     if (newest && snap.matchId !== newest.matchId) return;
     // Nothing older than the displayed pair can improve interpolation.
@@ -116,7 +137,8 @@ export class RemoteMatch {
       this.snaps.push(snap);
     }
     if (this.snaps.length > 64) this.snaps.splice(0, this.snaps.length - 64);
-    const target = this.snaps[this.snaps.length - 1]!.tick - CONFIG.net.delayTicks;
+    this.measure(snap.tick, now);
+    const target = this.snaps[this.snaps.length - 1]!.tick - this.delay;
     if (this.renderTick === null || Math.abs(target - this.renderTick) > CONFIG.net.resyncTicks) this.renderTick = target;
   }
 
@@ -130,7 +152,7 @@ export class RemoteMatch {
   advance(dt: number): SimEvent[] {
     if (this.renderTick === null) return [];
     const newest = this.snaps[this.snaps.length - 1]!;
-    const target = newest.tick - CONFIG.net.delayTicks;
+    const target = newest.tick - this.delay;
     this.renderTick += dt / CONFIG.tick;
     this.renderTick += (target - this.renderTick) * Math.min(1, dt * 2);
     // Keep the pair being drawn and anything newer.

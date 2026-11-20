@@ -75,7 +75,8 @@ export type ToHost =
   | { t: 'team'; team: Team }
   // Attributes changed in the lobby; used from the next kickoff.
   | { t: 'attrs'; attrs: Attributes }
-  | { t: 'input'; matchId: string; input: WireInput };
+  // The guest's latest inputs, oldest first (see CONFIG.net.inputRepeat).
+  | { t: 'input'; matchId: string; inputs: WireInput[] };
 
 export type ToClient =
   | { t: 'pong'; tick: number; matchId: string | null; sentAt: number }

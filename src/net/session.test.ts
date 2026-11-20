@@ -261,7 +261,8 @@ describe('guest connection recovery', () => {
     expect(state.sent).toHaveLength(1);
     state.dataChannel.bufferedAmount = 0;
     session.sendInput({ ...idle, x: 1 });
-    expect(state.sent[1]).toMatchObject({ t: 'input', matchId: room.matchId, input: { x: 1, seq: 102 } });
+    // The repeats carry on from what was last made, sent or not.
+    expect(state.sent[1]).toMatchObject({ t: 'input', matchId: room.matchId, inputs: [{ seq: 99 }, { seq: 100 }, { seq: 101 }, { x: 1, seq: 102 }] });
   });
 
   it('rejects an incompatible host with a clear refresh message', async () => {
@@ -399,14 +400,19 @@ describe('host transport isolation', () => {
     first.state.emit('open');
     expect(session.room!.members.find(m => m.id === 'guest')!.connected).toBe(true);
     expect(session.host!.match!.players.filter(p => p.id === 'guest')).toHaveLength(1);
-    first.state.emit('data', { t: 'input', matchId: session.host!.matchId, input: { ...idle, seq: 9999, y: -1 } });
-    next.state.emit('data', { t: 'input', matchId: session.host!.matchId, input: { ...idle, seq: 1, y: 1 } });
+    first.state.emit('data', { t: 'input', matchId: session.host!.matchId, inputs: [{ ...idle, seq: 9999, y: -1 }] });
+    next.state.emit('data', { t: 'input', matchId: session.host!.matchId, inputs: [{ ...idle, seq: 1, y: 1 }] });
     session.host!.match!.holdFor = 0;
     for (let i = 0; i < 10; i++) session.host!.step(idle);
     expect(session.host!.match!.players.find(p => p.id === 'guest')!.vy).toBeGreaterThan(0);
+    // Repeats of what's been had already change nothing.
+    next.state.emit('data', { t: 'input', matchId: session.host!.matchId,
+      inputs: [{ ...idle, seq: 0, y: -1 }, { ...idle, seq: 1, y: -1 }] });
+    session.host!.step(idle);
+    expect(session.host!.match!.players.find(p => p.id === 'guest')!.vy).toBeGreaterThan(0);
     for (const conn of [next.control, next.state]) {
       conn.emit('data', { t: 'ping', sentAt: performance.now() });
-      expect(conn.sent).toContainEqual({ t: 'pong', matchId: session.host!.matchId, sentAt: performance.now(), tick: 10 });
+      expect(conn.sent).toContainEqual({ t: 'pong', matchId: session.host!.matchId, sentAt: performance.now(), tick: 11 });
     }
     const count = next.state.sent.length;
     next.state.dataChannel.bufferedAmount = 32 * 1024;
@@ -452,8 +458,8 @@ describe('host transport isolation', () => {
     session.end();
     session.start();
     session.host!.match!.holdFor = 0;
-    state.emit('data', { t: 'input', matchId: old, input: { ...idle, seq: 9999, y: -1 } });
-    state.emit('data', { t: 'input', matchId: session.host!.matchId, input: { ...idle, seq: 1, y: 1 } });
+    state.emit('data', { t: 'input', matchId: old, inputs: [{ ...idle, seq: 9999, y: -1 }] });
+    state.emit('data', { t: 'input', matchId: session.host!.matchId, inputs: [{ ...idle, seq: 1, y: 1 }] });
     for (let i = 0; i < 10; i++) session.host!.step(idle);
     expect(session.host!.match!.players.find(p => p.id === 'guest')!.vy).toBeGreaterThan(0);
   });

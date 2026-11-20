@@ -79,7 +79,13 @@ const hostClock = new HostClock(dt => {
   if (hostEvents.length > 512) hostEvents.splice(0, hostEvents.length - 512);
 });
 // Browser-console diagnostics, including on production builds.
-Object.assign(window, { inkKickNetwork: () => session.diagnostics() });
+Object.assign(window, {
+  inkKickNetwork: async () => ({
+    ...await session.diagnostics(),
+    // Ticks a guest draws behind the newest snapshot (adapts to jitter).
+    drawDelayTicks: mode.kind === 'guest' ? mode.remote.delay : null,
+  }),
+});
 
 function pickMode() {
   const before = mode;

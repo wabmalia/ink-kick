@@ -376,9 +376,24 @@ export const CONFIG = {
   net: {
     // The host sends a snapshot every this many ticks (2 is 30 a second).
     snapshotEvery: 2,
-    // Guests draw this many ticks behind the newest snapshot, so there's
-    // usually a pair to blend between even when one goes missing.
+    // Guests draw some ticks behind the newest snapshot, so there's usually
+    // a pair to blend between even when one goes missing. How far adapts to
+    // how unevenly snapshots arrive: the spread of their lateness over the
+    // last jitterWindow arrivals (jitterPercentile of it, so a rare straggler
+    // doesn't set the pace), plus a snapshot gap and a tick to spare,
+    // within min/maxDelayTicks. delayTicks until jitterSamples have come in.
     delayTicks: 6,
+    minDelayTicks: 3,
+    maxDelayTicks: 12,
+    jitterWindow: 150,
+    jitterSamples: 30,
+    jitterPercentile: 0.95,
+    // Each input packet repeats this many of the guest's latest inputs, so
+    // one arriving late or lost costs nothing; the host skips repeats.
+    inputRepeat: 4,
+    // Most inputs the host holds for a guest; past it, movement-only ones
+    // are merged away (a kick press or release is never dropped first).
+    inputQueue: 8,
     // Further off than this, a guest jumps straight to the right time.
     resyncTicks: 30,
   },

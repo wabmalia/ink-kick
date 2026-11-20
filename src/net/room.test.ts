@@ -246,3 +246,48 @@ it("gathers guests' round trips and tells everyone, forgetting anyone who leaves
   r.join('b', 'Bo', link().l);
   expect(r.sendPings()).toEqual({ a: 35 });
 });
+
+describe('guest inputs arriving together', () => {
+  function playing() {
+    const r = room();
+    r.join('a', 'Ana', link().l);
+    r.start();
+    skipCoin(r);
+    return { r, player: r.match!.players.find(p => p.id === 'a')! };
+  }
+
+  it('plays a quick tap that lands within one tick as a press, then a release', () => {
+    const { r, player } = playing();
+    r.input('a', { seq: 1, ...idle, kick: true });
+    r.input('a', { seq: 2, ...idle });
+    r.step(idle);
+    expect(player.kickDown).toBe(true);
+    r.step(idle);
+    expect(player.kickDown).toBe(false);
+  });
+
+  it('jumps straight to the newest when only movement is waiting', () => {
+    const { r, player } = playing();
+    Object.assign(player, { x: 0, y: -5, vx: 0, vy: 0 });
+    for (let s = 1; s <= 5; s++) r.input('a', { seq: s, ...idle, x: s === 5 ? 1 : -1 });
+    r.step(idle);
+    expect(player.vx).toBeGreaterThan(0);
+    // Nothing left over to play late.
+    r.step(idle);
+    expect(player.vx).toBeGreaterThan(0);
+  });
+
+  it('skips repeats, and when too many wait, merges movement but keeps every kick', () => {
+    const { r, player } = playing();
+    r.input('a', { seq: 1, ...idle, kick: true });
+    for (let s = 2; s <= 20; s++) r.input('a', { seq: s, ...idle, kick: s === 2 || s === 20 ? false : true, x: s / 20 });
+    r.input('a', { seq: 7, ...idle });
+    const seen: boolean[] = [];
+    for (let i = 0; i < 4; i++) {
+      r.step(idle);
+      seen.push(player.kickDown);
+    }
+    // Press (1), release (2), press (3..19 merged), release (20).
+    expect(seen).toEqual([true, false, true, false]);
+  });
+});

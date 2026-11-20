@@ -26,7 +26,9 @@ export interface RoomListener {
 interface Member extends MemberView {
   attrs: Attributes;
   link: Link | null;
+  // The input being played, and newer ones not played yet, oldest first.
   input: WireInput | null;
+  pending: WireInput[];
   inputTick: number;
   // Their reported round trip to the host, in ms.
   ping: number | null;
@@ -43,7 +45,7 @@ export class HostRoom {
   matchId: string | null = null;
 
   constructor(readonly code: string, readonly hostId: string, hostName: string, private listener: RoomListener, hostAttrs?: Attributes) {
-    this.members.push({ id: hostId, name: cleanName(hostName), attrs: cleanAttributes(hostAttrs), team: 'gold', connected: true, link: null, input: null, inputTick: 0, ping: null });
+    this.members.push({ id: hostId, name: cleanName(hostName), attrs: cleanAttributes(hostAttrs), team: 'gold', connected: true, link: null, input: null, pending: [], inputTick: 0, ping: null });
   }
 
   view(): RoomView {
@@ -74,11 +76,11 @@ export class HostRoom {
   join(id: string, name: string, link: Link, attrs?: unknown) {
     let m = this.member(id);
     if (m) {
-      Object.assign(m, { name: cleanName(name), attrs: cleanAttributes(attrs), connected: true, link, input: null, ping: null });
+      Object.assign(m, { name: cleanName(name), attrs: cleanAttributes(attrs), connected: true, link, input: null, pending: [], ping: null });
     } else {
       const gold = this.members.filter(x => x.team === 'gold').length;
       const red = this.members.length - gold;
-      m = { id, name: cleanName(name), attrs: cleanAttributes(attrs), team: red < gold ? 'red' : 'gold', connected: true, link, input: null, inputTick: this.tick, ping: null };
+      m = { id, name: cleanName(name), attrs: cleanAttributes(attrs), team: red < gold ? 'red' : 'gold', connected: true, link, input: null, pending: [], inputTick: this.tick, ping: null };
       this.members.push(m);
     }
     if (this.match && !this.match.players.some(p => p.id === id)) addPlayer(this.match, createPlayer(id, m.team, m.attrs));
@@ -98,7 +100,7 @@ export class HostRoom {
   disconnect(id: string, link: Link) {
     const m = this.member(id);
     if (!m || m.link !== link) return;
-    Object.assign(m, { connected: false, link: null, input: null, ping: null });
+    Object.assign(m, { connected: false, link: null, input: null, pending: [], ping: null });
     this.changed();
   }
 
@@ -129,12 +131,32 @@ export class HostRoom {
     this.changed();
   }
 
+  // Inputs are queued, not just the newest kept: two arriving within one
+  // tick would otherwise lose the first, and with it a quick kick tap.
   input(id: string, input: WireInput) {
     const m = this.member(id);
-    if (m?.connected && (!m.input || input.seq > m.input.seq)) {
-      m.input = input;
-      m.inputTick = this.tick;
+    if (!m?.connected) return;
+    const newest = m.pending[m.pending.length - 1] ?? m.input;
+    if (newest && input.seq <= newest.seq) return;
+    m.pending.push(input);
+    m.inputTick = this.tick;
+    // Too many waiting: merge away movement-only ones, oldest first.
+    while (m.pending.length > CONFIG.net.inputQueue) {
+      const i = m.pending.findIndex((p, k) => k + 1 < m.pending.length && p.kick === m.pending[k + 1]!.kick);
+      m.pending.splice(Math.max(0, i), 1);
     }
+  }
+
+  // The input a guest plays this tick: the next one that presses or
+  // releases kick, so every press and release lands on a tick of its own;
+  // otherwise the newest, as movement only needs the latest.
+  private nextInput(m: Member) {
+    if (!m.pending.length) return;
+    const kick = m.input?.kick ?? false;
+    const edge = m.pending.findIndex(p => p.kick !== kick);
+    const take = edge === -1 ? m.pending.length - 1 : edge;
+    m.input = m.pending[take]!;
+    m.pending.splice(0, take + 1);
   }
 
   setPing(id: string, ms: number | null) {
@@ -158,7 +180,12 @@ export class HostRoom {
     this.matchId = crypto.randomUUID();
     this.phase = 'match';
     this.tick = 0;
-    for (const m of this.members) m.inputTick = -Infinity;
+    for (const m of this.members) {
+      m.inputTick = -Infinity;
+      // Unplayed ones go, but their sequence stays the one to beat.
+      m.input = m.pending[m.pending.length - 1] ?? m.input;
+      m.pending = [];
+    }
     const kickoff = Math.random() < 0.5 ? 'gold' : 'red';
     this.match = createMatch(this.members.map(m => createPlayer(m.id, m.team, m.attrs)), { kickoff, coin: true, rules: this.rules, keepers: this.keepers });
     this.changed();
@@ -180,6 +207,7 @@ export class HostRoom {
     const match = this.match;
     if (!match) return [];
     const inputs: Record<string, Input> = {};
+    for (const m of this.members) if (m.id !== this.hostId) this.nextInput(m);
     // A silent connection must not leave a player sprinting or charging
     // forever. Keep the sequence number so delayed packets stay rejected.
     for (const m of this.members) inputs[m.id] = m.id === this.hostId ? hostInput

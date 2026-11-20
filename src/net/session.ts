@@ -5,7 +5,7 @@ import { loadKeepers, loadRules, saveKeepers, saveRules } from '../game/rules';
 import { iceServers } from './relay';
 import {
   cleanInput, cleanName, cleanPing, cleanPings, newRoomCode, PEER_PREFIX, PROTOCOL_VERSION, VERSION_MESSAGE, validTeam,
-  type MatchSync, type RoomView, type Snapshot, type ToClient, type ToHost,
+  type MatchSync, type RoomView, type Snapshot, type ToClient, type ToHost, type WireInput,
 } from './protocol';
 import { HostRoom, type Link } from './room';
 import { loadAttributes, type Attributes } from '../game/attributes';
@@ -87,6 +87,8 @@ export class Session {
   private control: DataConnection | null = null;
   private state: DataConnection | null = null;
   private seq = 0;
+  /** The latest inputs sent, repeated in each packet. */
+  private recentInputs: WireInput[] = [];
   private retry: ReturnType<typeof setTimeout> | undefined;
   private monitor: ReturnType<typeof setInterval> | undefined;
   /** Bumped on teardown, so a peer still being set up knows it's stale. */
@@ -220,9 +222,11 @@ export class Session {
         if (this.host !== host || this.states.get(id) !== conn || !paired()) return;
         const msg = d as ToHost;
         if (msg?.t === 'ping') return send(conn, { t: 'pong', tick: host.tick, matchId: host.matchId, sentAt: msg.sentAt }, true);
-        if (msg?.t !== 'input' || msg.matchId !== host.matchId) return;
-        const input = cleanInput(msg.input);
-        if (input) host.input(id, input);
+        if (msg?.t !== 'input' || msg.matchId !== host.matchId || !Array.isArray(msg.inputs)) return;
+        for (const raw of msg.inputs.slice(-CONFIG.net.inputRepeat)) {
+          const input = cleanInput(raw);
+          if (input) host.input(id, input);
+        }
       });
       const closed = () => {
         if (this.states.get(id) !== conn) return;
@@ -621,7 +625,9 @@ export class Session {
   /** A guest's input for this tick. */
   sendInput(input: Input) {
     if (!this.room?.matchId || this.syncedMatchId !== this.room.matchId) return;
-    send(this.state, { t: 'input', matchId: this.room.matchId, input: { ...input, seq: ++this.seq } }, true);
+    this.recentInputs.push({ ...input, seq: ++this.seq });
+    if (this.recentInputs.length > CONFIG.net.inputRepeat) this.recentInputs.shift();
+    send(this.state, { t: 'input', matchId: this.room.matchId, inputs: [...this.recentInputs] }, true);
   }
 
   // Shared ----------------------------------------------------------------
@@ -651,6 +657,7 @@ export class Session {
     this.role = null;
     this.linked = true;
     this.seq = 0;
+    this.recentInputs = [];
     this.syncedMatchId = null;
     this.previousSnapshot = null;
     this.reconnectCount = 0;
