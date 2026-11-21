@@ -7,6 +7,8 @@ import { closeOnBackdrop, openDialog } from './dom';
 // The Locker room's attributes: a hexagon with one corner per attribute, and
 // at each corner its name and − / + buttons. Lowering one frees a point to
 // spend on another; a button fades out whenever its move isn't allowed.
+// Phones get the same thing as an equalizer instead (the CSS picks): a
+// column of segments per attribute, + above and − below.
 
 const SVG = 'http://www.w3.org/2000/svg';
 // The chart's size in CSS pixels, and the hexagon's radius at a 10.
@@ -136,7 +138,46 @@ function mountChart(host: HTMLElement, left: HTMLElement) {
     return { a, minus, value, plus };
   });
 
+  // The equalizer: per attribute, + then the segments (10 at the top) then
+  // − then the name and value.
+  const eq = document.createElement('div');
+  eq.className = 'eq';
+  const columns = ATTRIBUTES.map(a => {
+    const col = document.createElement('div');
+    col.className = 'eq-col';
+    const button = (text: string, label: string, act: (x: Attributes, k: Attribute) => Attributes) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'step';
+      b.textContent = text;
+      b.setAttribute('aria-label', `${label} ${LABELS[a]}`);
+      b.addEventListener('click', () => change(act(attrs, a)));
+      return b;
+    };
+    const plus = button('+', 'Raise', raise);
+    const bar = document.createElement('div');
+    bar.className = 'eq-bar';
+    const segments = Array.from({ length: MAX }, () => bar.appendChild(document.createElement('span')));
+    const minus = button('−', 'Lower', lower);
+    const name = document.createElement('span');
+    name.className = 'eq-name';
+    name.textContent = LABELS[a];
+    const value = document.createElement('output');
+    value.className = 'eq-value';
+    col.append(plus, bar, minus, name, value);
+    eq.append(col);
+    return { a, plus, minus, value, segments };
+  });
+  host.append(eq);
+
   const draw = () => {
+    for (const { a, plus, minus, value, segments } of columns) {
+      // Filled from the bottom: segments[0] is the top, a 10.
+      segments.forEach((seg, i) => seg.classList.toggle('on', MAX - i <= attrs[a]));
+      value.textContent = String(attrs[a]);
+      minus.setAttribute('aria-disabled', String(!canLower(attrs, a)));
+      plus.setAttribute('aria-disabled', String(!canRaise(attrs, a)));
+    }
     shape.setAttribute('points', ATTRIBUTES.map((a, i) => point(i, attrs[a]).join(',')).join(' '));
     ATTRIBUTES.forEach((a, i) => {
       const [x, y] = point(i, attrs[a]);

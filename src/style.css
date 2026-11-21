@@ -957,6 +957,17 @@ html, body {
 .spare.to-spend { color: var(--gold); }
 
 .radar-wrap { position: relative; width: 300px; height: 214px; }
+/* The equalizer: phones only (below), the hexagon everywhere else. */
+.eq { display: none; }
+.eq-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.eq-bar { display: flex; flex-direction: column; gap: 2px; padding: 3px; border-radius: 5px; background: rgba(13, 16, 38, 0.55); }
+.eq-bar span { width: 26px; height: 7px; border-radius: 2px; background: rgba(238, 240, 250, 0.1); }
+.eq-bar span.on { background: #ffc23a; box-shadow: 0 0 4px rgba(255, 194, 58, 0.45); }
+/* The top three lit segments warmer, as on a real meter. */
+.eq-bar span.on:nth-child(-n + 3) { background: #ff8a4c; box-shadow: 0 0 4px rgba(255, 138, 76, 0.5); }
+.eq-name { font-family: 'Caveat', cursive; font-weight: 700; font-size: 14px; line-height: 1; color: var(--text); white-space: nowrap; }
+.eq-value { font-family: 'Caveat Brush', cursive; font-size: 16px; line-height: 1; color: var(--gold); }
+.eq .step { width: 30px; height: 26px; font-size: 18px; border-radius: 8px; }
 .corner { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 1px; }
 .corner-name { font-family: 'Caveat', cursive; font-weight: 700; font-size: 19px; line-height: 1; color: var(--text); }
 .corner-row { display: flex; align-items: center; gap: 2px; }
@@ -1313,6 +1324,14 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
 
   /* Home: the chart a touch smaller, a smaller title and no tagline, so
      the two columns fit without scrolling. */
+  /* Attributes as an equalizer: easier to read and to tap than the
+     hexagon at this size. */
+  .radar-wrap { width: auto; height: auto; zoom: 1; }
+  .radar-wrap > :not(.eq) { display: none; }
+  .eq { display: flex; gap: 8px; justify-content: center; }
+  /* In the side panel the "?" would sit on Strength's +: down by the
+     points line instead. */
+  .attr-panel .info-btn { top: auto; bottom: 8px; right: 10px; }
   .home .locker-chart { zoom: 0.85; }
   /* The door's slimmer on a phone: smaller vents, and no words above the
      tape (its "Pick a nickname" says it; the label stays for screen
