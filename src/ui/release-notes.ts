@@ -19,6 +19,7 @@ export const RELEASE_NOTES: ReleaseDay[] = [
       'Buttons stay clear of a notch or Dynamic Island, with the stadium running on behind it.',
       'No more text selection or copy menu popping up from a long press or double tap.',
       'On a touch screen you can move and resize the stick, Kick and Sprint: How to play, then Move and resize the buttons.',
+      'The stick stays where you put it instead of following your thumb.',
       'Touch buttons are see-through, so they hide less of the play, and Kick matches Sprint with a gold edge.',
       'The locker room looks like a locker: painted metal, vents, a handle, and your nickname on a strip of tape.',
       'Solo and multiplayer share a coach\'s tactics board, either side of the halfway line.',

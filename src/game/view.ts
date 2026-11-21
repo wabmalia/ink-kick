@@ -59,8 +59,6 @@ const REF_EXIT = { x: 0, y: -(CONFIG.pitch.height / 2 + 2) };
 // screens) the camera would sit so close that the scoreboard leaves the top
 // of the picture, so the stage stays this shape, centred between bars.
 export const MAX_ASPECT = 1.85;
-// A phone held sideways (the same test as the phone styles in style.css):
-// small enough that the pitch needs every pixel.
 /** The wider of the screen's left and right safe-area insets (a notch or a
  *  Dynamic Island, rounded corners), in CSS px. */
 function safeSide() {
@@ -72,6 +70,8 @@ function safeSide() {
   probe.remove();
   return inset;
 }
+// A phone held sideways: a touch screen small enough that the pitch needs
+// every pixel (the phone styles in style.css use the same size test).
 const COMPACT = matchMedia('(pointer: coarse) and ((max-height: 500px) or (max-width: 500px))');
 
 
@@ -91,7 +91,10 @@ export class GameView {
   // Phones show the score as text instead of the board (see COMPACT).
   private compact = false;
   private trainingOn = false;
+  // Not on every page (the lab has none).
   private phoneScore = document.getElementById('phone-score');
+  private phoneScoreGold = document.getElementById('phone-score-gold');
+  private phoneScoreRed = document.getElementById('phone-score-red');
   private phoneScoreShown = '';
   private infoBoards = new InfoBoards();
   private labelLayer: HTMLElement;
@@ -600,10 +603,10 @@ export class GameView {
 
     this.billboard.setScore(state.score);
     const key = `${state.score.gold}-${state.score.red}`;
-    if (this.compact && key !== this.phoneScoreShown) {
+    if (this.compact && this.phoneScoreGold && this.phoneScoreRed && key !== this.phoneScoreShown) {
       this.phoneScoreShown = key;
-      document.getElementById('phone-score-gold')!.textContent = String(state.score.gold);
-      document.getElementById('phone-score-red')!.textContent = String(state.score.red);
+      this.phoneScoreGold.textContent = String(state.score.gold);
+      this.phoneScoreRed.textContent = String(state.score.red);
     }
     this.infoBoards.set(state.info);
     this.drawLabels(state, names);

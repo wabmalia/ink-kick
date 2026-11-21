@@ -41,7 +41,8 @@ export class Governor {
   private steady = 0;
 
   constructor(start = 0) {
-    this.level = Math.min(Math.max(0, start), LEVELS.length - 1);
+    // A saved level, whatever it holds: a whole step on the ladder.
+    this.level = Math.min(Math.max(0, Math.round(start) || 0), LEVELS.length - 1);
   }
 
   get quality(): Quality {

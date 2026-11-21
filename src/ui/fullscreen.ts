@@ -47,7 +47,8 @@ function show() {
   const label = on ? 'Exit fullscreen' : 'Fullscreen';
   button.setAttribute('aria-label', label);
   button.title = label;
-  button.setAttribute('aria-pressed', String(on));
+  // The label says what a press does; data-on only swaps the icon (CSS).
+  button.dataset.on = String(on);
   button.hidden = !supported || (!on && installed());
 }
 

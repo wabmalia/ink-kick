@@ -2,7 +2,9 @@
 
 3D arcade football in the browser: Three.js + TypeScript + Vite + Vitest.
 Live at https://arcade.wabmalia.eu/ink-kick/ (repo wabmalia/ink-kick; the old wabmalia.github.io/ink-kick/ redirects there).
-Desktop first; mobile is deferred.
+Desktop and phones held sideways (touch controls in `src/game/touch.ts`,
+phone styles under the `(max-height: 500px), (max-width: 500px)` query in
+`src/style.css`; desktop layout changes only on purpose).
 
 ## Commands
 
@@ -54,8 +56,7 @@ runs check, test and build first). Pushing is shipping: only push when asked.
   compatibility isn't wanted until the game is finished.
 - **Tests.** Sim, keeper and netcode changes come with Vitest coverage. Run
   `npm run check` and `npm test` before committing.
-- **Parked, don't start unless asked:** offline / PWA caching, an arcade
-  tile for this game.
+- **Parked, don't start unless asked:** offline / PWA caching.
 - **Local multiplayer testing:** Waterfox to Chromium rooms fail locally (a
   known, accepted limitation). Test with two Chromium browsers or two tabs
   in one browser instead of diagnosing it.

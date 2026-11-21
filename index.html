@@ -71,7 +71,7 @@
     <button class="ink-btn help-btn" id="help-open" type="button" aria-haspopup="dialog">
       <span class="key small" aria-hidden="true">H</span> How to play
     </button>
-    <button class="ink-btn fullscreen-btn" id="fullscreen" type="button" aria-pressed="false" aria-label="Fullscreen" title="Fullscreen" hidden>
+    <button class="ink-btn fullscreen-btn" id="fullscreen" type="button" aria-label="Fullscreen" title="Fullscreen" hidden>
       <svg class="enter" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>
       <svg class="exit" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg>
     </button>
@@ -196,7 +196,8 @@
     </section>
   </div>
 
-  <p class="train-line" id="train-line" aria-live="polite"></p>
+  <!-- Not live: it changes every frame while a drill runs. -->
+  <p class="train-line" id="train-line"></p>
   <!-- Phones: the score, where the stadium's board won't fit (game/view.ts). -->
   <p class="phone-score" id="phone-score" aria-label="Score" hidden><span class="team gold">Gold</span><b id="phone-score-gold">0</b><span class="dash">-</span><b id="phone-score-red">0</b><span class="team red">Red</span></p>
 

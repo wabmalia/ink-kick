@@ -374,9 +374,7 @@ html, body {
 .cards .card { display: flex; flex-direction: column; align-items: stretch; }
 /* Every card: title, a line saying what it's for, then its controls. */
 .cards .card h2 { margin-bottom: 2px; }
-.cards .card > .brush,
 #create-block { display: flex; align-items: center; gap: 18px; }
-/* Solo has a single button: beside the title and description, not under. */
 /* Solo: its two buttons side by side under the description, the same size. */
 .solo-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 6px 4px 4px; }
 .solo-actions .brush { font-size: 22px; padding: 6px 12px 8px; }
@@ -783,8 +781,8 @@ html, body {
 .fullscreen-btn { display: none; align-items: center; justify-content: center; padding: 6px 10px; }
 .fullscreen-btn svg { width: 22px; height: 22px; display: block; }
 .fullscreen-btn .exit,
-.fullscreen-btn[aria-pressed='true'] .enter { display: none; }
-.fullscreen-btn[aria-pressed='true'] .exit { display: block; }
+.fullscreen-btn[data-on='true'] .enter { display: none; }
+.fullscreen-btn[data-on='true'] .exit { display: block; }
 @media (pointer: coarse) {
   .fullscreen-btn { display: inline-flex; }
 }
@@ -989,7 +987,7 @@ html, body {
 .eq-bar span.on:nth-child(-n + 3) { background: #ff8a4c; box-shadow: 0 0 4px rgba(255, 138, 76, 0.5); }
 .eq-name { font-family: 'Caveat', cursive; font-weight: 700; font-size: 14px; line-height: 1; color: var(--text); white-space: nowrap; }
 .eq-value { font-family: 'Caveat Brush', cursive; font-size: 16px; line-height: 1; color: var(--gold); }
-.eq .step { width: 30px; height: 26px; font-size: 18px; border-radius: 8px; }
+.eq .step { width: 38px; height: 32px; font-size: 20px; border-radius: 9px; }
 .corner { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 1px; }
 .corner-name { font-family: 'Caveat', cursive; font-weight: 700; font-size: 19px; line-height: 1; color: var(--text); }
 .corner-row { display: flex; align-items: center; gap: 2px; }
@@ -1231,21 +1229,10 @@ a.arcade-back { text-decoration: none; display: inline-flex; align-items: center
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
   -webkit-tap-highlight-color: transparent;
 }
+/* Placed and sized inline from the player's layout (game/touch.ts). */
 .touch-kick {
-  right: calc(24px + env(safe-area-inset-right));
-  bottom: calc(24px + env(safe-area-inset-bottom));
-  width: 66px;
-  height: 66px;
-  font-size: 15px;
   border-color: rgba(255, 194, 58, 0.55);
   color: rgba(255, 211, 107, 0.85);
-}
-.touch-sprint {
-  right: calc(102px + env(safe-area-inset-right));
-  bottom: calc(14px + env(safe-area-inset-bottom));
-  width: 48px;
-  height: 48px;
-  font-size: 12px;
 }
 .touch-btn.held { transform: scale(0.92); filter: brightness(1.15); }
 
@@ -1262,7 +1249,7 @@ a.arcade-back { text-decoration: none; display: inline-flex; align-items: center
   display: none;
   position: fixed;
   z-index: 1;
-  top: max(10px, env(safe-area-inset-top));
+  /* top: clear of the screen's top edge (the phone styles). */
   left: 50%;
   transform: translateX(-50%);
   max-width: calc(100% - 360px);
@@ -1291,8 +1278,7 @@ a.arcade-back { text-decoration: none; display: inline-flex; align-items: center
 .phone-score {
   position: fixed;
   z-index: 1;
-  /* In line with the corner buttons (drawn at 0.72 on phones, 38 px tall). */
-  top: calc(max(12px, env(safe-area-inset-top)) * 0.72 + 14px);
+  /* top: in line with the corner buttons (the phone styles). */
   left: 50%;
   transform: translate(-50%, -50%);
   margin: 0;
@@ -1320,69 +1306,69 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
   .side-column { zoom: 0.72; }
   .help { max-height: calc((100dvh - 16px) / 0.72); overflow-y: auto; padding: 22px 28px; }
 
-  /* The menu starts below the top buttons, which step aside once it
-     scrolls rather than float over the cards. The attributes float over
-     the screen when open, so it stays centred. */
+  /* Clear of the screen's edges. Nothing to tap within --top of the top
+     edge: held sideways there's no status bar, and a touch up there is
+     iOS's swipe down for Control Center (most of all in the arcade's
+     installed app, with no browser bar above the game). And out from under
+     a notch or Dynamic Island and the rounded corners, while the stadium
+     runs on behind them. Pieces drawn at 0.72, alone or inside the menu's
+     screens, have their offsets scaled back up to land on the same spot. */
+  :root { --top: max(24px, env(safe-area-inset-top) + 12px); }
+  .ingame, .top-buttons, .back-to-menu { top: calc(var(--top) / 0.72); }
+  .ingame, .net-pings, .back-to-menu { left: calc(max(16px, env(safe-area-inset-left) + 8px) / 0.72); }
+  .top-buttons { right: calc(max(16px, env(safe-area-inset-right) + 8px) / 0.72); }
+  .net-pings { top: calc(var(--top) / 0.72 + 46px); }
+  .side-column {
+    top: calc(var(--top) / 0.72 + 50px);
+    left: calc(max(12px, env(safe-area-inset-left) + 6px) / 0.72);
+  }
+  .phone-score { top: calc(var(--top) + 14px); }
+  .train-line, .controls-editor .ce-bar { top: var(--top); }
+
+  /* The menu starts below the top buttons, which step aside (fade, and
+     out of reach) once it scrolls rather than float over the cards. With
+     the attributes open over it, it stays centred. */
   .menu, .menu.with-side {
+    padding-top: calc(var(--top) + 30px);
     padding-left: max(16px, env(safe-area-inset-left));
     padding-right: max(16px, env(safe-area-inset-right));
   }
-  /* Nothing to tap within --top of the screen's top edge: held sideways
-     there's no status bar, and a touch up there is iOS's swipe down for
-     Control Center (most of all in the arcade's installed app, with no
-     browser bar above the game). The corner buttons are drawn at 0.72, so
-     their offsets are scaled back up to land on the same screen spot. */
-  :root { --top: max(24px, env(safe-area-inset-top) + 12px); }
-  .ingame, .top-buttons { top: calc(var(--top) / 0.72); }
-  .net-pings { top: calc(var(--top) / 0.72 + 46px); }
-  .side-column { top: calc(var(--top) / 0.72 + 50px); }
-  .phone-score { top: calc(var(--top) + 14px); }
-  .train-line, .controls-editor .ce-bar { top: var(--top); }
-  .menu { padding-top: calc(var(--top) + 30px); }
-  /* Buttons stay out from under a notch or Dynamic Island, and the rounded
-     corners; the stadium runs on behind them. These are drawn at 0.72, so
-     the inset is scaled back up to land on the same screen spot. */
-  .ingame, .net-pings { left: calc(max(16px, env(safe-area-inset-left) + 8px) / 0.72); }
-  .side-column { left: calc(max(12px, env(safe-area-inset-left) + 6px) / 0.72); }
-  .top-buttons { right: calc(max(16px, env(safe-area-inset-right) + 8px) / 0.72); }
+  .top-buttons { transition: opacity 0.2s, visibility 0s; }
+  body:has(.menu.scrolled:not([hidden])) .top-buttons {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s, visibility 0s 0.2s;
+  }
 
-  /* Home: the chart a touch smaller, a smaller title and no tagline, so
-     the two columns fit without scrolling. */
-  /* Attributes as an equalizer: easier to read and to tap than the
-     hexagon at this size. */
-  .radar-wrap { width: auto; height: auto; zoom: 1; }
-  .radar-wrap > :not(.eq) { display: none; }
-  .eq { display: flex; gap: 8px; justify-content: center; }
-  /* In the side panel the "?" would sit on Strength's +: down by the
-     points line instead. */
-  /* A header row: the points to spend on the left, the "?" on the right. */
-  .attr-panel .info-btn { top: 8px; right: 10px; }
-  .attr-panel .spare { order: -1; align-self: flex-start; margin: 2px 0 16px; min-height: 30px; display: flex; align-items: center; }
-  /* Room inside the side panel for the six columns and their names. */
-  .attr-panel { padding: 8px 14px 12px; }
-  .attr-panel .eq { gap: 5px; }
-  .attr-panel .eq-name { font-size: 12.5px; }
-  .home .locker-chart { zoom: 0.85; }
-  /* The door's slimmer on a phone: smaller vents, and no words above the
-     tape (its "Pick a nickname" says it; the label stays for screen
-     readers). */
+  /* Home: a smaller title and no tagline; a slimmer locker door, with
+     smaller vents and no words above the tape (its "Pick a nickname" says
+     it; the label stays for screen readers); a tighter tactics board so
+     multiplayer stays one line. */
+  .home .title { font-size: 48px; }
+  .home .tagline { display: none; }
   .home .card.locker { padding-top: 36px; }
   .locker-vents { top: 10px; height: 18px; width: 40%; }
-  /* Points left, close under the bars. */
-  .attr-panel .spare { margin-top: 2px; }
-  /* The tactics board a little tighter, so multiplayer stays one line. */
   .tactics-board { padding: 14px 6px 8px; }
   .tactics-board .card { padding: 4px 14px; }
   .multi-row { gap: 10px 12px; margin-top: 8px; }
   #create-block { gap: 12px; }
   .multi-row .brush { padding-inline: 16px; }
-  .home .title { font-size: 48px; }
-  .home .tagline { display: none; }
-  .top-buttons { transition: opacity 0.2s; }
-  body:has(.menu.scrolled:not([hidden])) .top-buttons { opacity: 0; pointer-events: none; }
 
-  /* Attributes and drills folded into buttons, closed until tapped; above
-     the stick's zone so their own buttons still work. */
+  /* Attributes as an equalizer: easier to read and to tap than the
+     hexagon at this size. */
+  /* zoom 1 undoes the hexagon's 0.74 (the base rule). */
+  .radar-wrap { width: auto; height: auto; zoom: 1; }
+  .radar-wrap > :not(.eq) { display: none; }
+  .eq { display: flex; gap: 8px; justify-content: center; }
+  /* On the home screen a touch smaller, with shorter segments, so the
+     locker still fits without scrolling. */
+  .home .locker-chart { zoom: 0.85; }
+  .home .eq-bar span { height: 5px; }
+
+  /* Attributes and drills folded into buttons, closed until tapped, the
+     attributes floating over the screen when open. Above the touch
+     controls, so their own buttons work. */
   .side-column { z-index: 2; }
   .side-pills { display: flex; }
   .side-column:has(#attr-panel:not([hidden])) #attr-pill,
@@ -1390,7 +1376,12 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
   .side-column:not(.open-attrs) .attr-panel,
   .side-column:not(.open-drills) .train-hud { display: none; }
   .attr-panel h2 { display: none; }
-  .attr-panel { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55); }
+  .attr-panel { padding: 8px 14px 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55); }
+  /* Its header row: the points to spend on the left, the "?" on the right
+     (the base rule's spot), with room under it before the + buttons. */
+  .attr-panel .spare { order: -1; align-self: flex-start; margin: 2px 0 16px; min-height: 30px; display: flex; align-items: center; }
+  .attr-panel .eq { gap: 5px; }
+  .attr-panel .eq-name { font-size: 12.5px; }
   body:has(#train-hud:not([hidden])) .train-line { display: flex; }
 }
 

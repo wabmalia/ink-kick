@@ -129,6 +129,8 @@ function build(): HTMLElement {
   const sprintUp = (e: PointerEvent) => {
     if (e.pointerId !== sprintPointer) return;
     sprintPointer = null;
+    // A faked kick's finger still on Sprint keeps sprinting.
+    if (faked && kickPointer !== null) return;
     state.sprint = false;
     sprintBtn.classList.remove('held');
   };
