@@ -824,7 +824,9 @@ html, body {
 .controls dd b { color: var(--text); }
 /* Keys on a keyboard, the on-screen controls on a touch screen. */
 .controls.touch-only { display: none; }
+.touch-only-btn { display: none; align-self: center; margin: -12px 0 18px; }
 @media (pointer: coarse) {
+  .touch-only-btn { display: inline-flex; }
   .controls.keys-only { display: none; }
   .controls.touch-only { display: grid; }
   .help-btn .key { display: none; }
@@ -1199,12 +1201,13 @@ html, body {
 }
 .touch-stick {
   position: absolute;
-  /* Placed by its centre: at rest bottom left, else where the thumb landed. */
-  left: calc(22px + 48px + env(safe-area-inset-left));
-  top: calc(100% - 18px - 48px - env(safe-area-inset-bottom));
+  /* Placed by its centre: at rest bottom left, else where the thumb landed.
+     Its size is the player's (--stick-d, game/touch.ts). */
+  left: calc(22px + var(--stick-d, 96px) / 2 + env(safe-area-inset-left));
+  top: calc(100% - 18px - var(--stick-d, 96px) / 2 - env(safe-area-inset-bottom));
   translate: -50% -50%;
-  width: 96px;
-  height: 96px;
+  width: var(--stick-d, 96px);
+  height: var(--stick-d, 96px);
   border-radius: 50%;
   border: 2px solid rgba(238, 240, 250, 0.3);
   background: rgba(13, 16, 38, 0.18);
@@ -1448,3 +1451,72 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
 .perf td { padding: 1px 8px 1px 0; text-align: right; }
 .perf td:first-child { text-align: left; }
 .perf thead td { color: #ffc23a; }
+
+/* --- Touch controls' editor (ui/controls-editor.ts) ----------------------- */
+
+.controls-editor {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  touch-action: none;
+}
+.controls-editor::backdrop { background: rgba(8, 10, 24, 0.55); }
+.controls-editor[open] { display: block; }
+.ce-bar {
+  position: absolute;
+  z-index: 1;
+  top: max(10px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+.ce-bar p { margin: 0; font-family: 'Caveat', cursive; font-weight: 700; font-size: 19px; text-shadow: 0 1px 2px #000; }
+.ce-bar .brush, .ce-bar .ink-btn { font-size: 18px; padding: 3px 14px 5px; }
+.ce-area {
+  position: absolute;
+  inset: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.ce-part {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-family: 'Caveat Brush', 'Caveat', cursive;
+  outline: 2px dashed rgba(238, 240, 250, 0.6);
+  outline-offset: 5px;
+  touch-action: none;
+  cursor: grab;
+}
+.ce-part.active { outline-color: var(--gold); }
+.ce-kick { color: #1a1d3a; background: rgba(242, 177, 52, 0.9); border: 2px solid #ffe3a0; }
+.ce-sprint { background: rgba(13, 16, 38, 0.7); border: 2px solid rgba(238, 240, 250, 0.7); }
+.ce-stick { border: 2px solid rgba(238, 240, 250, 0.5); background: rgba(13, 16, 38, 0.3); cursor: default; }
+.ce-knob { width: 20px; height: 20px; border-radius: 50%; background: rgba(238, 240, 250, 0.5); }
+/* The resize dot, on the rim: up-left for the buttons (towards the middle
+   of the screen), up-right for the stick. A bigger invisible touch area. */
+.ce-handle {
+  position: absolute;
+  left: 14.6%;
+  top: 14.6%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 2px solid #1a1d3a;
+  box-shadow: 0 0 0 2px rgba(255, 194, 58, 0.35);
+  cursor: nwse-resize;
+}
+.ce-handle::before { content: ''; position: absolute; inset: -14px; border-radius: 50%; }
+.ce-stick .ce-handle { left: 85.4%; cursor: nesw-resize; }

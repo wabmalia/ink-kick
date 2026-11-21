@@ -16,7 +16,9 @@ npm run dev
 - **Touch screens**: put a thumb down anywhere on the left to run (and curl):
   that's the stick's centre. Kick and Sprint buttons at the bottom right
   stand in for Space and Shift; a quick flick from Kick onto Sprint mid-charge
-  is the fake (a slow slide still kicks)
+  is the fake (a slow slide still kicks). How to play has "Move and resize
+  the buttons": drag Kick or Sprint anywhere in the right half, drag a
+  button's dot to resize it, and size the stick the same way
 
 Shooting within 20 m of goal, a wind-up that couldn't go in even with a
 full curl turns slowly towards goal, just until a curl could bring it in.

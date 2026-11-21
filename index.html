@@ -140,6 +140,7 @@
       <dt><span class="tc-btn kick">Kick</span></dt>
       <dd><b>Tackle.</b> Pokes up close, slides from further or behind.</dd>
     </dl>
+    <button class="ink-btn touch-only-btn" data-controls-editor type="button">Move and resize the buttons</button>
     <button class="brush gold" id="help-close" type="button">Got it</button>
   </dialog>
 
@@ -164,6 +165,16 @@
     </div>
     <p class="card-note small">No build is best: every strength has something that counters it. Points left unspent do nothing.</p>
     <button class="brush gold" id="attr-info-close" type="button">Got it</button>
+  </dialog>
+
+  <!-- Touch screens: where the buttons sit and how big (ui/controls-editor.ts). -->
+  <dialog class="controls-editor" id="controls-editor" aria-labelledby="ce-title">
+    <div class="ce-bar">
+      <p id="ce-title">Drag a button to move it, its dot to resize it.</p>
+      <button class="ink-btn" id="ce-reset" type="button">Reset</button>
+      <button class="brush gold" id="ce-done" type="button">Done</button>
+    </div>
+    <div class="ce-area"></div>
   </dialog>
 
   <div class="side-column" id="side-column">

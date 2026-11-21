@@ -18,6 +18,7 @@ export const RELEASE_NOTES: ReleaseDay[] = [
       'The home screen puts the locker room beside solo and multiplayer, and solo\'s two buttons sit side by side, the same size.',
       'Buttons stay clear of a notch or Dynamic Island, with the stadium running on behind it.',
       'No more text selection or copy menu popping up from a long press or double tap.',
+      'On a touch screen you can move and resize Kick and Sprint, and size the stick: How to play, then Move and resize the buttons.',
       'The locker room looks like a locker: painted metal, vents, a handle, and your nickname on a strip of tape.',
       'Solo and multiplayer share a coach\'s tactics board, either side of the halfway line.',
       'On phones, attributes are equalizer bars with big + and − buttons.',

@@ -22,6 +22,7 @@ import { currentAttributes, mountLocker, onAttributes } from './ui/locker';
 import { Training } from './game/training';
 import { resetTimes, showTimes } from './ui/training-hud';
 import { mountFullscreen } from './ui/fullscreen';
+import { mountControlsEditor } from './ui/controls-editor';
 import { mountPerf, PERF } from './ui/perf';
 import { Governor, LEVELS } from './game/governor';
 import type { Quality } from './game/view';
@@ -48,6 +49,7 @@ document.addEventListener('selectstart', e => {
 });
 
 mountFullscreen();
+mountControlsEditor();
 const view = new GameView(document.getElementById('game')!);
 // Frame times and a settings test at ?perf (see ui/perf.ts).
 const perf = PERF ? mountPerf(view, () => focused) : null;
@@ -148,6 +150,8 @@ function pickMode() {
   enableKeys(inMatch() && !dialogOpen());
 }
 onHelp(pickMode);
+// The touch controls' editor is a dialog too: solo waits, rooms don't.
+window.addEventListener('controls-editor', pickMode);
 attrInfo.addEventListener('close', pickMode);
 
 session.listen({

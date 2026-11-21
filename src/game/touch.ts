@@ -1,4 +1,6 @@
 import type { Input } from '../engine/sim';
+import { KEYS, store } from '../storage';
+import { DEFAULT_LAYOUT, fitLayout, type TouchLayout } from './touch-layout';
 
 // Touch screens: a stick on the left to run (and curl after a kick), Kick
 // and Sprint buttons at the bottom right. Shown only where the main pointer
@@ -14,8 +16,11 @@ import type { Input } from '../engine/sim';
 
 /** Drags shorter than this share of the stick's reach don't move you. */
 export const DEAD_ZONE = 0.22;
-/** The stick's reach, from its centre to its rim, in CSS px. */
+/** The stick's reach at its usual size, from its centre to its rim, in CSS px. */
 export const STICK_REACH = 48;
+/** Kick to Sprint, centre to centre, at the usual layout: the flick speed
+ *  is for this distance, and scales with it. */
+const FLICK_DISTANCE = Math.hypot(DEFAULT_LAYOUT.kick.x - DEFAULT_LAYOUT.sprint.x, DEFAULT_LAYOUT.kick.y - DEFAULT_LAYOUT.sprint.y);
 /** A flick onto Sprint: at least this fast, in CSS px per ms... */
 export const FLICK_SPEED = 0.45;
 /** ...measured over about this long, in ms. */
@@ -60,6 +65,10 @@ export function stickCentre(x: number, y: number, width: number, height: number,
 }
 
 const state = { x: 0, y: 0, kick: false, sprint: false };
+// Where the buttons are and how big, as the player set them.
+let layout: TouchLayout = { ...DEFAULT_LAYOUT };
+let reach = STICK_REACH;
+let flickSpeed = FLICK_SPEED;
 let enabled = false;
 let root: HTMLElement | null = null;
 const coarse = typeof matchMedia === 'function' ? matchMedia('(pointer: coarse)') : null;
@@ -89,12 +98,12 @@ function build(): HTMLElement {
   const steer = (e: PointerEvent) => {
     const dx = e.clientX - centre.x;
     const dy = e.clientY - centre.y;
-    const dir = stickDirection(dx, dy, STICK_REACH);
+    const dir = stickDirection(dx, dy, reach);
     state.x = dir.x;
     state.y = dir.y;
     // The knob follows the thumb, up to the rim.
     const len = Math.hypot(dx, dy);
-    const k = len > STICK_REACH ? STICK_REACH / len : 1;
+    const k = len > reach ? reach / len : 1;
     knob.style.translate = `${dx * k}px ${dy * k}px`;
   };
   const restStick = () => {
@@ -111,7 +120,7 @@ function build(): HTMLElement {
     e.preventDefault();
     stickPointer = e.pointerId;
     zone.setPointerCapture(e.pointerId);
-    centre = stickCentre(e.clientX, e.clientY, window.innerWidth, window.innerHeight);
+    centre = stickCentre(e.clientX, e.clientY, window.innerWidth, window.innerHeight, reach);
     const box = zone.getBoundingClientRect();
     stick.style.left = `${centre.x - box.left}px`;
     stick.style.top = `${centre.y - box.top}px`;
@@ -168,7 +177,7 @@ function build(): HTMLElement {
     if (e.pointerId !== kickPointer || faked) return;
     samples.push({ x: e.clientX, y: e.clientY, t: e.timeStamp });
     while (samples.length > 2 && e.timeStamp - samples[0]!.t > FLICK_WINDOW * 2) samples.shift();
-    if (!onSprint(e.clientX, e.clientY) || fingerSpeed(samples) < FLICK_SPEED) return;
+    if (!onSprint(e.clientX, e.clientY) || fingerSpeed(samples) < flickSpeed) return;
     // Both in the same tick: the sim sees Sprint go down mid-charge first.
     faked = true;
     state.kick = false;
@@ -205,15 +214,62 @@ function build(): HTMLElement {
   return el;
 }
 
+/** Puts the buttons where the layout says, sized to it. */
+function place() {
+  if (!root) return;
+  for (const key of ['kick', 'sprint'] as const) {
+    const el = root.querySelector<HTMLElement>(`.touch-${key}`)!;
+    const s = layout[key];
+    el.style.right = `calc(env(safe-area-inset-right) + ${s.x - s.d / 2}px)`;
+    el.style.bottom = `calc(env(safe-area-inset-bottom) + ${s.y - s.d / 2}px)`;
+    el.style.width = el.style.height = `${s.d}px`;
+    el.style.fontSize = `${Math.round(s.d * (key === 'kick' ? 0.23 : 0.25))}px`;
+  }
+  root.style.setProperty('--stick-d', `${layout.stick.d}px`);
+}
+
+/** The screen inside its safe area (clear of a notch and rounded
+ *  corners), which layouts are measured in. */
+export function touchArea(): { w: number; h: number } {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;visibility:hidden;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
+  document.body.append(probe);
+  const s = getComputedStyle(probe);
+  const px = (v: string) => parseFloat(v) || 0;
+  const area = { w: window.innerWidth - px(s.paddingLeft) - px(s.paddingRight), h: window.innerHeight - px(s.paddingTop) - px(s.paddingBottom) };
+  probe.remove();
+  return area;
+}
+
+/** The layout the player set, fitted to this screen. */
+export function touchLayout(area = touchArea()): TouchLayout {
+  return fitLayout(store.getJSON(localStorage, KEYS.touchLayout), area.w, area.h);
+}
+
+/** Takes up a new layout (the editor's), saving it unless told not to. */
+export function setTouchLayout(next: TouchLayout, save = true) {
+  layout = next;
+  reach = next.stick.d / 2;
+  const apart = Math.hypot(next.kick.x - next.sprint.x, next.kick.y - next.sprint.y);
+  // Further apart, a flick has further to go in the same moment.
+  flickSpeed = FLICK_SPEED * Math.min(2, Math.max(0.8, apart / FLICK_DISTANCE));
+  if (save) store.setJSON(localStorage, KEYS.touchLayout, next);
+  place();
+}
+
 function show() {
   const on = enabled && !!coarse?.matches;
-  if (on && !root) root = build();
+  if (on && !root) {
+    root = build();
+    setTouchLayout(touchLayout(), false);
+  }
   if (!root) return;
   if (root.hidden === on) root.hidden = !on;
   if (!on) releaseAll();
 }
 
 coarse?.addEventListener('change', show);
+if (typeof window !== 'undefined') window.addEventListener('resize', () => root && setTouchLayout(touchLayout(), false));
 if (typeof window !== 'undefined') window.addEventListener('blur', () => releaseAll());
 
 export function enableTouch(on: boolean) {

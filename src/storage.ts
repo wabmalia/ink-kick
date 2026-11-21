@@ -14,6 +14,8 @@ export const KEYS = {
   keepers: 'inkkick.keepers',
   // Phones and tablets: the drawing quality level that kept up (game/governor.ts).
   quality: 'inkkick.quality',
+  // Phones and tablets: where the touch buttons sit and how big (game/touch-layout.ts).
+  touchLayout: 'inkkick.touchLayout',
 } as const;
 
 export const store = {
