@@ -1323,11 +1323,22 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
   /* The menu starts below the top buttons, which step aside once it
      scrolls rather than float over the cards. The attributes float over
      the screen when open, so it stays centred. */
-  .menu { padding-top: 48px; }
   .menu, .menu.with-side {
     padding-left: max(16px, env(safe-area-inset-left));
     padding-right: max(16px, env(safe-area-inset-right));
   }
+  /* Nothing to tap within --top of the screen's top edge: held sideways
+     there's no status bar, and a touch up there is iOS's swipe down for
+     Control Center (most of all in the arcade's installed app, with no
+     browser bar above the game). The corner buttons are drawn at 0.72, so
+     their offsets are scaled back up to land on the same screen spot. */
+  :root { --top: max(24px, env(safe-area-inset-top) + 12px); }
+  .ingame, .top-buttons { top: calc(var(--top) / 0.72); }
+  .net-pings { top: calc(var(--top) / 0.72 + 46px); }
+  .side-column { top: calc(var(--top) / 0.72 + 50px); }
+  .phone-score { top: calc(var(--top) + 14px); }
+  .train-line, .controls-editor .ce-bar { top: var(--top); }
+  .menu { padding-top: calc(var(--top) + 30px); }
   /* Buttons stay out from under a notch or Dynamic Island, and the rounded
      corners; the stadium runs on behind them. These are drawn at 0.72, so
      the inset is scaled back up to land on the same screen spot. */
