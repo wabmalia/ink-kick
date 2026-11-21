@@ -524,7 +524,10 @@ html, body {
   background: radial-gradient(circle, #1a1f45 0 3px, #b9c0e2 4px);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
-.home .card.locker .info-btn { top: 12px; right: 14px; }
+/* Over the attributes: points to spend on the left, the "?" on the right. */
+.chart-head { align-self: stretch; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.chart-head .spare { margin: 0; }
+.chart-head .info-btn { position: relative; top: auto; right: auto; }
 .home .card.locker #name {
   background: #f3ead2;
   color: #2a2440;
@@ -1350,7 +1353,7 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
   .home .card.locker { padding-top: 44px; }
   .locker-vents { top: 12px; height: 22px; width: 40%; }
   /* Points left, close under the bars. */
-  .eq + .spare, .locker-chart .spare, .attr-panel .spare { margin-top: 2px; }
+  .attr-panel .spare { margin-top: 2px; }
   /* The tactics board a little tighter, so multiplayer stays one line. */
   .tactics-board { padding: 14px 6px 8px; }
   .tactics-board .card { padding: 4px 14px; }

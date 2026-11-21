@@ -199,7 +199,6 @@
           <span class="locker-hinge bottom" aria-hidden="true"></span>
           <span class="locker-handle" aria-hidden="true"></span>
           <h2>Locker room</h2>
-          <button class="ink-btn info-btn" data-attr-info type="button" aria-haspopup="dialog" aria-label="What the attributes do">?</button>
           <p class="card-note locker-note">Who you are, and how you play.</p>
           <div class="locker-body">
             <div class="locker-name">
@@ -208,8 +207,12 @@
               <p class="card-note small">No real names or contact details needed.</p>
             </div>
             <div class="locker-chart">
+              <!-- A header over the attributes: points to spend, and what they do. -->
+              <div class="chart-head">
+                <p class="spare" id="spare" aria-live="polite"></p>
+                <button class="ink-btn info-btn" data-attr-info type="button" aria-haspopup="dialog" aria-label="What the attributes do">?</button>
+              </div>
               <div class="radar-wrap" id="radar" role="group" aria-label="Attributes"></div>
-              <p class="spare" id="spare" aria-live="polite"></p>
             </div>
           </div>
         </section>
