@@ -71,7 +71,7 @@ function safeSide() {
   return inset;
 }
 // A phone held sideways: a touch screen small enough that the pitch needs
-// every pixel (the same test as the phone styles in style.css).
+// every pixel (the phone styles in style.css use the same size test).
 const COMPACT = matchMedia('(pointer: coarse) and ((max-height: 500px) or (max-width: 500px))');
 
 

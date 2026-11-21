@@ -3,8 +3,7 @@
 3D arcade football in the browser: Three.js + TypeScript + Vite + Vitest.
 Live at https://arcade.wabmalia.eu/ink-kick/ (repo wabmalia/ink-kick; the old wabmalia.github.io/ink-kick/ redirects there).
 Desktop and phones held sideways (touch controls in `src/game/touch.ts`,
-phone styles under the `(pointer: coarse) and ((max-height: 500px) or
-(max-width: 500px))` query in
+phone styles under the `(max-height: 500px), (max-width: 500px)` query in
 `src/style.css`; desktop layout changes only on purpose).
 
 ## Commands

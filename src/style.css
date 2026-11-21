@@ -1312,9 +1312,7 @@ a.arcade-back { text-decoration: none; display: inline-flex; align-items: center
 /* Only in play, not over the menus. */
 body:has(.menu:not([hidden])) .phone-score { display: none; }
 
-/* Phones: a touch screen with at most 500 px on a side (the same test as
-   COMPACT in game/view.ts). A small desktop window keeps the desktop look. */
-@media (pointer: coarse) and ((max-height: 500px) or (max-width: 500px)) {
+@media (max-height: 500px), (max-width: 500px) {
   /* The menus, buttons and dialogs drawn smaller, all in proportion. */
   .menu .screen, .top-buttons, .ingame, .net-pings, .scoreboard, .help, .toast,
   .side-column { zoom: 0.72; }
