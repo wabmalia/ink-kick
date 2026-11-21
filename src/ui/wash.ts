@@ -17,6 +17,8 @@ interface Wash {
 
 const WASHES: Record<string, Wash> = {
   card: { base: '#1f2552', lights: ['#2a3270', '#26306a'], darks: ['#161b40', '#141936'], rim: 'rgba(84, 104, 200, 0.55)' },
+  // The locker room's door: a bluer, greyer painted metal.
+  locker: { base: '#2c3768', lights: ['#3a4782', '#34407a'], darks: ['#222b57', '#1e264d'], rim: 'rgba(160, 172, 230, 0.6)' },
   ink: { base: '#1c2148', lights: ['#262d62'], darks: ['#141936'], rim: 'rgba(120, 136, 210, 0.6)' },
   gold: { base: '#ffc23a', lights: ['#ffeab0', '#ffd774'], darks: ['#f5a312'], rim: 'rgba(225, 140, 0, 0.85)' },
   red: { base: '#ff7660', lights: ['#ffc2b3', '#ff9c8a'], darks: ['#f0553c'], rim: 'rgba(222, 70, 46, 0.85)' },

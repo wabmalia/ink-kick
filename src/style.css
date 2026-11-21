@@ -382,6 +382,77 @@ html, body {
 }
 .home .cards .card.locker { grid-row: 1 / span 2; align-self: stretch; display: flex; }
 .home .locker-chart { align-self: center; margin-top: 2px; }
+
+/* The locker room drawn as a locker door, on its own painted-metal wash
+   (ui/wash.ts): vent slats at the top, hinges down the left, a handle and
+   lock on the right, faint brushing, and the nickname on a strip of tape. */
+.home .card.locker { padding: 58px 40px 16px 34px; }
+.home .card.locker::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 8px;
+  border-radius: 12px;
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0 2px, transparent 2px 7px);
+  pointer-events: none;
+}
+.locker-vents {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-0.6deg);
+  width: 44%;
+  height: 30px;
+  border-radius: 4px;
+  background: repeating-linear-gradient(180deg, #121738 0 4px, transparent 4px 9px);
+  opacity: 0.85;
+}
+.locker-hinge {
+  position: absolute;
+  left: 9px;
+  width: 8px;
+  height: 26px;
+  border-radius: 3px 4px 3px 5px;
+  background: #9aa3d0;
+  box-shadow: inset -2px 0 0 rgba(20, 24, 51, 0.35);
+}
+.locker-hinge.top { top: 22%; }
+.locker-hinge.bottom { bottom: 22%; }
+.locker-handle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  width: 12px;
+  height: 54px;
+  transform: translateY(-50%) rotate(1deg);
+  border-radius: 7px 6px 7px 6px;
+  background: linear-gradient(90deg, #d4d9f0, #8f98c6);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45);
+}
+/* The lock under the handle. */
+.locker-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 10px);
+  width: 18px;
+  height: 18px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, #1a1f45 0 3px, #b9c0e2 4px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+.home .card.locker .info-btn { top: 12px; right: 14px; }
+.home .card.locker #name {
+  background: #f3ead2;
+  color: #2a2440;
+  border: 0;
+  border-radius: 2px 3px 2px 4px;
+  transform: rotate(-1.5deg);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+.home .card.locker #name::placeholder { color: #8a7f6a; }
+.home .card.locker #name:focus { box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25), 0 0 0 3px var(--gold); }
 /* A window too narrow for two columns stacks them (phones held sideways
    are short and keep the columns). */
 @media (max-width: 720px) and (min-height: 501px) {
@@ -1162,6 +1233,13 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
   /* Home: the chart a touch smaller, a smaller title and no tagline, so
      the two columns fit without scrolling. */
   .home .locker-chart { zoom: 0.85; }
+  /* The door's slimmer on a phone: smaller vents, and no words above the
+     tape (its "Pick a nickname" says it; the label stays for screen
+     readers). */
+  .home .card.locker { padding-top: 44px; }
+  .locker-vents { top: 12px; height: 22px; width: 40%; }
+  .home .locker-note { display: none; }
+  .home .locker-name .field-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .home .title { font-size: 48px; }
   .home .tagline { display: none; }
   .top-buttons { transition: opacity 0.2s; }

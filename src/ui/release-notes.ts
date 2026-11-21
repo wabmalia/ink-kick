@@ -17,6 +17,7 @@ export const RELEASE_NOTES: ReleaseDay[] = [
       'On phones the score is a small label at the top, level with the buttons.',
       'The home screen puts the locker room beside solo and multiplayer, and solo\'s two buttons sit side by side, the same size.',
       'Buttons stay clear of a notch or Dynamic Island, with the stadium running on behind it.',
+      'The locker room looks like a locker: painted metal, vents, a handle, and your nickname on a strip of tape.',
       'Multiplayer fits on one line: host a room, or type a code and join.',
       'The fullscreen button is an icon beside How to play, and goes away when the game runs as an installed app.',
     ],
