@@ -1336,10 +1336,11 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
   .eq { display: flex; gap: 8px; justify-content: center; }
   /* In the side panel the "?" would sit on Strength's +: down by the
      points line instead. */
-  .attr-panel .info-btn { top: 8px; left: 10px; right: auto; }
+  /* A header row: the points to spend on the left, the "?" on the right. */
+  .attr-panel .info-btn { top: 8px; right: 10px; }
+  .attr-panel .spare { order: -1; align-self: flex-start; margin: 2px 0 8px; min-height: 30px; display: flex; align-items: center; }
   /* Room inside the side panel for the six columns and their names. */
-  /* An overlay, so it can take the room: a strip at the top for the "?". */
-  .attr-panel { padding: 46px 14px 12px; }
+  .attr-panel { padding: 8px 14px 12px; }
   .attr-panel .eq { gap: 5px; }
   .attr-panel .eq-name { font-size: 12.5px; }
   .home .locker-chart { zoom: 0.85; }
