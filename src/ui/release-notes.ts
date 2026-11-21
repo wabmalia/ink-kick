@@ -11,6 +11,15 @@ export interface ReleaseDay {
 
 export const RELEASE_NOTES: ReleaseDay[] = [
   {
+    date: '2026-11-21',
+    notes: [
+      'On phones the pitch fills the screen: the camera comes closer and picks the angle that shows it largest.',
+      'On phones the score sits just behind the far touchline, close to the play.',
+      'On phones the home screen puts the locker room beside solo and multiplayer, so it fits without scrolling.',
+      'Buttons stay clear of a notch or Dynamic Island, with the stadium running on behind it.',
+    ],
+  },
+  {
     date: '2026-11-20',
     notes: [
       'Rooms show each player\'s ping to the host, in the lobby and in a corner during the match.',

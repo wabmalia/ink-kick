@@ -59,6 +59,20 @@ const REF_EXIT = { x: 0, y: -(CONFIG.pitch.height / 2 + 2) };
 // screens) the camera would sit so close that the scoreboard leaves the top
 // of the picture, so the stage stays this shape, centred between bars.
 export const MAX_ASPECT = 1.85;
+// A phone held sideways (the same test as the phone styles in style.css):
+// small enough that the pitch needs every pixel.
+/** The wider of the screen's left and right safe-area insets (a notch or a
+ *  Dynamic Island, rounded corners), in CSS px. */
+function safeSide() {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;visibility:hidden;padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)';
+  document.body.append(probe);
+  const s = getComputedStyle(probe);
+  const inset = Math.max(parseFloat(s.paddingLeft) || 0, parseFloat(s.paddingRight) || 0);
+  probe.remove();
+  return inset;
+}
+const COMPACT = matchMedia('(pointer: coarse) and ((max-height: 500px) or (max-width: 500px))');
 
 
 export class GameView {
@@ -74,6 +88,11 @@ export class GameView {
   private labels = new Map<string, HTMLElement>();
   private projected = new THREE.Vector3();
   private billboard = new Billboard();
+  // Phones show the score as text instead of the board (see COMPACT).
+  private compact = false;
+  private trainingOn = false;
+  private phoneScore = document.getElementById('phone-score');
+  private phoneScoreShown = '';
   private infoBoards = new InfoBoards();
   private labelLayer: HTMLElement;
   // The stage's size in CSS px: the window, unless that's wider than MAX_ASPECT.
@@ -152,7 +171,11 @@ export class GameView {
   // that the four corners and both goals stay in view at any window shape.
   private resize() {
     const h = window.innerHeight;
-    const w = Math.min(window.innerWidth, Math.round(h * MAX_ASPECT));
+    // Phones: the whole width, the pitch as big as it fits (see COMPACT).
+    const compact = COMPACT.matches;
+    this.compact = compact;
+    this.showScoreboard();
+    const w = compact ? window.innerWidth : Math.min(window.innerWidth, Math.round(h * MAX_ASPECT));
     this.stage = { w, h };
     // The canvas and the labels over it share this box (see .stage in CSS).
     document.documentElement.style.setProperty('--stage-w', `${w}px`);
@@ -163,6 +186,8 @@ export class GameView {
     camera.updateProjectionMatrix();
     const { width: W, height: H, goalDepth } = CONFIG.pitch;
     const look = new THREE.Vector3(0, 0, 0.6);
+    // About 42 degrees above the pitch; phones may look down more steeply
+    // (below), which suits screens with height to spare.
     const view = new THREE.Vector3(0, 19.5, 21.5).normalize();
     const mustSee = [-1, 1].flatMap(sx => [-1, 1].flatMap(sz => [
       new THREE.Vector3(sx * (W / 2 + goalDepth + 0.6), 0, sz * (H / 2 + 0.8)),
@@ -174,22 +199,58 @@ export class GameView {
       camera.lookAt(look);
       camera.updateMatrixWorld();
     };
-    // Keep clear of the buttons at the top.
+    // Keep clear of the buttons at the top, and on a phone of the notch
+    // and rounded corners: the stadium may run under them, the play not.
+    const side = compact ? safeSide() : 0;
+    const xMax = Math.min(0.96, 1 - (2 * (side + 4)) / w);
     const fits = () => mustSee.every(p => {
       this.projected.copy(p).project(camera);
-      return Math.abs(this.projected.x) <= 0.96 && this.projected.y <= 0.8 && this.projected.y >= -0.96;
+      return Math.abs(this.projected.x) <= xMax && this.projected.y <= (compact ? 0.86 : 0.8) && this.projected.y >= -0.96;
     });
-    let near = 5;
-    let far = 250;
-    for (let i = 0; i < 24; i++) {
-      const mid = (near + far) / 2;
-      place(mid);
-      if (fits()) far = mid;
-      else near = mid;
+    // Pulled back just far enough that everything fits, at this angle.
+    const fit = () => {
+      let near = 5;
+      let far = 250;
+      for (let i = 0; i < 24; i++) {
+        const mid = (near + far) / 2;
+        place(mid);
+        if (fits()) far = mid;
+        else near = mid;
+      }
+      place(far);
+    };
+    // How much of the picture the pitch takes up, as the camera sits now.
+    const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sz]) => new THREE.Vector3(sx! * W / 2, 0, sz! * H / 2));
+    const pitchArea = () => {
+      const p = corners.map(c => c.clone().project(camera));
+      let a = 0;
+      for (let i = 0; i < 4; i++) a += p[i]!.x * p[(i + 1) % 4]!.y - p[(i + 1) % 4]!.x * p[i]!.y;
+      return Math.abs(a) / 2;
+    };
+    fit();
+    if (compact) {
+      // On a phone, the angle (42 to 56 degrees) that shows the pitch
+      // largest: steeper fills a screen with height to spare, while a wide
+      // one already fits best as it is.
+      let best = { area: pitchArea(), view: view.clone() };
+      for (let deg = 44; deg <= 56; deg += 2) {
+        const a = (deg * Math.PI) / 180;
+        view.set(0, Math.sin(a), Math.cos(a));
+        fit();
+        const area = pitchArea();
+        if (area > best.area) best = { area, view: view.clone() };
+      }
+      view.copy(best.view);
+      fit();
     }
-    place(far);
     this.broadcast.pos.copy(camera.position);
     this.billboard.place(camera);
+    // The phone's score sits on the ground just behind the far touchline,
+    // where the stadium's board stands, close to the play.
+    if (this.phoneScore) {
+      const spot = new THREE.Vector3(0, 0, -(H / 2 + 1.4)).project(camera);
+      this.phoneScore.style.top = `${Math.round(((1 - spot.y) / 2) * h)}px`;
+    }
     this.broadcast.look.copy(look);
     // Lower and close, the centre circle filling the screen.
     const closeView = new THREE.Vector3(0, 0.55, 1).normalize();
@@ -268,8 +329,15 @@ export class GameView {
       this.scene.add(this.training);
     }
     if (this.training) this.training.visible = on;
-    // No score to keep.
-    this.billboard.group.visible = !on;
+    this.trainingOn = on;
+    this.showScoreboard();
+  }
+
+  // No score to keep in training. On a phone the board would leave the top
+  // of the picture, so the score is a line of text there instead.
+  private showScoreboard() {
+    this.billboard.group.visible = !this.trainingOn && !this.compact;
+    if (this.phoneScore) this.phoneScore.hidden = this.trainingOn || !this.compact;
   }
 
   private drawReach(reach?: { x: number; y: number; r: number }) {
@@ -537,6 +605,12 @@ export class GameView {
     }
 
     this.billboard.setScore(state.score);
+    const key = `${state.score.gold}-${state.score.red}`;
+    if (this.compact && key !== this.phoneScoreShown) {
+      this.phoneScoreShown = key;
+      document.getElementById('phone-score-gold')!.textContent = String(state.score.gold);
+      document.getElementById('phone-score-red')!.textContent = String(state.score.red);
+    }
     this.infoBoards.set(state.info);
     this.drawLabels(state, names);
     this.drawTags(dt);

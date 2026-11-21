@@ -1096,6 +1096,32 @@ html, body {
   100% { background: rgba(13, 16, 38, 0.85); transform: translateX(-50%) scale(1); }
 }
 
+/* The score as text on phones, where the stadium's board won't fit. */
+.phone-score {
+  position: fixed;
+  z-index: 1;
+  /* top comes from the camera (game/view.ts): centred on that spot. */
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 1px 10px 3px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  border-radius: 12px 14px 10px 16px;
+  background: rgba(13, 16, 38, 0.85);
+  border: 2px solid rgba(238, 240, 250, 0.35);
+  font-family: 'Caveat Brush', cursive;
+  pointer-events: none;
+}
+.phone-score .team { font-size: 12px; }
+.phone-score .team.gold { color: #ffc53d; }
+.phone-score .team.red { color: #ff6e55; }
+.phone-score b { font-weight: 400; font-size: 18px; color: var(--text); font-variant-numeric: tabular-nums; }
+.phone-score .dash { color: var(--soft); }
+/* Only in play, not over the menus. */
+body:has(.menu:not([hidden])) .phone-score { display: none; }
+
 @media (max-height: 500px), (max-width: 500px) {
   /* The menus, buttons and dialogs drawn smaller, all in proportion. */
   .menu .screen, .top-buttons, .ingame, .net-pings, .scoreboard, .help, .toast,
@@ -1106,7 +1132,31 @@ html, body {
      scrolls rather than float over the cards. The attributes float over
      the screen when open, so it stays centred. */
   .menu { padding-top: 48px; }
-  .menu.with-side { padding-inline: 16px; }
+  .menu, .menu.with-side {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+  /* Buttons stay out from under a notch or Dynamic Island, and the rounded
+     corners; the stadium runs on behind them. These are drawn at 0.72, so
+     the inset is scaled back up to land on the same screen spot. */
+  .ingame, .net-pings { left: calc(max(16px, env(safe-area-inset-left) + 8px) / 0.72); }
+  .side-column { left: calc(max(12px, env(safe-area-inset-left) + 6px) / 0.72); }
+  .top-buttons { right: calc(max(16px, env(safe-area-inset-right) + 8px) / 0.72); }
+
+  /* Home: the locker as a column on the left, solo and multiplayer
+     stacked beside it, so it fits the width rather than scrolling. */
+  .menu .screen.home { width: min(1080px, 100%); }
+  .home .cards {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(300px, 0.8fr) 1fr;
+    grid-template-rows: auto 1fr;
+    align-items: stretch;
+  }
+  .home .cards .card.locker { grid-row: 1 / span 2; display: flex; }
+  .home .locker-chart { align-self: center; margin-top: 2px; zoom: 0.85; }
+  .home .title { font-size: 48px; }
+  .home .tagline { display: none; }
   .top-buttons { transition: opacity 0.2s; }
   body:has(.menu.scrolled:not([hidden])) .top-buttons { opacity: 0; pointer-events: none; }
 
