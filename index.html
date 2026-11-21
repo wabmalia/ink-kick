@@ -213,28 +213,36 @@
             </div>
           </div>
         </section>
-        <section class="card solo" id="solo-card">
-          <h2>Solo</h2>
-          <p class="card-note">You against the bot, or try out your build.</p>
-          <div class="solo-actions">
-            <button class="brush green" id="train" type="button">Training ground</button>
-            <button class="brush gold" id="play-solo" type="button">Play solo</button>
-          </div>
-        </section>
-        <section class="card">
-          <h2 id="multi-title">Multiplayer</h2>
-          <p class="card-note" id="multi-note">Join a friend's room by its code, or host your own.</p>
-          <div class="multi-row">
-            <div id="create-block">
-              <button class="brush red" id="create" type="button">Host a room</button>
-              <span class="or">or</span>
+        <!-- A coach's tactics board: solo above the halfway line, multiplayer
+             below, chalked markings and a couple of magnets. -->
+        <div class="tactics-board">
+          <span class="tp-clip" aria-hidden="true"></span>
+          <span class="tp-box top" aria-hidden="true"></span>
+          <span class="tp-box bottom" aria-hidden="true"></span>
+          <section class="card solo" id="solo-card">
+            <h2>Solo</h2>
+            <p class="card-note">You against the bot, or try out your build.</p>
+            <div class="solo-actions">
+              <button class="brush green" id="train" type="button">Training ground</button>
+              <button class="brush gold" id="play-solo" type="button">Play solo</button>
             </div>
-            <form class="join" id="join-form">
-              <input id="code" maxlength="5" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="CODE" aria-label="Room code">
-              <button class="brush blue" type="submit">Join</button>
-            </form>
-          </div>
-        </section>
+          </section>
+          <div class="tp-halfway" aria-hidden="true"><span class="tp-magnet gold"></span><span class="tp-magnet red"></span></div>
+          <section class="card">
+            <h2 id="multi-title">Multiplayer</h2>
+            <p class="card-note" id="multi-note">Join a friend's room by its code, or host your own.</p>
+            <div class="multi-row">
+              <div id="create-block">
+                <button class="brush red" id="create" type="button">Host a room</button>
+                <span class="or">or</span>
+              </div>
+              <form class="join" id="join-form">
+                <input id="code" maxlength="5" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="CODE" aria-label="Room code">
+                <button class="brush blue" type="submit">Join</button>
+              </form>
+            </div>
+          </section>
+        </div>
       </div>
     </section>
 

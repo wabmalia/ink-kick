@@ -18,6 +18,7 @@ export const RELEASE_NOTES: ReleaseDay[] = [
       'The home screen puts the locker room beside solo and multiplayer, and solo\'s two buttons sit side by side, the same size.',
       'Buttons stay clear of a notch or Dynamic Island, with the stadium running on behind it.',
       'The locker room looks like a locker: painted metal, vents, a handle, and your nickname on a strip of tape.',
+      'Solo and multiplayer share a coach\'s tactics board, either side of the halfway line.',
       'Multiplayer fits on one line: host a room, or type a code and join.',
       'The fullscreen button is an icon beside How to play, and goes away when the game runs as an installed app.',
     ],
