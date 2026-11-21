@@ -14,10 +14,21 @@
 
 * { box-sizing: border-box; }
 
+input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
 html, body {
   margin: 0;
   /* No double-tap zoom on phones; scrolling the menu still works. */
   touch-action: manipulation;
+  /* A game, not a page: no text selection or copy menu from a long press,
+     a drag or a double tap (text fields still take it, above). */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
   height: 100%;
   overflow: hidden;
   background: var(--navy-deep);

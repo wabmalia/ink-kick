@@ -41,6 +41,11 @@ const attrInfo = document.getElementById('attr-info') as HTMLDialogElement;
 // No zooming on a double tap: the viewport and touch-action ask for that,
 // but some phone browsers still zoom on the double click a double tap makes.
 document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
+// And no text selection outside the text fields, should iOS start one
+// despite user-select: none (it can, on a long press mid-game).
+document.addEventListener('selectstart', e => {
+  if (!(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) e.preventDefault();
+});
 
 mountFullscreen();
 const view = new GameView(document.getElementById('game')!);
