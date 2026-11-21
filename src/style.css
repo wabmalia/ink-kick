@@ -870,6 +870,22 @@ html, body {
 .th-pane li { padding-left: 18px; text-indent: -18px; margin-bottom: 6px; }
 .th-pane li::before { content: '•'; display: inline-block; width: 18px; text-indent: 0; color: var(--gold); }
 .th-pane b { color: var(--text); font-weight: 700; }
+/* A flick drawn out: the two buttons, a dashed arc from one to the other
+   with an arrowhead, the arc drawing itself over and over. */
+.th-pane li.has-flick { display: flex; align-items: center; gap: 12px; padding-left: 0; text-indent: 0; }
+.th-pane li.has-flick::before { display: none; }
+.flick { flex: none; display: inline-flex; align-items: center; gap: 2px; }
+.flick .tc-btn.kick { width: 40px; height: 40px; font-size: 11px; }
+.flick .tc-btn.sprint { width: 34px; height: 34px; font-size: 9.5px; }
+.flick-arrow { width: 40px; height: 20px; color: var(--gold); margin-bottom: 14px; }
+.flick-arrow path:first-child { animation: flick-draw 1.6s ease-in-out infinite; }
+@keyframes flick-draw {
+  0% { stroke-dashoffset: 24; opacity: 0.3; }
+  45%, 100% { stroke-dashoffset: 0; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flick-arrow path:first-child { animation: none; }
+}
 .or-word,
 .hold,
 .plus { font-family: 'Caveat', cursive; font-weight: 700; font-size: 18px; color: var(--soft); }

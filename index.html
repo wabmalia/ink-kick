@@ -126,7 +126,7 @@
     <!-- The same controls on a touch screen, a tab each (ui/help.ts). -->
     <div class="touch-help touch-only">
       <div class="attr-tabs" role="tablist" aria-label="Controls">
-        <button class="attr-tab" role="tab" type="button" id="th-tab-run" aria-controls="th-run" aria-selected="true">Run</button>
+        <button class="attr-tab" role="tab" type="button" id="th-tab-run" aria-controls="th-run" aria-selected="true">Movement</button>
         <button class="attr-tab" role="tab" type="button" id="th-tab-sprint" aria-controls="th-sprint" aria-selected="false" tabindex="-1">Sprint</button>
         <button class="attr-tab" role="tab" type="button" id="th-tab-kick" aria-controls="th-kick" aria-selected="false" tabindex="-1">Kick</button>
       </div>
@@ -141,7 +141,7 @@
         <span class="tc-btn sprint" aria-hidden="true">Sprint</span>
         <ul>
           <li><b>Hold</b> to sprint until your stamina runs out. Drops your defensive stance.</li>
-          <li><b>Flick onto Kick</b> to slide in, or start a kick, without lifting your thumb.</li>
+          <li class="has-flick"><span class="flick" role="img" aria-label="A quick flick from Sprint onto Kick"><span class="tc-btn sprint" aria-hidden="true">Sprint</span><svg class="flick-arrow" viewBox="0 0 48 22" aria-hidden="true"><path d="M3 17 Q24 -3 40 13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="4 4"/><path d="M33 13 L41 14 L39 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tc-btn kick" aria-hidden="true">Kick</span></span><span><b>Flick onto Kick</b> to slide in, or start a kick, without lifting your thumb.</span></li>
         </ul>
       </div>
       <div class="th-pane" role="tabpanel" id="th-kick" aria-labelledby="th-tab-kick" hidden>
@@ -149,7 +149,7 @@
         <ul>
           <li><b>With the ball,</b> hold to power up and let go to strike. A quick pass to a teammate you're facing curls onto their feet.</li>
           <li><b>Without it,</b> tackle: pokes up close, slides from further or behind.</li>
-          <li><b>Flick onto Sprint</b> mid-charge to fake: the kick's called off and you sprint away.</li>
+          <li class="has-flick"><span class="flick" role="img" aria-label="A quick flick from Kick onto Sprint"><span class="tc-btn kick" aria-hidden="true">Kick</span><svg class="flick-arrow" viewBox="0 0 48 22" aria-hidden="true"><path d="M3 17 Q24 -3 40 13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="4 4"/><path d="M33 13 L41 14 L39 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tc-btn sprint" aria-hidden="true">Sprint</span></span><span><b>Flick onto Sprint</b> mid-charge to fake: the kick's called off and you sprint away.</span></li>
         </ul>
       </div>
     </div>

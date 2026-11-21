@@ -21,7 +21,7 @@ export const RELEASE_NOTES: ReleaseDay[] = [
       'On a touch screen you can move and resize the stick, Kick and Sprint: How to play, then Move and resize the buttons.',
       'The stick stays where you put it instead of following your thumb.',
       'On a touch screen, flick from Sprint onto Kick to slide in or start a kick without lifting your thumb.',
-      'How to play on a touch screen has a tab each for running, sprinting and kicking.',
+      'How to play on a touch screen has a tab each for movement, sprinting and kicking, with the flicks drawn out.',
       'Touch buttons are see-through, so they hide less of the play, and Kick matches Sprint with a gold edge.',
       'The locker room looks like a locker: painted metal, vents, a handle, and your nickname on a strip of tape.',
       'Solo and multiplayer share a coach\'s tactics board, either side of the halfway line.',
