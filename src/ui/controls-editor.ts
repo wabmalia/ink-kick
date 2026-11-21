@@ -1,12 +1,11 @@
-import { DEFAULT_LAYOUT, moveButton, resizeButton, resizeStick, type Movable, type TouchLayout } from '../game/touch-layout';
+import { DEFAULT_LAYOUT, moveButton, moveStick, resizeButton, resizeStick, type Movable, type TouchLayout } from '../game/touch-layout';
 import { setTouchLayout, touchArea, touchLayout } from '../game/touch';
 import { openDialog } from './dom';
 
 // The touch controls' editor, from How to play on a touch screen: copies of
 // the stick, Kick and Sprint where they are now, each with a ring and a
-// handle on its edge, as Sinkhole's editor sizes its holes. Drag a button to
-// move it, its handle to resize it; the stick only resizes, since it centres
-// on the thumb anyway. Done saves, Reset puts the usual layout back.
+// handle on its edge, as Sinkhole's editor sizes its holes. Drag one to move
+// it, its handle to resize it. Done saves, Reset puts the usual layout back.
 // It's a dialog, so solo and training wait while it's open; a room never
 // stops for it (main.ts only pauses solo), the player just stands still.
 
@@ -43,10 +42,10 @@ function draw() {
     el.style.fontSize = `${Math.round(s.d * (key === 'kick' ? 0.23 : 0.25))}px`;
   }
   const { el } = parts.get('stick')!;
-  const d = draft.stick.d;
-  el.style.left = '22px';
-  el.style.bottom = '18px';
-  el.style.width = el.style.height = `${d}px`;
+  const s = draft.stick;
+  el.style.left = `${s.x - s.d / 2}px`;
+  el.style.bottom = `${s.y - s.d / 2}px`;
+  el.style.width = el.style.height = `${s.d}px`;
 }
 
 /** A part's centre on screen, in client px. */
@@ -69,8 +68,11 @@ function drag(part: Part, what: 'move' | 'size', start: PointerEvent) {
     if (what === 'size') {
       const now = centre(part);
       const d = 2 * Math.hypot(e.clientX - now.x, e.clientY - now.y);
-      draft = part === 'stick' ? resizeStick(draft, d) : resizeButton(draft, part, d, w, h);
-    } else if (part !== 'stick') {
+      draft = part === 'stick' ? resizeStick(draft, d, w, h) : resizeButton(draft, part, d, w, h);
+    } else if (part === 'stick') {
+      // From the area's bottom-left corner, to the stick's centre.
+      draft = moveStick(draft, e.clientX - grab.x - box.left, box.bottom - (e.clientY - grab.y), w, h);
+    } else {
       // From the area's bottom-right corner, to the button's centre.
       const x = box.right - (e.clientX - grab.x);
       const y = box.bottom - (e.clientY - grab.y);
@@ -101,12 +103,10 @@ export function mountControlsEditor() {
       e.stopPropagation();
       drag(part, 'size', e);
     });
-    if (part !== 'stick') {
-      el.addEventListener('pointerdown', e => {
-        e.preventDefault();
-        drag(part, 'move', e);
-      });
-    }
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      drag(part, 'move', e);
+    });
   }
   dialog.querySelector('#ce-reset')!.addEventListener('click', () => {
     draft = { ...DEFAULT_LAYOUT };

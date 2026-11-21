@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BUTTON_D, DEFAULT_LAYOUT, fitLayout, GAP, moveButton, resizeButton, resizeStick, STICK_D, TOP_CLEAR, type TouchLayout } from './touch-layout';
+import { BUTTON_D, DEFAULT_LAYOUT, fitLayout, GAP, moveButton, moveStick, resizeButton, resizeStick, STICK_D, TOP_CLEAR, type TouchLayout } from './touch-layout';
 
 const W = 844;
 const H = 390;
@@ -36,8 +36,18 @@ describe('touch layout', () => {
     const far = moveButton(DEFAULT_LAYOUT, 'kick', 80, 200, W, H);
     expect(resizeButton(far, 'kick', 500, W, H).kick.d).toBe(BUTTON_D[1]);
     expect(resizeButton(far, 'kick', 1, W, H).kick.d).toBe(BUTTON_D[0]);
-    expect(resizeStick(DEFAULT_LAYOUT, 999).stick.d).toBe(STICK_D[1]);
-    expect(resizeStick(DEFAULT_LAYOUT, 1).stick.d).toBe(STICK_D[0]);
+    expect(resizeStick(DEFAULT_LAYOUT, 999, W, H).stick.d).toBe(STICK_D[1]);
+    expect(resizeStick(DEFAULT_LAYOUT, 1, W, H).stick.d).toBe(STICK_D[0]);
+  });
+
+  it('keeps the stick in the left half, on screen', () => {
+    const l = moveStick(DEFAULT_LAYOUT, 140, 120, W, H);
+    expect(l.stick).toMatchObject({ x: 140, y: 120 });
+    const far = moveStick(DEFAULT_LAYOUT, 5000, 5000, W, H);
+    expect(far.stick.x + far.stick.d / 2).toBeLessThanOrEqual(W / 2);
+    expect(far.stick.y + far.stick.d / 2).toBeLessThanOrEqual(H - TOP_CLEAR);
+    const big = resizeStick(moveStick(DEFAULT_LAYOUT, 0, 0, W, H), 160, W, H);
+    expect(big.stick.x - big.stick.d / 2).toBeGreaterThanOrEqual(0);
   });
 
   it('fits a saved layout to a smaller screen, and drops a broken one', () => {

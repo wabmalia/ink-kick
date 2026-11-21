@@ -1190,29 +1190,15 @@ html, body {
   -webkit-touch-callout: none;
 }
 .touch-controls > * { pointer-events: auto; touch-action: none; }
-.touch-zone {
-  /* Where a thumb can put the stick down: the left side, below the
-     buttons at the top. */
-  position: fixed;
-  left: 0;
-  bottom: 0;
-  width: 45%;
-  height: 70%;
-}
 .touch-stick {
-  position: absolute;
-  /* Placed by its centre: at rest bottom left, else where the thumb landed.
-     Its size is the player's (--stick-d, game/touch.ts). */
-  left: calc(22px + var(--stick-d, 96px) / 2 + env(safe-area-inset-left));
-  top: calc(100% - 18px - var(--stick-d, 96px) / 2 - env(safe-area-inset-bottom));
-  translate: -50% -50%;
-  width: var(--stick-d, 96px);
-  height: var(--stick-d, 96px);
+  /* Placed and sized by the player's layout (game/touch.ts). */
+  position: fixed;
   border-radius: 50%;
   border: 2px solid rgba(238, 240, 250, 0.3);
-  background: rgba(13, 16, 38, 0.18);
-  pointer-events: none;
+  background: rgba(13, 16, 38, 0.15);
 }
+/* A touch just outside the ring still takes the stick. */
+.touch-stick::before { content: ''; position: absolute; inset: -18px; border-radius: 50%; }
 .touch-stick:not(.held) { opacity: 0.7; }
 .touch-knob {
   position: absolute;
@@ -1233,8 +1219,12 @@ html, body {
   padding: 0;
   border-radius: 50%;
   font-family: 'Caveat Brush', 'Caveat', cursive;
-  color: var(--text);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  /* Placed and sized by the player's layout (game/touch.ts); see-through so
+     they hide little of the play. Kick and Sprint alike, Kick in gold. */
+  background: rgba(13, 16, 38, 0.32);
+  border: 2px solid rgba(238, 240, 250, 0.45);
+  color: rgba(238, 240, 250, 0.85);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
   -webkit-tap-highlight-color: transparent;
 }
 .touch-kick {
@@ -1243,9 +1233,8 @@ html, body {
   width: 66px;
   height: 66px;
   font-size: 15px;
-  color: #1a1d3a;
-  background: rgba(242, 177, 52, 0.8);
-  border: 2px solid #ffe3a0;
+  border-color: rgba(255, 194, 58, 0.8);
+  color: rgba(255, 211, 107, 0.9);
 }
 .touch-sprint {
   right: calc(102px + env(safe-area-inset-right));
@@ -1253,8 +1242,6 @@ html, body {
   width: 48px;
   height: 48px;
   font-size: 12px;
-  background: rgba(13, 16, 38, 0.55);
-  border: 2px solid rgba(238, 240, 250, 0.55);
 }
 .touch-btn.held { transform: scale(0.92); filter: brightness(1.15); }
 
@@ -1499,9 +1486,9 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
   cursor: grab;
 }
 .ce-part.active { outline-color: var(--gold); }
-.ce-kick { color: #1a1d3a; background: rgba(242, 177, 52, 0.9); border: 2px solid #ffe3a0; }
-.ce-sprint { background: rgba(13, 16, 38, 0.7); border: 2px solid rgba(238, 240, 250, 0.7); }
-.ce-stick { border: 2px solid rgba(238, 240, 250, 0.5); background: rgba(13, 16, 38, 0.3); cursor: default; }
+.ce-kick { color: #ffd36b; background: rgba(13, 16, 38, 0.6); border: 2px solid #ffc23a; }
+.ce-sprint { background: rgba(13, 16, 38, 0.6); border: 2px solid rgba(238, 240, 250, 0.7); }
+.ce-stick { border: 2px solid rgba(238, 240, 250, 0.5); background: rgba(13, 16, 38, 0.3); }
 .ce-knob { width: 20px; height: 20px; border-radius: 50%; background: rgba(238, 240, 250, 0.5); }
 /* The resize dot, on the rim: up-left for the buttons (towards the middle
    of the screen), up-right for the stick. A bigger invisible touch area. */

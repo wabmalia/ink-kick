@@ -6,9 +6,9 @@ import { DEFAULT_LAYOUT, fitLayout, type TouchLayout } from './touch-layout';
 // and Sprint buttons at the bottom right. Shown only where the main pointer
 // is a finger, and only while a match takes input (see enableTouch).
 //
-// The stick floats: a thumb put down anywhere on the left side becomes its
-// centre, so it sits wherever suits the hand, and lifting and putting the
-// thumb back down mid-play still steers. Let go and it returns to its spot.
+// Each sits where the player put it, at the size they chose (the controls
+// editor, game/touch-layout.ts). The stick steers from a touch on it, or
+// just around it.
 //
 // A fake, as Space then Shift on a keyboard: flick the kick finger onto
 // Sprint while charging. The kick is called off and you sprint away. Only a
@@ -54,16 +54,6 @@ export function fingerSpeed(samples: Sample[]): number {
   return dt > 0 ? Math.hypot(last.x - from.x, last.y - from.y) / dt : 0;
 }
 
-/** Where the stick's centre goes for a thumb put down at (x, y): there,
- *  unless that would push the stick off the screen's edge. */
-export function stickCentre(x: number, y: number, width: number, height: number, reach = STICK_REACH): { x: number; y: number } {
-  const margin = reach + 6;
-  return {
-    x: Math.min(Math.max(x, margin), Math.max(margin, width - margin)),
-    y: Math.min(Math.max(y, margin), Math.max(margin, height - margin)),
-  };
-}
-
 const state = { x: 0, y: 0, kick: false, sprint: false };
 // Where the buttons are and how big, as the player set them.
 let layout: TouchLayout = { ...DEFAULT_LAYOUT };
@@ -79,25 +69,22 @@ function build(): HTMLElement {
   el.className = 'touch-controls';
   el.hidden = true;
   el.innerHTML = `
-    <div class="touch-zone" aria-hidden="true">
-      <div class="touch-stick"><div class="touch-knob"></div></div>
-    </div>
+    <div class="touch-stick" aria-hidden="true"><div class="touch-knob"></div></div>
     <button class="touch-btn touch-sprint" type="button" tabindex="-1">Sprint</button>
     <button class="touch-btn touch-kick" type="button" tabindex="-1">Kick</button>`;
   document.body.append(el);
 
-  const zone = el.querySelector<HTMLElement>('.touch-zone')!;
   const stick = el.querySelector<HTMLElement>('.touch-stick')!;
   const knob = el.querySelector<HTMLElement>('.touch-knob')!;
   const kickBtn = el.querySelector<HTMLElement>('.touch-kick')!;
   const sprintBtn = el.querySelector<HTMLElement>('.touch-sprint')!;
 
-  // The stick: centred where the thumb lands.
+  // The stick: steering from its centre, wherever the touch began on it.
   let stickPointer: number | null = null;
-  let centre = { x: 0, y: 0 };
   const steer = (e: PointerEvent) => {
-    const dx = e.clientX - centre.x;
-    const dy = e.clientY - centre.y;
+    const r = stick.getBoundingClientRect();
+    const dx = e.clientX - (r.left + r.width / 2);
+    const dy = e.clientY - (r.top + r.height / 2);
     const dir = stickDirection(dx, dy, reach);
     state.x = dir.x;
     state.y = dir.y;
@@ -111,30 +98,24 @@ function build(): HTMLElement {
     state.x = 0;
     state.y = 0;
     knob.style.translate = '';
-    stick.style.left = '';
-    stick.style.top = '';
     stick.classList.remove('held');
   };
-  zone.addEventListener('pointerdown', e => {
+  stick.addEventListener('pointerdown', e => {
     if (stickPointer !== null) return;
     e.preventDefault();
     stickPointer = e.pointerId;
-    zone.setPointerCapture(e.pointerId);
-    centre = stickCentre(e.clientX, e.clientY, window.innerWidth, window.innerHeight, reach);
-    const box = zone.getBoundingClientRect();
-    stick.style.left = `${centre.x - box.left}px`;
-    stick.style.top = `${centre.y - box.top}px`;
+    stick.setPointerCapture(e.pointerId);
     stick.classList.add('held');
     steer(e);
   });
-  zone.addEventListener('pointermove', e => {
+  stick.addEventListener('pointermove', e => {
     if (e.pointerId === stickPointer) steer(e);
   });
   const stickUp = (e: PointerEvent) => {
     if (e.pointerId === stickPointer) restStick();
   };
-  zone.addEventListener('pointerup', stickUp);
-  zone.addEventListener('pointercancel', stickUp);
+  stick.addEventListener('pointerup', stickUp);
+  stick.addEventListener('pointercancel', stickUp);
 
   // Sprint: held while a finger is on it.
   let sprintPointer: number | null = null;
@@ -225,7 +206,11 @@ function place() {
     el.style.width = el.style.height = `${s.d}px`;
     el.style.fontSize = `${Math.round(s.d * (key === 'kick' ? 0.23 : 0.25))}px`;
   }
-  root.style.setProperty('--stick-d', `${layout.stick.d}px`);
+  const stick = root.querySelector<HTMLElement>('.touch-stick')!;
+  const s = layout.stick;
+  stick.style.left = `calc(env(safe-area-inset-left) + ${s.x - s.d / 2}px)`;
+  stick.style.bottom = `calc(env(safe-area-inset-bottom) + ${s.y - s.d / 2}px)`;
+  stick.style.width = stick.style.height = `${s.d}px`;
 }
 
 /** The screen inside its safe area (clear of a notch and rounded

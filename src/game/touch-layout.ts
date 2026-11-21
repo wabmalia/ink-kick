@@ -1,20 +1,20 @@
-// Where the touch buttons sit and how big they are, set by the player in the
-// controls editor (ui/controls-editor.ts) and kept on the device. Kick and
-// Sprint are placed by their centre, measured in CSS px from the screen's
-// bottom-right corner (inside the safe area), so a layout carries over to
-// any phone; the stick only has a size, since it centres on the thumb.
-// Buttons stay in the right half, clear of the top buttons, on screen, and
-// never overlapping, so one press can't hit both. A left-handed layout
-// would mirror the half (not yet).
+// Where the touch controls sit and how big they are, set by the player in
+// the controls editor (ui/controls-editor.ts) and kept on the device. Each
+// is placed by its centre in CSS px, inside the safe area: Kick and Sprint
+// from the bottom-right corner, the stick from the bottom-left, so a layout
+// carries over to any phone. Buttons stay in the right half and the stick
+// in the left, clear of the top buttons and on screen; Kick and Sprint never
+// overlap, so one press can't hit both. A left-handed layout would swap
+// the halves (not yet).
 
 export interface ButtonSpot { x: number; y: number; d: number }
-export interface TouchLayout { kick: ButtonSpot; sprint: ButtonSpot; stick: { d: number } }
+export interface TouchLayout { kick: ButtonSpot; sprint: ButtonSpot; stick: ButtonSpot }
 export type Movable = 'kick' | 'sprint';
 
 export const DEFAULT_LAYOUT: TouchLayout = {
   kick: { x: 57, y: 57, d: 66 },
   sprint: { x: 126, y: 38, d: 48 },
-  stick: { d: 96 },
+  stick: { x: 70, y: 66, d: 96 },
 };
 /** Diameters allowed, in CSS px. */
 export const BUTTON_D: [number, number] = [40, 112];
@@ -69,23 +69,24 @@ export function resizeButton(layout: TouchLayout, key: Movable, d: number, w: nu
   return overlaps(next, fixed) ? layout : { ...layout, [key]: next };
 }
 
-export function resizeStick(layout: TouchLayout, d: number): TouchLayout {
-  return { ...layout, stick: { d: Math.round(clamp(d, STICK_D[0], STICK_D[1])) } };
+/** Moves the stick's centre to (x, y), measured from the bottom-left. */
+export function moveStick(layout: TouchLayout, x: number, y: number, w: number, h: number): TouchLayout {
+  return { ...layout, stick: bounded({ ...layout.stick, x, y }, w, h) };
+}
+
+export function resizeStick(layout: TouchLayout, d: number, w: number, h: number): TouchLayout {
+  return { ...layout, stick: bounded({ ...layout.stick, d: Math.round(clamp(d, STICK_D[0], STICK_D[1])) }, w, h) };
 }
 
 /** A saved layout, checked, and fitted to this screen; anything off falls back to the default. */
 export function fitLayout(raw: unknown, w: number, h: number): TouchLayout {
   const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, Record<string, unknown> | undefined>;
-  const spot = (k: Movable): ButtonSpot => ({
+  const spot = (k: keyof TouchLayout, [lo, hi]: [number, number]): ButtonSpot => bounded({
     x: num(r[k]?.x, DEFAULT_LAYOUT[k].x),
     y: num(r[k]?.y, DEFAULT_LAYOUT[k].y),
-    d: clamp(num(r[k]?.d, DEFAULT_LAYOUT[k].d), BUTTON_D[0], BUTTON_D[1]),
-  });
-  const layout: TouchLayout = {
-    kick: bounded(spot('kick'), w, h),
-    sprint: bounded(spot('sprint'), w, h),
-    stick: { d: clamp(num(r.stick?.d, DEFAULT_LAYOUT.stick.d), STICK_D[0], STICK_D[1]) },
-  };
+    d: clamp(num(r[k]?.d, DEFAULT_LAYOUT[k].d), lo, hi),
+  }, w, h);
+  const layout: TouchLayout = { kick: spot('kick', BUTTON_D), sprint: spot('sprint', BUTTON_D), stick: spot('stick', STICK_D) };
   return overlaps(layout.kick, layout.sprint) ? { ...DEFAULT_LAYOUT } : layout;
 }

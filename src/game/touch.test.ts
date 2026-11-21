@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEAD_ZONE, FLICK_SPEED, fingerSpeed, STICK_REACH, stickCentre, stickDirection } from './touch';
+import { DEAD_ZONE, FLICK_SPEED, fingerSpeed, stickDirection } from './touch';
 
 describe('stickDirection', () => {
   it('ignores a thumb resting near the centre', () => {
@@ -45,17 +45,5 @@ describe('fingerSpeed', () => {
   it('is zero with nothing to go on', () => {
     expect(fingerSpeed([])).toBe(0);
     expect(fingerSpeed([{ x: 3, y: 3, t: 10 }])).toBe(0);
-  });
-});
-
-describe('stickCentre', () => {
-  it('goes where the thumb lands', () => {
-    expect(stickCentre(200, 250, 844, 390)).toEqual({ x: 200, y: 250 });
-  });
-
-  it('keeps the whole stick on screen', () => {
-    const c = stickCentre(2, 389, 844, 390);
-    expect(c.x).toBeGreaterThanOrEqual(STICK_REACH);
-    expect(c.y).toBeLessThanOrEqual(390 - STICK_REACH);
   });
 });
