@@ -863,7 +863,7 @@ html, body {
    doesn't jump. */
 .touch-help { width: 100%; margin-bottom: 18px; }
 .touch-help .attr-tabs { margin-top: 4px; }
-.th-pane { display: flex; align-items: flex-start; gap: 18px; min-height: 9.2em; }
+.th-pane { display: flex; align-items: flex-start; gap: 18px; min-height: 8.7em; }
 .th-pane[hidden] { display: none; }
 .th-pane > :first-child { flex: none; margin-top: 4px; }
 .th-pane ul { margin: 0; padding: 0; list-style: none; font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; line-height: 1.2; color: var(--soft); }
@@ -872,9 +872,7 @@ html, body {
 .th-pane b { color: var(--text); font-weight: 700; }
 /* A flick drawn out: the two buttons, a dashed arc from one to the other
    with an arrowhead, the arc drawing itself over and over. */
-.th-pane li.has-flick { display: flex; align-items: center; gap: 12px; padding-left: 0; text-indent: 0; }
-.th-pane li.has-flick::before { display: none; }
-.flick { flex: none; display: inline-flex; align-items: center; gap: 2px; }
+.flick { display: flex; align-items: center; gap: 2px; margin: 6px 0 0; text-indent: 0; }
 .flick .tc-btn.kick { width: 40px; height: 40px; font-size: 11px; }
 .flick .tc-btn.sprint { width: 34px; height: 34px; font-size: 9.5px; }
 .flick-arrow { width: 40px; height: 20px; color: var(--gold); margin-bottom: 14px; }
