@@ -93,38 +93,42 @@
 
   <dialog class="help card" id="help" aria-labelledby="help-title" tabindex="-1">
     <h2 id="help-title">How to play</h2>
-    <dl class="controls keys-only">
-      <dt>
-        <span class="keys cluster">
+    <!-- Keyboard: a tab each, as on a touch screen (ui/help.ts). -->
+    <div class="tab-help keys-only">
+      <div class="attr-tabs" role="tablist" aria-label="Controls">
+        <button class="attr-tab" role="tab" type="button" id="kh-tab-move" aria-controls="kh-move" aria-selected="true">Movement</button>
+        <button class="attr-tab" role="tab" type="button" id="kh-tab-sprint" aria-controls="kh-sprint" aria-selected="false" tabindex="-1">Sprint</button>
+        <button class="attr-tab" role="tab" type="button" id="kh-tab-kick" aria-controls="kh-kick" aria-selected="false" tabindex="-1">Kick</button>
+      </div>
+      <div class="th-pane" role="tabpanel" id="kh-move" aria-labelledby="kh-tab-move">
+        <span class="keys cluster" aria-label="W A S D">
           <span class="key up">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>
         </span>
-        <span class="or-word">or</span>
-        <span class="keys cluster">
-          <span class="key up" aria-label="Up">&uarr;</span><span class="key" aria-label="Left">&larr;</span><span class="key" aria-label="Down">&darr;</span><span class="key" aria-label="Right">&rarr;</span>
-        </span>
-      </dt>
-      <dd><b>Run.</b> You turn slower with the ball.</dd>
-
-      <dt><span class="key wide">Shift</span></dt>
-      <dd><b>Sprint</b> until your stamina runs out. Drops your defensive stance.</dd>
-
-      <dt><span class="key space">Space</span><span class="hold">hold</span></dt>
-      <dd><b>Kick.</b> Hold to power up, let go to strike. A quick pass to a teammate you're facing curls onto their feet. Near goal, a shot that a curl couldn't save turns slowly until one could. Hold a direction just after to curl it.</dd>
-
-      <dt><span class="key space short">Space</span><span class="plus">+</span><span class="key wide">Shift</span></dt>
-      <dd><b>Fake.</b> Tap sprint mid-charge to call it off.</dd>
-
-      <dt><span class="key space">Space</span></dt>
-      <dd><b>Tackle.</b> Pokes up close, slides from further or behind.</dd>
-
-      <dt><span class="key">X</span></dt>
-      <dd>Same as Space.</dd>
-
-      <dt><span class="key">H</span><span class="key wide">Esc</span></dt>
-      <dd>This help. Esc also leaves solo.</dd>
-    </dl>
+        <ul>
+          <li><b>WASD or arrows</b> to move.</li>
+          <li>Hold a direction right after a kick to curl it.</li>
+        </ul>
+      </div>
+      <div class="th-pane" role="tabpanel" id="kh-sprint" aria-labelledby="kh-tab-sprint" hidden>
+        <span class="key wide">Shift</span>
+        <ul>
+          <li><b>Hold</b> to sprint, while stamina lasts.</li>
+        </ul>
+      </div>
+      <div class="th-pane" role="tabpanel" id="kh-kick" aria-labelledby="kh-tab-kick" hidden>
+        <span class="key space short">Space</span>
+        <ul>
+          <li><b>With the ball:</b> hold to charge, let go to shoot or pass.</li>
+          <li><b>Without it:</b> tap to poke, hold to slide.</li>
+          <li><b>Tap Shift</b> mid-charge to fake.
+            <span class="flick" aria-hidden="true"><span class="key space short">Space</span><span class="plus">+</span><span class="key wide">Shift</span></span></li>
+          <li><b>X</b> works like Space.</li>
+        </ul>
+      </div>
+      <p class="help-keys-note"><span class="key small">H</span> this help · <span class="key small">Esc</span> also leaves solo</p>
+    </div>
     <!-- The same controls on a touch screen, a tab each (ui/help.ts). -->
-    <div class="touch-help touch-only">
+    <div class="tab-help touch-only">
       <div class="attr-tabs" role="tablist" aria-label="Controls">
         <button class="attr-tab" role="tab" type="button" id="th-tab-run" aria-controls="th-run" aria-selected="true">Movement</button>
         <button class="attr-tab" role="tab" type="button" id="th-tab-sprint" aria-controls="th-sprint" aria-selected="false" tabindex="-1">Sprint</button>

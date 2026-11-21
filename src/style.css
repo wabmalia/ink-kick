@@ -809,25 +809,14 @@ html, body {
 .help[open] { display: flex; flex-direction: column; align-items: center; }
 .help h2 { align-self: flex-start; }
 
-.controls {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 14px 20px;
-  align-items: center;
-  margin: 8px 0 26px;
-  width: 100%;
-}
-.controls dt { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
-.controls dd { margin: 0; font-family: 'Caveat', cursive; font-weight: 700; font-size: 20px; line-height: 1.15; color: var(--soft); }
-.controls dd b { color: var(--text); }
 /* Keys on a keyboard, the on-screen controls on a touch screen. */
-.touch-help.touch-only { display: none; }
+.tab-help.touch-only { display: none; }
 .help-actions { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
 .touch-only-btn { display: none; }
 @media (pointer: coarse) {
   .touch-only-btn { display: inline-flex; }
-  .controls.keys-only { display: none; }
-  .touch-help.touch-only { display: block; }
+  .tab-help.keys-only { display: none; }
+  .tab-help.touch-only { display: block; }
   .help-btn .key { display: none; }
 }
 .tc-btn {
@@ -858,11 +847,16 @@ html, body {
   background: rgba(238, 240, 250, 0.8);
   translate: 8px -6px;
 }
-/* How to play on a touch screen: a tab each for run, sprint and kick, the
+/* How to play: a tab each for movement, sprint and kick, the
    control drawn beside what it does. As tall as the longest, so switching
    doesn't jump. */
-.touch-help { width: 100%; margin-bottom: 18px; }
-.touch-help .attr-tabs { margin-top: 4px; }
+.tab-help { width: 100%; margin-bottom: 18px; }
+.tab-help .attr-tabs { margin-top: 4px; }
+.th-pane .keys.cluster { transform: none; }
+/* The keyboard's Kick tab has a line more. */
+.tab-help.keys-only .th-pane { min-height: 10.2em; }
+.help-keys-note { margin: 4px 0 0; font-family: 'Caveat', cursive; font-weight: 700; font-size: 19px; color: var(--soft); }
+.help-keys-note .key { margin: 0 2px; }
 .th-pane { display: flex; align-items: flex-start; gap: 18px; min-height: 8.7em; }
 .th-pane[hidden] { display: none; }
 .th-pane > :first-child { flex: none; margin-top: 4px; }
