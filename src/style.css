@@ -410,7 +410,7 @@ html, body {
 .join input { width: 6.4em; letter-spacing: 0.15em; text-transform: uppercase; flex: none; }
 
 /* Multiplayer in one line: Host a room, or a code and Join. */
-.multi-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px 18px; margin: 10px 4px 6px; }
+.multi-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 12px 18px; margin: 10px 4px 6px; }
 .multi-row .or { font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; color: var(--soft); }
 
 .notice .card { max-width: 520px; font-family: 'Caveat', cursive; font-size: 24px; text-align: center; }
