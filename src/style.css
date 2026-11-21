@@ -864,6 +864,8 @@ html, body {
 .th-pane li { padding-left: 18px; text-indent: -18px; margin-bottom: 6px; }
 .th-pane li::before { content: '•'; display: inline-block; width: 18px; text-indent: 0; color: var(--gold); }
 .th-pane b { color: var(--text); font-weight: 700; }
+/* A keycap inside a line: its letter not pushed out by the bullet's indent. */
+.th-pane li .key { text-indent: 0; margin-right: 4px; vertical-align: 2px; }
 /* A flick drawn out: the two buttons, a dashed arc from one to the other
    with an arrowhead, the arc drawing itself over and over. */
 .flick { display: flex; align-items: center; gap: 2px; margin: 6px 0 0; text-indent: 0; }
