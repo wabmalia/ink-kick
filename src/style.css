@@ -1336,9 +1336,10 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
   .eq { display: flex; gap: 8px; justify-content: center; }
   /* In the side panel the "?" would sit on Strength's +: down by the
      points line instead. */
-  .attr-panel .info-btn { top: auto; bottom: 8px; right: 10px; }
+  .attr-panel .info-btn { top: 8px; left: 10px; right: auto; }
   /* Room inside the side panel for the six columns and their names. */
-  .attr-panel { padding: 10px 12px 12px; }
+  /* An overlay, so it can take the room: a strip at the top for the "?". */
+  .attr-panel { padding: 46px 14px 12px; }
   .attr-panel .eq { gap: 5px; }
   .attr-panel .eq-name { font-size: 12.5px; }
   .home .locker-chart { zoom: 0.85; }
@@ -1369,7 +1370,7 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
   .side-column:not(.open-attrs) .attr-panel,
   .side-column:not(.open-drills) .train-hud { display: none; }
   .attr-panel h2 { display: none; }
-  .attr-panel { padding-top: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55); }
+  .attr-panel { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55); }
   body:has(#train-hud:not([hidden])) .train-line { display: flex; }
 }
 
