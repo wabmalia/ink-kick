@@ -71,7 +71,10 @@
     <button class="ink-btn help-btn" id="help-open" type="button" aria-haspopup="dialog">
       <span class="key small" aria-hidden="true">H</span> How to play
     </button>
-    <button class="ink-btn fullscreen-btn" id="fullscreen" type="button" aria-pressed="false" hidden>Fullscreen</button>
+    <button class="ink-btn fullscreen-btn" id="fullscreen" type="button" aria-pressed="false" aria-label="Fullscreen" title="Fullscreen" hidden>
+      <svg class="enter" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>
+      <svg class="exit" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg>
+    </button>
   </div>
 
   <dialog class="help card notes" id="notes" aria-labelledby="notes-title" tabindex="-1">
@@ -216,13 +219,15 @@
         <section class="card">
           <h2 id="multi-title">Multiplayer</h2>
           <p class="card-note" id="multi-note">Join a friend's room by its code, or host your own.</p>
-          <form class="join" id="join-form">
-            <input id="code" maxlength="5" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="CODE" aria-label="Room code">
-            <button class="brush blue" type="submit">Join</button>
-          </form>
-          <div id="create-block">
-            <p class="or"><span>or</span></p>
-            <button class="brush red" id="create" type="button">Host a room</button>
+          <div class="multi-row">
+            <div id="create-block">
+              <button class="brush red" id="create" type="button">Host a room</button>
+              <span class="or">or</span>
+            </div>
+            <form class="join" id="join-form">
+              <input id="code" maxlength="5" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="CODE" aria-label="Room code">
+              <button class="brush blue" type="submit">Join</button>
+            </form>
           </div>
         </section>
       </div>

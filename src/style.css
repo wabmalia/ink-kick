@@ -364,8 +364,7 @@ html, body {
 /* Every card: title, a line saying what it's for, then its controls. */
 .cards .card h2 { margin-bottom: 2px; }
 .cards .card > .brush,
-#create-block .brush { align-self: center; }
-#create-block { display: flex; flex-direction: column; }
+#create-block { display: flex; align-items: center; gap: 14px; }
 /* Solo has a single button: beside the title and description, not under. */
 .cards .card.solo {
   display: grid;
@@ -392,14 +391,14 @@ html, body {
 }
 .field-input:focus,
 .join input:focus { border-bottom-color: var(--gold); }
-.join { display: flex; gap: 14px; align-items: center; width: 100%; }
+.join { display: flex; gap: 12px; align-items: center; }
 .field-input::placeholder,
 .join input::placeholder { color: #9aa0bf; opacity: 1; }
-.join input { width: 6.5ch; letter-spacing: 0.15em; text-transform: uppercase; flex: 1; }
+.join input { width: 6.4em; letter-spacing: 0.15em; text-transform: uppercase; flex: none; }
 
-.or { width: 100%; margin: 8px 0; display: flex; align-items: center; gap: 10px; font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; color: var(--soft); }
-.or::before,
-.or::after { content: ''; flex: 1; border-top: 2px solid rgba(238, 240, 250, 0.45); }
+/* Multiplayer in one line: Host a room, or a code and Join. */
+.multi-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 14px; margin-top: 4px; }
+.multi-row .or { font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; color: var(--soft); }
 
 .notice .card { max-width: 520px; font-family: 'Caveat', cursive; font-size: 24px; text-align: center; }
 
@@ -595,8 +594,13 @@ html, body {
   align-items: center;
   gap: 10px;
 }
-/* Under How to play, on touch screens only (see ui/fullscreen.ts). */
-.fullscreen-btn { position: absolute; top: calc(100% + 8px); right: 0; display: none; }
+/* Right of How to play, on touch screens only (see ui/fullscreen.ts): the
+   usual corners icon, turned inwards while fullscreen. */
+.fullscreen-btn { display: none; align-items: center; justify-content: center; padding: 6px 10px; }
+.fullscreen-btn svg { width: 22px; height: 22px; display: block; }
+.fullscreen-btn .exit,
+.fullscreen-btn[aria-pressed='true'] .enter { display: none; }
+.fullscreen-btn[aria-pressed='true'] .exit { display: block; }
 @media (pointer: coarse) {
   .fullscreen-btn { display: inline-flex; }
 }
@@ -837,7 +841,6 @@ html, body {
   .cards .card.solo { padding-top: 8px; padding-bottom: 9px; }
   .card h2 { font-size: 26px; margin-bottom: 4px; }
   .card-note { margin-bottom: 6px; }
-  .or { margin: 4px 0; }
 }
 
 /* --- Side column: attributes, and the training ground's drills ---------- */
@@ -1100,7 +1103,8 @@ html, body {
 .phone-score {
   position: fixed;
   z-index: 1;
-  /* top comes from the camera (game/view.ts): centred on that spot. */
+  /* In line with the corner buttons (drawn at 0.72 on phones, 38 px tall). */
+  top: calc(max(12px, env(safe-area-inset-top)) * 0.72 + 14px);
   left: 50%;
   transform: translate(-50%, -50%);
   margin: 0;
@@ -1149,11 +1153,12 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
   .home .cards {
     width: 100%;
     display: grid;
-    grid-template-columns: minmax(300px, 0.8fr) 1fr;
+    grid-template-columns: 300px 1fr;
     grid-template-rows: auto 1fr;
     align-items: stretch;
   }
   .home .cards .card.locker { grid-row: 1 / span 2; display: flex; }
+  .home .cards .card:not(.locker) { align-self: start; }
   .home .locker-chart { align-self: center; margin-top: 2px; zoom: 0.85; }
   .home .title { font-size: 48px; }
   .home .tagline { display: none; }

@@ -245,12 +245,6 @@ export class GameView {
     }
     this.broadcast.pos.copy(camera.position);
     this.billboard.place(camera);
-    // The phone's score sits on the ground just behind the far touchline,
-    // where the stadium's board stands, close to the play.
-    if (this.phoneScore) {
-      const spot = new THREE.Vector3(0, 0, -(H / 2 + 1.4)).project(camera);
-      this.phoneScore.style.top = `${Math.round(((1 - spot.y) / 2) * h)}px`;
-    }
     this.broadcast.look.copy(look);
     // Lower and close, the centre circle filling the screen.
     const closeView = new THREE.Vector3(0, 0.55, 1).normalize();
