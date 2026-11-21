@@ -364,17 +364,30 @@ html, body {
 /* Every card: title, a line saying what it's for, then its controls. */
 .cards .card h2 { margin-bottom: 2px; }
 .cards .card > .brush,
-#create-block { display: flex; align-items: center; gap: 14px; }
+#create-block { display: flex; align-items: center; gap: 18px; }
 /* Solo has a single button: beside the title and description, not under. */
-.cards .card.solo {
+/* Solo: its two buttons side by side under the description, the same size. */
+.solo-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 6px 4px 4px; }
+.solo-actions .brush { font-size: 22px; padding: 6px 12px 8px; }
+
+/* Home: the locker room as a column on the left, solo and multiplayer
+   stacked beside it, each only as tall as it needs. */
+.screen.home { width: min(980px, 100%); }
+.home .cards {
+  width: 100%;
   display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  column-gap: 16px;
+  grid-template-columns: 300px 1fr;
+  grid-template-rows: auto 1fr;
+  align-items: start;
 }
-.card.solo > .solo-actions { grid-column: 2; grid-row: 1 / span 2; display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
-.solo-actions .brush { font-size: 22px; padding: 4px 20px 6px; }
-.card.solo .card-note { margin-bottom: 4px; }
+.home .cards .card.locker { grid-row: 1 / span 2; align-self: stretch; display: flex; }
+.home .locker-chart { align-self: center; margin-top: 2px; }
+/* A window too narrow for two columns stacks them (phones held sideways
+   are short and keep the columns). */
+@media (max-width: 720px) and (min-height: 501px) {
+  .home .cards { grid-template-columns: 1fr; }
+  .home .cards .card.locker { grid-row: auto; }
+}
 
 .field-input,
 .join input {
@@ -397,7 +410,7 @@ html, body {
 .join input { width: 6.4em; letter-spacing: 0.15em; text-transform: uppercase; flex: none; }
 
 /* Multiplayer in one line: Host a room, or a code and Join. */
-.multi-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 14px; margin-top: 4px; }
+.multi-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px 18px; margin: 10px 4px 6px; }
 .multi-row .or { font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; color: var(--soft); }
 
 .notice .card { max-width: 520px; font-family: 'Caveat', cursive; font-size: 24px; text-align: center; }
@@ -838,7 +851,6 @@ html, body {
   .tagline { margin: -6px 0 0; font-size: 21px; }
   .cards { gap: 10px; }
   .cards .card { padding: 11px 26px 13px; }
-  .cards .card.solo { padding-top: 8px; padding-bottom: 9px; }
   .card h2 { font-size: 26px; margin-bottom: 4px; }
   .card-note { margin-bottom: 6px; }
 }
@@ -1147,19 +1159,9 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
   .side-column { left: calc(max(12px, env(safe-area-inset-left) + 6px) / 0.72); }
   .top-buttons { right: calc(max(16px, env(safe-area-inset-right) + 8px) / 0.72); }
 
-  /* Home: the locker as a column on the left, solo and multiplayer
-     stacked beside it, so it fits the width rather than scrolling. */
-  .menu .screen.home { width: min(1080px, 100%); }
-  .home .cards {
-    width: 100%;
-    display: grid;
-    grid-template-columns: 300px 1fr;
-    grid-template-rows: auto 1fr;
-    align-items: stretch;
-  }
-  .home .cards .card.locker { grid-row: 1 / span 2; display: flex; }
-  .home .cards .card:not(.locker) { align-self: start; }
-  .home .locker-chart { align-self: center; margin-top: 2px; zoom: 0.85; }
+  /* Home: the chart a touch smaller, a smaller title and no tagline, so
+     the two columns fit without scrolling. */
+  .home .locker-chart { zoom: 0.85; }
   .home .title { font-size: 48px; }
   .home .tagline { display: none; }
   .top-buttons { transition: opacity 0.2s; }

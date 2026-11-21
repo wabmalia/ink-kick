@@ -15,7 +15,7 @@ export const RELEASE_NOTES: ReleaseDay[] = [
     notes: [
       'On phones the pitch fills the screen: the camera comes closer and picks the angle that shows it largest.',
       'On phones the score is a small label at the top, level with the buttons.',
-      'On phones the home screen puts the locker room beside solo and multiplayer, so it fits without scrolling.',
+      'The home screen puts the locker room beside solo and multiplayer, and solo\'s two buttons sit side by side, the same size.',
       'Buttons stay clear of a notch or Dynamic Island, with the stadium running on behind it.',
       'Multiplayer fits on one line: host a room, or type a code and join.',
       'The fullscreen button is an icon beside How to play, and goes away when the game runs as an installed app.',
