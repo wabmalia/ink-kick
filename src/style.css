@@ -534,6 +534,11 @@ html, body {
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
 }
 .home .card.locker #name::placeholder { color: #8a7f6a; }
+/* Just the tape: no line above it or label (kept for screen readers), and
+   the privacy hint's space kept but its words gone. */
+.home .locker-note { display: none; }
+.home .locker-name .field-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.home .locker-name .card-note.small { visibility: hidden; }
 .home .card.locker #name:focus { box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25), 0 0 0 3px var(--gold); }
 /* A window too narrow for two columns stacks them (phones held sideways
    are short and keep the columns). */
@@ -1332,14 +1337,18 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
   /* In the side panel the "?" would sit on Strength's +: down by the
      points line instead. */
   .attr-panel .info-btn { top: auto; bottom: 8px; right: 10px; }
+  /* Room inside the side panel for the six columns and their names. */
+  .attr-panel { padding: 10px 12px 12px; }
+  .attr-panel .eq { gap: 5px; }
+  .attr-panel .eq-name { font-size: 12.5px; }
   .home .locker-chart { zoom: 0.85; }
   /* The door's slimmer on a phone: smaller vents, and no words above the
      tape (its "Pick a nickname" says it; the label stays for screen
      readers). */
   .home .card.locker { padding-top: 44px; }
   .locker-vents { top: 12px; height: 22px; width: 40%; }
-  .home .locker-note { display: none; }
-  .home .locker-name .field-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  /* Points left, close under the bars. */
+  .eq + .spare, .locker-chart .spare, .attr-panel .spare { margin-top: 2px; }
   /* The tactics board a little tighter, so multiplayer stays one line. */
   .tactics-board { padding: 14px 6px 8px; }
   .tactics-board .card { padding: 4px 14px; }
