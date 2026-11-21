@@ -10,9 +10,10 @@ import { DEFAULT_LAYOUT, fitLayout, type TouchLayout } from './touch-layout';
 // editor, game/touch-layout.ts). The stick steers from a touch on it, or
 // just around it.
 //
-// A fake, as Space then Shift on a keyboard: flick the kick finger onto
-// Sprint while charging. The kick is called off and you sprint away. Only a
-// quick flick counts, so a thumb drifting onto Sprint still strikes.
+// Flicks between the buttons, without lifting the thumb: Kick onto Sprint
+// mid-charge is the fake (as Space then Shift on a keyboard), Sprint onto
+// Kick slides or starts a charge. Only a quick flick counts, so a thumb
+// drifting onto the other button doesn't change anything.
 
 /** Drags shorter than this share of the stick's reach don't move you. */
 export const DEAD_ZONE = 0.22;
@@ -117,80 +118,60 @@ function build(): HTMLElement {
   stick.addEventListener('pointerup', stickUp);
   stick.addEventListener('pointercancel', stickUp);
 
-  // Sprint: held while a finger is on it.
-  let sprintPointer: number | null = null;
-  sprintBtn.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    sprintPointer = e.pointerId;
-    sprintBtn.setPointerCapture(e.pointerId);
-    state.sprint = true;
-    sprintBtn.classList.add('held');
-  });
-  const sprintUp = (e: PointerEvent) => {
-    if (e.pointerId !== sprintPointer) return;
-    sprintPointer = null;
-    // A faked kick's finger still on Sprint keeps sprinting.
-    if (faked && kickPointer !== null) return;
-    state.sprint = false;
-    sprintBtn.classList.remove('held');
+  // Kick and Sprint: each finger on them has a role, kick or sprint, and
+  // each is held while any finger has its role. A quick flick onto the
+  // other button swaps that finger's role, once a touch: Kick onto Sprint
+  // is the fake (the charge is called off and you sprint away), Sprint
+  // onto Kick slides or starts a charge without lifting the thumb. A slow
+  // drift onto the other button doesn't count.
+  type Role = 'kick' | 'sprint';
+  const fingers = new Map<number, { role: Role; swapped: boolean; samples: Sample[] }>();
+  const buttons: Record<Role, HTMLElement> = { kick: kickBtn, sprint: sprintBtn };
+  const sync = () => {
+    for (const role of ['kick', 'sprint'] as const) {
+      const on = [...fingers.values()].some(f => f.role === role);
+      state[role] = on;
+      buttons[role].classList.toggle('held', on);
+    }
   };
-  sprintBtn.addEventListener('pointerup', sprintUp);
-  sprintBtn.addEventListener('pointercancel', sprintUp);
-
-  // Kick: held while a finger is on it, unless that finger flicks onto
-  // Sprint, which turns it into a sprinting finger until it lifts.
-  let kickPointer: number | null = null;
-  let faked = false;
-  let samples: Sample[] = [];
-  const onSprint = (x: number, y: number) => {
-    const r = sprintBtn.getBoundingClientRect();
+  const over = (el: HTMLElement, x: number, y: number) => {
+    const r = el.getBoundingClientRect();
     const pad = 10;
     return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad;
   };
-  kickBtn.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    kickPointer = e.pointerId;
-    faked = false;
-    samples = [{ x: e.clientX, y: e.clientY, t: e.timeStamp }];
-    kickBtn.setPointerCapture(e.pointerId);
-    state.kick = true;
-    kickBtn.classList.add('held');
-  });
-  kickBtn.addEventListener('pointermove', e => {
-    if (e.pointerId !== kickPointer || faked) return;
-    samples.push({ x: e.clientX, y: e.clientY, t: e.timeStamp });
-    while (samples.length > 2 && e.timeStamp - samples[0]!.t > FLICK_WINDOW * 2) samples.shift();
-    if (!onSprint(e.clientX, e.clientY) || fingerSpeed(samples) < flickSpeed) return;
-    // Both in the same tick: the sim sees Sprint go down mid-charge first.
-    faked = true;
-    state.kick = false;
-    state.sprint = true;
-    kickBtn.classList.remove('held');
-    sprintBtn.classList.add('held');
-  });
-  const kickUp = (e: PointerEvent) => {
-    if (e.pointerId !== kickPointer) return;
-    kickPointer = null;
-    state.kick = false;
-    kickBtn.classList.remove('held');
-    if (faked && sprintPointer === null) {
-      state.sprint = false;
-      sprintBtn.classList.remove('held');
-    }
-    faked = false;
-  };
-  kickBtn.addEventListener('pointerup', kickUp);
-  kickBtn.addEventListener('pointercancel', kickUp);
+  for (const role of ['kick', 'sprint'] as const) {
+    const el = buttons[role];
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      fingers.set(e.pointerId, { role, swapped: false, samples: [{ x: e.clientX, y: e.clientY, t: e.timeStamp }] });
+      sync();
+    });
+    el.addEventListener('pointermove', e => {
+      const f = fingers.get(e.pointerId);
+      if (!f || f.swapped) return;
+      f.samples.push({ x: e.clientX, y: e.clientY, t: e.timeStamp });
+      while (f.samples.length > 2 && e.timeStamp - f.samples[0]!.t > FLICK_WINDOW * 2) f.samples.shift();
+      const to: Role = f.role === 'kick' ? 'sprint' : 'kick';
+      if (!over(buttons[to], e.clientX, e.clientY) || fingerSpeed(f.samples) < flickSpeed) return;
+      // Both change in the same tick: on a fake the sim sees Sprint go
+      // down mid-charge first.
+      f.role = to;
+      f.swapped = true;
+      sync();
+    });
+    const up = (e: PointerEvent) => {
+      if (!fingers.delete(e.pointerId)) return;
+      sync();
+    };
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  }
 
   releaseAll = () => {
     restStick();
-    kickPointer = null;
-    sprintPointer = null;
-    faked = false;
-    state.kick = false;
-    state.sprint = false;
-    kickBtn.classList.remove('held');
-    sprintBtn.classList.remove('held');
+    fingers.clear();
+    sync();
   };
   // No long-press menus or text selection under a thumb.
   el.addEventListener('contextmenu', e => e.preventDefault());

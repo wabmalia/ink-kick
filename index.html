@@ -123,23 +123,36 @@
       <dt><span class="key">H</span><span class="key wide">Esc</span></dt>
       <dd>This help. Esc also leaves solo.</dd>
     </dl>
-    <!-- The same controls on a touch screen. -->
-    <dl class="controls touch-only">
-      <dt><span class="tc-stick" aria-hidden="true"><span></span></span></dt>
-      <dd><b>Run.</b> Drag the stick. You turn slower with the ball.</dd>
-
-      <dt><span class="tc-btn sprint">Sprint</span></dt>
-      <dd><b>Sprint</b> until your stamina runs out. Drops your defensive stance.</dd>
-
-      <dt><span class="tc-btn kick">Kick</span><span class="hold">hold</span></dt>
-      <dd><b>Kick.</b> Hold to power up, let go to strike. A quick pass to a teammate you're facing curls onto their feet. Steer just after to curl it.</dd>
-
-      <dt><span class="tc-btn kick">Kick</span><span class="plus">&rarr;</span><span class="tc-btn sprint">Sprint</span></dt>
-      <dd><b>Fake.</b> Mid-charge, flick your thumb from Kick onto Sprint to call it off and sprint away.</dd>
-
-      <dt><span class="tc-btn kick">Kick</span></dt>
-      <dd><b>Tackle.</b> Pokes up close, slides from further or behind.</dd>
-    </dl>
+    <!-- The same controls on a touch screen, a tab each (ui/help.ts). -->
+    <div class="touch-help touch-only">
+      <div class="attr-tabs" role="tablist" aria-label="Controls">
+        <button class="attr-tab" role="tab" type="button" id="th-tab-run" aria-controls="th-run" aria-selected="true">Run</button>
+        <button class="attr-tab" role="tab" type="button" id="th-tab-sprint" aria-controls="th-sprint" aria-selected="false" tabindex="-1">Sprint</button>
+        <button class="attr-tab" role="tab" type="button" id="th-tab-kick" aria-controls="th-kick" aria-selected="false" tabindex="-1">Kick</button>
+      </div>
+      <div class="th-pane" role="tabpanel" id="th-run" aria-labelledby="th-tab-run">
+        <span class="tc-stick" aria-hidden="true"><span></span></span>
+        <ul>
+          <li><b>Drag the stick</b> to run. You turn slower with the ball.</li>
+          <li>Steer just after a kick to curl it.</li>
+        </ul>
+      </div>
+      <div class="th-pane" role="tabpanel" id="th-sprint" aria-labelledby="th-tab-sprint" hidden>
+        <span class="tc-btn sprint" aria-hidden="true">Sprint</span>
+        <ul>
+          <li><b>Hold</b> to sprint until your stamina runs out. Drops your defensive stance.</li>
+          <li><b>Flick onto Kick</b> to slide in, or start a kick, without lifting your thumb.</li>
+        </ul>
+      </div>
+      <div class="th-pane" role="tabpanel" id="th-kick" aria-labelledby="th-tab-kick" hidden>
+        <span class="tc-btn kick" aria-hidden="true">Kick</span>
+        <ul>
+          <li><b>With the ball,</b> hold to power up and let go to strike. A quick pass to a teammate you're facing curls onto their feet.</li>
+          <li><b>Without it,</b> tackle: pokes up close, slides from further or behind.</li>
+          <li><b>Flick onto Sprint</b> mid-charge to fake: the kick's called off and you sprint away.</li>
+        </ul>
+      </div>
+    </div>
     <div class="help-actions">
       <button class="ink-btn touch-only-btn" data-controls-editor type="button">Move and resize the buttons</button>
       <button class="brush gold" id="help-close" type="button">Got it</button>

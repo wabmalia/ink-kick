@@ -1,7 +1,7 @@
 // The How to play dialog: the H key or the button opens it, H, Esc, the
 // button inside or a click outside closes it.
 
-import { closeOnBackdrop, openDialog } from './dom';
+import { closeOnBackdrop, openDialog, tabs } from './dom';
 
 const dialog = document.getElementById('help') as HTMLDialogElement;
 const listeners = new Set<() => void>();
@@ -24,6 +24,8 @@ document.getElementById('help-open')!.addEventListener('click', () => {
 });
 document.getElementById('help-close')!.addEventListener('click', () => toggle(false));
 closeOnBackdrop(dialog);
+// On a touch screen the controls come in tabs: run, sprint, kick.
+tabs(dialog);
 
 window.addEventListener('keydown', e => {
   if (e.code !== 'KeyH' || e.repeat) return;

@@ -821,13 +821,13 @@ html, body {
 .controls dd { margin: 0; font-family: 'Caveat', cursive; font-weight: 700; font-size: 20px; line-height: 1.15; color: var(--soft); }
 .controls dd b { color: var(--text); }
 /* Keys on a keyboard, the on-screen controls on a touch screen. */
-.controls.touch-only { display: none; }
+.touch-help.touch-only { display: none; }
 .help-actions { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
 .touch-only-btn { display: none; }
 @media (pointer: coarse) {
   .touch-only-btn { display: inline-flex; }
   .controls.keys-only { display: none; }
-  .controls.touch-only { display: grid; }
+  .touch-help.touch-only { display: block; }
   .help-btn .key { display: none; }
 }
 .tc-btn {
@@ -858,6 +858,18 @@ html, body {
   background: rgba(238, 240, 250, 0.8);
   translate: 8px -6px;
 }
+/* How to play on a touch screen: a tab each for run, sprint and kick, the
+   control drawn beside what it does. As tall as the longest, so switching
+   doesn't jump. */
+.touch-help { width: 100%; margin-bottom: 18px; }
+.touch-help .attr-tabs { margin-top: 4px; }
+.th-pane { display: flex; align-items: flex-start; gap: 18px; min-height: 9.2em; }
+.th-pane[hidden] { display: none; }
+.th-pane > :first-child { flex: none; margin-top: 4px; }
+.th-pane ul { margin: 0; padding: 0; list-style: none; font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; line-height: 1.2; color: var(--soft); }
+.th-pane li { padding-left: 18px; text-indent: -18px; margin-bottom: 6px; }
+.th-pane li::before { content: '•'; display: inline-block; width: 18px; text-indent: 0; color: var(--gold); }
+.th-pane b { color: var(--text); font-weight: 700; }
 .or-word,
 .hold,
 .plus { font-family: 'Caveat', cursive; font-weight: 700; font-size: 18px; color: var(--soft); }

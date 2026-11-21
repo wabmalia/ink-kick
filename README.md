@@ -16,7 +16,8 @@ npm run dev
 - **Touch screens**: a stick at the bottom left to run (and curl), Kick and
   Sprint buttons at the bottom right
   stand in for Space and Shift; a quick flick from Kick onto Sprint mid-charge
-  is the fake (a slow slide still kicks). How to play has "Move and resize
+  is the fake, and from Sprint onto Kick slides or starts a kick (a slow
+  slide onto the other button changes nothing). How to play has "Move and resize
   the buttons": drag the stick anywhere in the left half, Kick and Sprint
   anywhere in the right, and drag a control's dot to resize it
 

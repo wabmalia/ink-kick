@@ -2,7 +2,7 @@ import {
   ATTRIBUTES, canLower, canRaise, LABELS, loadAttributes, lower, MAX, raise, saveAttributes, spare,
   type Attribute, type Attributes,
 } from '../game/attributes';
-import { closeOnBackdrop, openDialog } from './dom';
+import { closeOnBackdrop, openDialog, tabs } from './dom';
 
 // The Locker room's attributes: a hexagon with one corner per attribute, and
 // at each corner its name and − / + buttons. Lowering one frees a point to
@@ -50,35 +50,7 @@ function infoDialog() {
   }
   document.getElementById('attr-info-close')!.addEventListener('click', () => dialog.close());
   closeOnBackdrop(dialog);
-  attributeTabs(dialog);
-}
-
-// One tab an attribute, showing what it does; arrow keys, Home and End move
-// between them, as tabs do.
-function attributeTabs(dialog: HTMLElement) {
-  const tabs = [...dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
-  const select = (tab: HTMLButtonElement, focus = false) => {
-    for (const t of tabs) {
-      const on = t === tab;
-      t.setAttribute('aria-selected', String(on));
-      t.tabIndex = on ? 0 : -1;
-      document.getElementById(t.getAttribute('aria-controls')!)!.hidden = !on;
-    }
-    if (focus) tab.focus();
-  };
-  tabs.forEach((tab, i) => {
-    tab.addEventListener('click', () => select(tab));
-    tab.addEventListener('keydown', e => {
-      const to = e.key === 'ArrowRight' ? (i + 1) % tabs.length
-        : e.key === 'ArrowLeft' ? (i - 1 + tabs.length) % tabs.length
-        : e.key === 'Home' ? 0
-        : e.key === 'End' ? tabs.length - 1
-        : null;
-      if (to === null) return;
-      e.preventDefault();
-      select(tabs[to]!, true);
-    });
-  });
+  tabs(dialog);
 }
 
 /** The home screen's chart, the training ground's, and the info dialog. */
