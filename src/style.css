@@ -525,7 +525,7 @@ html, body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 /* Over the attributes: points to spend on the left, the "?" on the right. */
-.chart-head { align-self: stretch; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.chart-head { align-self: stretch; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
 .chart-head .spare { margin: 0; }
 .chart-head .info-btn { position: relative; top: auto; right: auto; }
 .home .card.locker #name {
@@ -1341,7 +1341,7 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
      points line instead. */
   /* A header row: the points to spend on the left, the "?" on the right. */
   .attr-panel .info-btn { top: 8px; right: 10px; }
-  .attr-panel .spare { order: -1; align-self: flex-start; margin: 2px 0 8px; min-height: 30px; display: flex; align-items: center; }
+  .attr-panel .spare { order: -1; align-self: flex-start; margin: 2px 0 16px; min-height: 30px; display: flex; align-items: center; }
   /* Room inside the side panel for the six columns and their names. */
   .attr-panel { padding: 8px 14px 12px; }
   .attr-panel .eq { gap: 5px; }
@@ -1350,8 +1350,8 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
   /* The door's slimmer on a phone: smaller vents, and no words above the
      tape (its "Pick a nickname" says it; the label stays for screen
      readers). */
-  .home .card.locker { padding-top: 44px; }
-  .locker-vents { top: 12px; height: 22px; width: 40%; }
+  .home .card.locker { padding-top: 36px; }
+  .locker-vents { top: 10px; height: 18px; width: 40%; }
   /* Points left, close under the bars. */
   .attr-panel .spare { margin-top: 2px; }
   /* The tactics board a little tighter, so multiplayer stays one line. */
