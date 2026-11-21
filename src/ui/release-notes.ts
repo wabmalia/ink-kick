@@ -25,6 +25,7 @@ export const RELEASE_NOTES: ReleaseDay[] = [
       'On phones, attributes are equalizer bars with big + and − buttons.',
       'Multiplayer fits on one line: host a room, or type a code and join.',
       'The fullscreen button is an icon beside How to play, and goes away when the game runs as an installed app.',
+      'An Arcade button at the top left of the home screen goes back to the other games.',
     ],
   },
   {

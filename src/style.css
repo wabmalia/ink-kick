@@ -1111,6 +1111,9 @@ html, body {
 /* Back to the menu from setting up a match: top left, where it is in a
    match and the training ground, over the attributes. */
 .back-to-menu { position: fixed; z-index: 2; top: max(12px, env(safe-area-inset-top)); left: 16px; }
+/* The home screen's top left goes back out to the arcade (arcade.wabmalia.eu). */
+a.arcade-back { text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+.arcade-icon { width: 24px; height: 24px; flex: none; }
 /* Under the match lengths, the goalkeepers switch; Kick off (or the
    guests' wait for it) up in the card's top right corner. */
 .match-go { margin-top: 14px; }
