@@ -476,7 +476,7 @@ html, body {
 
 /* The locker room drawn as a locker door, on its own painted-metal wash
    (ui/wash.ts): vent slats at the top, hinges down the left, a handle and
-   lock on the right, faint brushing, and the nickname on a strip of tape. */
+   lock on the right, faint brushing. */
 .home .card.locker { padding: 58px 40px 16px 34px; }
 .home .card.locker::after {
   content: '';
@@ -537,21 +537,7 @@ html, body {
 .chart-head { align-self: stretch; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
 .chart-head .spare { margin: 0; }
 .chart-head .info-btn { position: relative; top: auto; right: auto; }
-.home .card.locker #name {
-  background: #f3ead2;
-  color: #2a2440;
-  border: 0;
-  border-radius: 2px 3px 2px 4px;
-  transform: rotate(-1.5deg);
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
-}
-.home .card.locker #name::placeholder { color: #8a7f6a; }
-/* Just the tape: no line above it or label (kept for screen readers), and
-   the privacy hint's space kept but its words gone. */
 .home .locker-note { display: none; }
-.home .locker-name .field-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.home .locker-name .card-note.small { visibility: hidden; }
-.home .card.locker #name:focus { box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25), 0 0 0 3px var(--gold); }
 /* A window too narrow for two columns stacks them (phones held sideways
    are short and keep the columns). */
 @media (max-width: 720px) and (min-height: 501px) {
@@ -577,6 +563,12 @@ html, body {
 .field-input::placeholder,
 .join input::placeholder { color: #9aa0bf; opacity: 1; }
 .join input { width: 6.4em; letter-spacing: 0.15em; text-transform: uppercase; flex: none; }
+
+/* Multiplayer's title with the nickname beside it, then one line: Host a
+   room, or a code and Join. */
+.multi-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+.multi-head h2 { margin: 0; }
+.multi-head #name { flex: 1; min-width: 9em; max-width: 14em; font-size: 22px; }
 
 /* Multiplayer in one line: Host a room, or a code and Join. */
 .multi-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 12px 18px; margin: 10px 4px 6px; }
@@ -992,7 +984,6 @@ html, body {
 /* The chart sits beside the title, note and nickname, all the card's height. */
 .locker-body { display: contents; }
 .locker-chart { grid-column: 2; grid-row: 1 / span 3; align-self: center; margin: 0 0 -4px; display: flex; flex-direction: column; align-items: center; }
-.locker-name { align-self: center; display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; color: var(--soft); }
 .card-note.small { margin: 0; font-size: 18px; line-height: 1.1; }
 .spare { margin: 8px 0 0; font-family: 'Caveat', cursive; font-weight: 700; font-size: 21px; color: var(--soft); }
@@ -1364,9 +1355,7 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
   }
 
   /* Home: a smaller title and no tagline; a slimmer locker door, with
-     smaller vents and no words above the tape (its "Pick a nickname" says
-     it; the label stays for screen readers); a tighter tactics board so
-     multiplayer stays one line. */
+     smaller vents; a tighter tactics board so multiplayer stays one line. */
   .home .title { font-size: 48px; }
   .home .tagline { display: none; }
   .home .card.locker { padding-top: 36px; }
@@ -1387,6 +1376,11 @@ body:has(.menu:not([hidden])) .phone-score { display: none; }
      locker still fits without scrolling. */
   .home .locker-chart { zoom: 0.85; }
   .home .eq-bar span { height: 5px; }
+  /* The bars between the hinges (left) and the handle and lock (right):
+     the door's sides only as wide as those, the bars closer together. */
+  .home .card.locker { padding-left: 26px; padding-right: 30px; }
+  .home .eq { gap: 5px; }
+  .home .eq-name { font-size: 12.5px; }
 
   /* Attributes and drills folded into buttons, closed until tapped, the
      attributes floating over the screen when open. Above the touch

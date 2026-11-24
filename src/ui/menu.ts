@@ -188,6 +188,7 @@ export function offerInvite(code: string) {
   $('create-block').hidden = true;
   $('multi-title').textContent = `Join room ${code}`;
   $('multi-note').textContent = `You've been invited. Pick a nickname, then join.`;
+  $('multi-note').hidden = false;
   nameInput.focus();
 }
 
@@ -195,7 +196,7 @@ function leaveInvite() {
   $('solo-card').hidden = false;
   $('create-block').hidden = false;
   $('multi-title').textContent = 'Multiplayer';
-  $('multi-note').textContent = `Join a friend's room by its code, or host your own.`;
+  $('multi-note').hidden = true;
 }
 
 nameInput.addEventListener('change', () => session.setName(nameInput.value));

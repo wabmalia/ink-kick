@@ -233,13 +233,8 @@
           <span class="locker-hinge bottom" aria-hidden="true"></span>
           <span class="locker-handle" aria-hidden="true"></span>
           <h2>Locker room</h2>
-          <p class="card-note locker-note">Who you are, and how you play.</p>
+          <p class="card-note locker-note">How you play.</p>
           <div class="locker-body">
-            <div class="locker-name">
-              <label class="field-label" for="name">Nickname</label>
-              <input class="field-input" id="name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Pick a nickname">
-              <p class="card-note small">No real names or contact details needed.</p>
-            </div>
             <div class="locker-chart">
               <!-- A header over the attributes: points to spend, and what they do. -->
               <div class="chart-head">
@@ -266,8 +261,13 @@
           </section>
           <div class="tp-halfway" aria-hidden="true"><span class="tp-magnet gold"></span><span class="tp-magnet red"></span></div>
           <section class="card">
-            <h2 id="multi-title">Multiplayer</h2>
-            <p class="card-note" id="multi-note">Join a friend's room by its code, or host your own.</p>
+            <!-- The nickname only matters with friends, so it lives here,
+                 beside the title. -->
+            <div class="multi-head">
+              <h2 id="multi-title">Multiplayer</h2>
+              <input class="field-input" id="name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Nickname, not your real name" aria-label="Nickname">
+            </div>
+            <p class="card-note" id="multi-note" hidden></p>
             <div class="multi-row">
               <div id="create-block">
                 <button class="brush red" id="create" type="button">Host a room</button>
